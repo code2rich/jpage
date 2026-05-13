@@ -32,7 +32,7 @@ cd jpage
 docker-compose up -d
 ```
 
-访问 http://localhost:3000
+访问 http://localhost:8858
 
 ### 本地运行
 

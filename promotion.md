@@ -95,7 +95,7 @@ cd jpage
 docker-compose up -d
 ```
 
-访问 http://localhost:3000，即刻使用。
+访问 http://localhost:8858，即刻使用。
 
 ### 方式二：本地运行
 

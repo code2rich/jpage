@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
   app:
     build: .
-    container_name: html-markdown-viewer
+    container_name: jpage
     ports:
       - "8858:8858"
     volumes:

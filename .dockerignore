@@ -1,0 +1,8 @@
+node_modules
+npm-debug.log
+data
+.git
+.gitignore
+README.md
+promotion.md
+*.md
