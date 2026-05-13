@@ -216,6 +216,38 @@ async function doDelete(container, id) {
 }
 
 // ---------- Preview Page ----------
+const PREVIEW_HEADER_COLLAPSED_KEY = 'htmlwebsite_preview_header_collapsed';
+const PREVIEW_TOOLBAR_COMPACT_KEY = 'htmlwebsite_preview_toolbar_compact';
+
+function syncPreviewHeaderState(layout, expandFloatingBtn, toggleHeaderBtn) {
+  const collapsed = layout.classList.contains('preview-header-collapsed');
+  if (toggleHeaderBtn) {
+    toggleHeaderBtn.setAttribute('aria-expanded', String(!collapsed));
+    toggleHeaderBtn.setAttribute('aria-label', collapsed ? '展开顶栏' : '收起顶栏');
+    toggleHeaderBtn.title = collapsed ? '展开顶栏' : '收起顶栏';
+  }
+  if (expandFloatingBtn) {
+    expandFloatingBtn.tabIndex = collapsed ? 0 : -1;
+    expandFloatingBtn.setAttribute('aria-hidden', collapsed ? 'false' : 'true');
+  }
+  try {
+    sessionStorage.setItem(PREVIEW_HEADER_COLLAPSED_KEY, collapsed ? '1' : '0');
+  } catch (_) {}
+}
+
+function syncToolbarCompact(layout, titleStrip, fileName) {
+  const compact = layout.classList.contains('preview-toolbar-compact');
+  const titleSpan = titleStrip.querySelector('#preview-title');
+  const name = (typeof fileName === 'string' && fileName.length > 0)
+    ? fileName
+    : (titleSpan ? titleSpan.textContent.trim() : '');
+  titleStrip.setAttribute('aria-expanded', String(!compact));
+  titleStrip.setAttribute('aria-label', compact ? `展开完整工具栏${name ? '：' + name : ''}` : '仅显示标题');
+  try {
+    sessionStorage.setItem(PREVIEW_TOOLBAR_COMPACT_KEY, compact ? '1' : '0');
+  } catch (_) {}
+}
+
 function renderPreview(container, hash) {
   const id = hash.split('/').pop();
   if (!id) return navigate('/');
@@ -223,26 +255,69 @@ function renderPreview(container, hash) {
   const tmpl = document.getElementById('preview-template');
   container.appendChild(tmpl.content.cloneNode(true));
 
+  const layout = container.querySelector('#preview-layout-root');
+  const expandFloatingBtn = container.querySelector('#btn-preview-expand-floating');
+  const titleStrip = container.querySelector('#preview-title-expand');
+  const toggleHeaderBtn = container.querySelector('#btn-toggle-preview-header');
+  const compactBtn = container.querySelector('#btn-preview-compact-only');
   const iframe = container.querySelector('#preview-iframe');
   const source = container.querySelector('#preview-source');
   const code = container.querySelector('#source-code');
   const toggles = container.querySelectorAll('.view-toggle .btn');
 
+  let fileName;
+
+  function setViewMode(mode) {
+    if (mode === 'render') {
+      iframe.style.display = 'block';
+      source.classList.remove('active');
+    } else {
+      iframe.style.display = 'none';
+      source.classList.add('active');
+    }
+    toggles.forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === mode);
+    });
+  }
+
+  try {
+    if (sessionStorage.getItem(PREVIEW_HEADER_COLLAPSED_KEY) === '1') {
+      layout.classList.add('preview-header-collapsed');
+    }
+    if (sessionStorage.getItem(PREVIEW_TOOLBAR_COMPACT_KEY) === '1') {
+      layout.classList.add('preview-toolbar-compact');
+    }
+  } catch (_) {}
+
+  syncPreviewHeaderState(layout, expandFloatingBtn, toggleHeaderBtn);
+  syncToolbarCompact(layout, titleStrip, fileName);
+
+  titleStrip.addEventListener('click', () => {
+    layout.classList.remove('preview-toolbar-compact');
+    syncToolbarCompact(layout, titleStrip, fileName);
+  });
+
+  compactBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    layout.classList.add('preview-toolbar-compact');
+    syncToolbarCompact(layout, titleStrip, fileName);
+  });
+
+  toggleHeaderBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    layout.classList.toggle('preview-header-collapsed');
+    syncPreviewHeaderState(layout, expandFloatingBtn, toggleHeaderBtn);
+  });
+
+  expandFloatingBtn.addEventListener('click', () => {
+    layout.classList.remove('preview-header-collapsed');
+    syncPreviewHeaderState(layout, expandFloatingBtn, toggleHeaderBtn);
+  });
+
   container.querySelector('#btn-back').addEventListener('click', () => navigate('/'));
 
   toggles.forEach(btn => {
-    btn.addEventListener('click', () => {
-      toggles.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const mode = btn.dataset.mode;
-      if (mode === 'render') {
-        iframe.style.display = 'block';
-        source.classList.remove('active');
-      } else {
-        iframe.style.display = 'none';
-        source.classList.add('active');
-      }
-    });
+    btn.addEventListener('click', () => setViewMode(btn.dataset.mode));
   });
 
   container.querySelector('#btn-download').addEventListener('click', () => {
@@ -251,7 +326,12 @@ function renderPreview(container, hash) {
   });
 
   api(`/api/files/${id}/content`).then(data => {
+    fileName = data.original_name;
     container.querySelector('#preview-title').textContent = data.original_name;
+    container.querySelector('#preview-heading').textContent = data.original_name;
+    expandFloatingBtn.title = `展开顶栏 · ${data.original_name}`;
+    expandFloatingBtn.setAttribute('aria-label', `展开顶栏 · ${data.original_name}`);
+    syncToolbarCompact(layout, titleStrip, fileName);
     code.textContent = data.content;
     iframe.src = API_BASE + `/api/files/${id}/render`;
   }).catch(e => {

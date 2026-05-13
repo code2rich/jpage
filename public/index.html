@@ -46,23 +46,41 @@
 
 <!-- 文件预览模板 -->
 <template id="preview-template">
-<div class="layout preview-layout">
-<header class="header header-preview">
-<div class="header-left">
+<div class="layout preview-layout" id="preview-layout-root">
+<header class="header header-preview" id="preview-header">
+<div class="preview-topbar">
+<button type="button" class="preview-title-strip" id="preview-title-expand" aria-controls="preview-toolbar-expanded" aria-expanded="true">
+<span id="preview-title" class="preview-title-text">加载中…</span>
+<svg class="preview-title-strip-hint" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+</button>
+<div class="preview-toolbar-expanded" id="preview-toolbar-expanded" role="region" aria-label="预览工具栏">
+<div class="preview-expanded-row">
+<div class="preview-expanded-left">
 <button type="button" class="btn btn-small" id="btn-back" aria-label="返回文件列表">
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
-返回
+<span class="btn-back-label">返回</span>
 </button>
-<h2 id="preview-title" class="preview-title-truncate"></h2>
+<h2 id="preview-heading" class="preview-heading-truncate"></h2>
 </div>
-<div class="header-right">
+<div class="preview-expanded-right">
 <div class="view-toggle" role="group" aria-label="预览模式">
 <button type="button" class="btn btn-small active" data-mode="render">渲染</button>
 <button type="button" class="btn btn-small" data-mode="source">源码</button>
 </div>
 <button type="button" class="btn btn-small" id="btn-download">下载</button>
+<button type="button" class="btn btn-small btn-preview-to-compact" id="btn-preview-compact-only" aria-label="仅显示标题" title="仅显示标题">···</button>
+<button type="button" class="btn btn-small btn-header-fold" id="btn-toggle-preview-header" aria-expanded="true" aria-controls="preview-header" aria-label="收起顶栏" title="收起顶栏">
+<svg class="icon-fold-chevron icon-fold-chevron--up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="18 15 12 9 6 15"></polyline></svg>
+<svg class="icon-fold-chevron icon-fold-chevron--down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+</button>
+</div>
+</div>
+</div>
 </div>
 </header>
+<button type="button" class="preview-expand-floating" id="btn-preview-expand-floating" aria-label="展开顶栏" title="展开顶栏">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+</button>
 <div class="preview-container">
 <iframe id="preview-iframe" sandbox="allow-scripts allow-same-origin"></iframe>
 <pre id="preview-source" class="source-view"><code id="source-code"></code></pre>

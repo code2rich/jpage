@@ -5,11 +5,10 @@ services:
     build: .
     container_name: html-markdown-viewer
     ports:
-      - "3000:3000"
+      - "8858:8858"
     volumes:
       - ./data:/app/data
     environment:
       - NODE_ENV=production
-      - PORT=3000
-      - JWT_SECRET=change-this-secret-in-production
+      - PORT=8858
     restart: unless-stopped
