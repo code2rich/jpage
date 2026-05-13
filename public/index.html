@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="即页，拖入 HTML 或 Markdown 文件，即刻获得在线预览页面。">
+<title>即页 — 拖入文件，即刻成页</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div id="app"></div>
+
+<!-- 文件管理模板 -->
+<template id="home-template">
+<div class="layout">
+<header class="header">
+<div class="header-left">
+<div class="brand-mark" aria-hidden="true">即</div>
+<div class="brand-text">
+<h1>即页</h1>
+<p class="header-tagline">拖入文件，即刻成页</p>
+</div>
+</div>
+</header>
+<main class="main">
+<div class="toolbar">
+<div class="upload-area" id="upload-area" role="button" tabindex="0" aria-label="选择或拖入 HTML、Markdown 文件上传">
+<input type="file" id="file-input" accept=".html,.htm,.md,.markdown" hidden aria-label="选择要上传的文件">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+<p class="upload-title">点击或拖拽上传</p>
+<span class="upload-hint">支持 .html .htm .md .markdown，单文件最大 50MB</span>
+</div>
+</div>
+<div class="file-list-header">
+<h2>文件列表</h2>
+<span class="file-count" id="file-count" aria-live="polite"></span>
+</div>
+<div class="file-list" id="file-list" aria-busy="false"></div>
+<div class="empty-state" id="empty-state" style="display:none">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+<p>暂无文件，请上传</p>
+</div>
+</main>
+</div>
+</template>
+
+<!-- 文件预览模板 -->
+<template id="preview-template">
+<div class="layout preview-layout">
+<header class="header header-preview">
+<div class="header-left">
+<button type="button" class="btn btn-small" id="btn-back" aria-label="返回文件列表">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
+返回
+</button>
+<h2 id="preview-title" class="preview-title-truncate"></h2>
+</div>
+<div class="header-right">
+<div class="view-toggle" role="group" aria-label="预览模式">
+<button type="button" class="btn btn-small active" data-mode="render">渲染</button>
+<button type="button" class="btn btn-small" data-mode="source">源码</button>
+</div>
+<button type="button" class="btn btn-small" id="btn-download">下载</button>
+</div>
+</header>
+<div class="preview-container">
+<iframe id="preview-iframe" sandbox="allow-scripts allow-same-origin"></iframe>
+<pre id="preview-source" class="source-view"><code id="source-code"></code></pre>
+</div>
+</div>
+</template>
+
+<script src="/js/app.js"></script>
+</body>
+</html>

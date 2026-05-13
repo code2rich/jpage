@@ -1,0 +1,20 @@
+{
+  "name": "html-markdown-viewer",
+  "version": "1.0.0",
+  "description": "即页 — 零配置 HTML/Markdown 即时预览与分享工具",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "marked": "^12.0.0",
+    "multer": "^1.4.5-lts.1",
+    "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
+  }
+}
