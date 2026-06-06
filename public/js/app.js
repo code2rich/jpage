@@ -550,10 +550,82 @@ function openSkillModal(name) {
     const files = document.getElementById('skill-modal-files');
     files.innerHTML = skill.files.map(f => `<li>${escapeHtml(f)}</li>`).join('');
     document.getElementById('skill-modal-source').textContent = skill.body || '（SKILL.md 正文为空）';
+    const installBox = document.getElementById('skill-install-rendered');
+    const installHeading = document.getElementById('skill-install-heading');
+    if (skill.installBody && skill.installBody.trim()) {
+      installHeading.style.display = '';
+      installBox.innerHTML = renderMarkdown(skill.installBody);
+    } else {
+      installHeading.style.display = 'none';
+      installBox.innerHTML = '';
+    }
     const modal = document.getElementById('skill-modal');
     modal.hidden = false;
     modal.setAttribute('aria-hidden', 'false');
   }).catch(e => toast(e.message, 'error'));
+}
+
+function renderMarkdown(md) {
+  const lines = md.split(/\r?\n/);
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.startsWith('```')) {
+      const code = [];
+      i++;
+      while (i < lines.length && !lines[i].startsWith('```')) {
+        code.push(escapeHtml(lines[i]));
+        i++;
+      }
+      i++;
+      out.push(`<pre><code>${code.join('\n')}</code></pre>`);
+      continue;
+    }
+    const h = line.match(/^(#{1,4})\s+(.*)$/);
+    if (h) {
+      const level = h[1].length + 2;
+      out.push(`<h${level}>${inlineMd(escapeHtml(h[2]))}</h${level}>`);
+      i++;
+      continue;
+    }
+    const ul = line.match(/^[-*]\s+(.*)$/);
+    if (ul) {
+      const items = [];
+      while (i < lines.length && lines[i].match(/^[-*]\s+/)) {
+        items.push(`<li>${inlineMd(escapeHtml(lines[i].replace(/^[-*]\s+/, '')))}</li>`);
+        i++;
+      }
+      out.push(`<ul>${items.join('')}</ul>`);
+      continue;
+    }
+    const ol = line.match(/^(\d+)\.\s+(.*)$/);
+    if (ol) {
+      const items = [];
+      while (i < lines.length && lines[i].match(/^\d+\.\s+/)) {
+        items.push(`<li>${inlineMd(escapeHtml(lines[i].replace(/^\d+\.\s+/, '')))}</li>`);
+        i++;
+      }
+      out.push(`<ol>${items.join('')}</ol>`);
+      continue;
+    }
+    if (line.trim() === '') { i++; continue; }
+    const para = [];
+    while (i < lines.length && lines[i].trim() !== ''
+           && !lines[i].match(/^(#{1,4}\s|[-*]\s|\d+\.\s|```)/)) {
+      para.push(lines[i]);
+      i++;
+    }
+    out.push(`<p>${inlineMd(escapeHtml(para.join(' ')))}</p>`);
+  }
+  return out.join('');
+}
+
+function inlineMd(text) {
+  return text
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(https?:\/\/[^\s<]+)/g, '<code>$1</code>');
 }
 
 function closeSkillModal() {

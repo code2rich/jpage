@@ -69,6 +69,11 @@ function readSkillMeta(skillName) {
   const meta = parsed.meta;
   if (!meta.name) meta.name = skillName;
   const files = walkFiles(skillRoot);
+  const installMdPath = path.join(skillRoot, 'INSTALL.md');
+  let installBody = '';
+  if (fs.existsSync(installMdPath)) {
+    installBody = fs.readFileSync(installMdPath, 'utf-8');
+  }
   return {
     name: skillName,
     title: meta.name,
@@ -79,6 +84,7 @@ function readSkillMeta(skillName) {
     totalSize: files.reduce((s, f) => s + f.size, 0),
     files: files.map(f => f.relPath),
     body: parsed.body,
+    installBody,
   };
 }
 
