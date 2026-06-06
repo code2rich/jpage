@@ -9,4 +9,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=8858
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - SESSION_SECRET=${SESSION_SECRET:-}
     restart: unless-stopped

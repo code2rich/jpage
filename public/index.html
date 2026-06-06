@@ -10,6 +10,31 @@
 <body>
 <div id="app"></div>
 
+<!-- 登录模板 -->
+<template id="login-template">
+<div class="layout login-layout">
+<main class="login-main">
+<form class="login-form" id="login-form" autocomplete="on">
+<div class="login-brand">
+<div class="brand-mark" aria-hidden="true">即</div>
+<h1 class="login-title">即页</h1>
+<p class="login-subtitle">拖入文件，即刻成页</p>
+</div>
+<label class="login-field">
+<span>用户名</span>
+<input type="text" name="username" id="login-username" required autocomplete="username" autofocus>
+</label>
+<label class="login-field">
+<span>密码</span>
+<input type="password" name="password" id="login-password" required autocomplete="current-password">
+</label>
+<div class="login-error" id="login-error" role="alert" hidden></div>
+<button type="submit" class="btn btn-primary login-submit" id="login-submit">登录</button>
+</form>
+</main>
+</div>
+</template>
+
 <!-- 文件管理模板 -->
 <template id="home-template">
 <div class="layout">
@@ -21,6 +46,10 @@
 <p class="header-tagline">拖入文件，即刻成页</p>
 </div>
 </div>
+<div class="header-right">
+<span class="header-user" id="header-user"></span>
+<button type="button" class="btn btn-small" id="btn-logout" aria-label="退出登录">退出</button>
+</div>
 </header>
 <main class="main">
 <div class="toolbar">
@@ -30,6 +59,10 @@
 <p class="upload-title">点击或拖拽上传</p>
 <span class="upload-hint">支持 .html .htm .md .markdown，单文件最大 50MB</span>
 </div>
+<label class="upload-privacy">
+<input type="checkbox" id="upload-is-public" checked>
+<span>公开访问（未勾选则仅管理员可访问）</span>
+</label>
 </div>
 <div class="file-list-header">
 <h2>文件列表</h2>
@@ -39,6 +72,19 @@
 <div class="empty-state" id="empty-state" style="display:none">
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
 <p>暂无文件，请上传</p>
+</div>
+
+<div class="skills-section">
+<div class="skills-header">
+<h2>AI 技能 (Skills)</h2>
+<span class="skills-count" id="skills-count" aria-live="polite"></span>
+</div>
+<p class="skills-hint">MCP 已启用后，可下载 Skill 包并安装到 Claude Code / Claude Desktop，让 AI 直接上传文件到即页。</p>
+<div class="skills-list" id="skills-list" aria-busy="false"></div>
+<div class="empty-state empty-state-sm" id="skills-empty" style="display:none">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+<p>暂无可用 Skill</p>
+</div>
 </div>
 </main>
 </div>
@@ -87,6 +133,27 @@
 </div>
 </div>
 </template>
+
+<!-- Skill 详情弹窗 -->
+<div class="modal-backdrop" id="skill-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="skill-modal-title">
+<div class="modal-panel">
+<div class="modal-header">
+<h2 id="skill-modal-title">Skill 详情</h2>
+<button type="button" class="btn btn-small modal-close" id="skill-modal-close" aria-label="关闭">×</button>
+</div>
+<div class="modal-body">
+<div class="skill-modal-meta" id="skill-modal-meta"></div>
+<h3>文件清单</h3>
+<ul class="skill-file-tree" id="skill-modal-files"></ul>
+<h3>SKILL.md 全文</h3>
+<pre class="skill-modal-source"><code id="skill-modal-source"></code></pre>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn" id="skill-modal-download">下载 .zip</button>
+<button type="button" class="btn btn-small" id="skill-modal-dismiss">关闭</button>
+</div>
+</div>
+</div>
 
 <script src="/js/app.js"></script>
 </body>
