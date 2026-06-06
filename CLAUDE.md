@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project: 即页 (jpage)
 
-零配置 HTML / Markdown 即时预览与分享工具。单文件 Express 服务（`server.js`） + MCP server 模块（`mcp-server.js`）。SQLite 存元数据与用户表，磁盘 `data/uploads/` 存原始文件，session 存 `data/sessions.sqlite`。单管理员鉴权（bcrypt）。
+零配置 HTML / Markdown 即时预览与分享工具。Express 服务（`server.js`）+ MCP server 模块（`mcp-server.js`）+ Skills 注册模块（`skills-registry.js`）。SQLite 存元数据与用户表，磁盘 `data/uploads/` 存原始文件，session 存 `data/sessions.sqlite`。单管理员鉴权（bcrypt）。支持 Markdown 增强渲染（代码高亮、KaTeX 公式、Mermaid 图表）。
 
 ## Commands
 
@@ -27,79 +27,81 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 
 ## Architecture
 
-**Two-module backend**:
-- `server.js` (~480 lines) — Express app, REST API, auth (session + bcrypt), multer upload, SQLite
-- `mcp-server.js` (~280 lines) — MCP Streamable HTTP server. Exports `mountMcpServer(app, {port, mcpToken, adminUserId})` and `closeMcpTransports()`. 6 tools + 2 resources; tools call the REST API via loopback fetch with the same Bearer token.
+**Three-module backend**:
+- `server.js` (~660 lines) — Express app, REST API, auth (session + bcrypt), multer upload, SQLite, Markdown 渲染增强（marked + highlight.js + KaTeX + Mermaid）
+- `mcp-server.js` (~350 lines) — MCP Streamable HTTP server. Exports `mountMcpServer(app, {port, mcpToken})` and `closeMcpTransports()`. 6 tools + 2 resources; tools call the REST API via loopback fetch with the same Bearer token.
+- `skills-registry.js` (~130 lines) — 自动扫描 `skills/*/SKILL.md`，解析 YAML frontmatter，提供 skill 列表/详情/ZIP 打包下载。
 
-**Storage**
-- `data/database.sqlite` — `files` and `users` tables
+**Storage**（均自动创建）：
+- `data/database.sqlite` — `files` 和 `users` 表
 - `data/sessions.sqlite` — express-session store (connect-sqlite3)
-- `data/uploads/` — uploaded file contents, named `<timestamp>-<random><ext>`
-- All auto-created on first run
+- `data/uploads/` — 上传文件内容，命名 `<timestamp>-<random><ext>`
 
 **Database schema**:
 - `files(id, original_name, stored_name, file_type, size, created_at, is_public, uploaded_by)` — `is_public=1` means anonymous can read; `uploaded_by` references `users.id`
 - `users(id, username UNIQUE, password_hash, created_at)`
 
 **REST API**:
-- `GET /api/auth/me` — current user
-- `POST /api/auth/login` — body `{username, password}`, sets `jpage.sid` cookie. Rate-limited 10/15min.
-- `POST /api/auth/logout` — destroys session
-- `GET /api/files` — list files (auth required)
-- `POST /api/files/upload` — multipart via multer (auth, 50/15min, 50MB, .html/.htm/.md/.markdown)
-- `POST /api/files/upload-json` — JSON `{name, content, isPublic?}` (auth, same rate limit / size / ext). Used by MCP.
-- `PUT /api/files/:id` — body `{name?, isPublic?}` (at least one)
-- `DELETE /api/files/:id` — removes DB row + disk file
-- `GET /api/files/:id/content` — returns raw file text as JSON (loadFileWithPrivacy allows public files)
-- `GET /api/files/:id/render` — returns rendered HTML (marked for markdown, charset-injected for HTML)
-- `GET /api/files/:id/download` — streams the file
-- `GET /api/skills` — list installed skill packages (auth required)
-- `GET /api/skills/:name` — skill detail with SKILL.md body and file list
-- `GET /api/skills/:name/download` — zip download of the entire skill directory
+- `GET /api/auth/me` — 当前用户
+- `POST /api/auth/login` — `{username, password}`，设置 `jpage.sid` cookie，限流 10/15min
+- `POST /api/auth/logout` — 销毁 session
+- `GET /api/files` — 列出文件（需登录）
+- `POST /api/files/upload` — multipart 上传（需登录，50/15min，50MB，.html/.htm/.md/.markdown）
+- `POST /api/files/upload-json` — JSON `{name, content, isPublic?}`（需登录，MCP 使用）
+- `PUT /api/files/:id` — `{name?, isPublic?}`（至少一个）
+- `DELETE /api/files/:id` — 删除数据库记录和磁盘文件
+- `GET /api/files/:id/content` — 返回原始文件文本 JSON（公开文件无需登录）
+- `GET /api/files/:id/render` — 返回渲染 HTML（Markdown 使用 marked + highlight.js + KaTeX + Mermaid）
+- `GET /api/files/:id/download` — 流式下载文件
+- `GET /api/skills` — 列出已安装的 skill 包（需登录）
+- `GET /api/skills/:name` — skill 详情（含 SKILL.md 内容和文件列表）
+- `GET /api/skills/:name/download` — ZIP 下载整个 skill 目录
 
-**Skills registry** — `skills-registry.js` auto-discovers `skills/*/SKILL.md` on every request. Parses minimal YAML frontmatter (`name`, `description`, `version`, `author`). The web UI shows a Skills section on the home page; admins can view details (modal) and download as zip. The zipped package mirrors the on-disk directory so it can be extracted directly into `~/.claude/skills/`.
+**Skills registry** — `skills-registry.js` 自动发现 `skills/*/SKILL.md`，解析 YAML frontmatter（`name`, `description`, `version`, `author`）。Web UI 首页展示 Skills 区块，管理员可查看详情（弹窗）和下载 ZIP。ZIP 包与磁盘目录结构一致，可直接解压到 `~/.claude/skills/`。
 
-**MCP endpoint** (mounted only when `MCP_TOKEN` env var is set):
+**MCP endpoint**（仅当 `MCP_TOKEN` 环境变量设置时挂载）：
 - `POST`/`GET`/`DELETE /mcp` — Streamable HTTP transport
 - Bearer auth via `Authorization: Bearer ${MCP_TOKEN}`
-- Tools: `list_files`, `upload_file`, `get_file_content`, `delete_file`, `rename_file`, `get_file_url`
-- Resources: `jpage://files` (list), `jpage://file/{id}` (content, ≤ 256KB)
+- Tools（6 个）：`list_files`, `upload_file`, `get_file_content`, `delete_file`, `rename_file`, `get_file_url`
+- Resources（2 个）：`jpage://files`（列表）, `jpage://file/{id}`（内容，≤ 256KB）
 
 **Static + SPA fallback** — `public/` served by `express.static`; catch-all `app.get('*')` returns `public/index.html` for client-side routing between home and preview views.
 
-**Frontend** — `public/index.html` defines two `<template>` blocks (home / preview); `public/js/app.js` is a single-file vanilla-JS controller that swaps them in based on URL hash. No build, no bundler, no framework. CSS in `public/css/style.css` includes a system-color-scheme dark mode.
+**Frontend** — `public/index.html` 定义两个 `<template>` 块（home / preview）；`public/js/app.js` 是单文件 vanilla-JS 控制器，基于 URL hash 切换视图。无构建、无打包器、无框架。CSS 在 `public/css/style.css`，支持系统深色模式。Markdown 渲染增强使用 marked + highlight.js + KaTeX + Mermaid。
 
 ## Conventions & Gotchas
 
-- **Default port is 8858** (not 3000). Configurable via `PORT` env var. `Dockerfile`, `docker-compose.yml`, and `README.md` all reference 8858 — keep them in sync.
-- **Multer filename encoding** — the `decodeFilename` helper (`Buffer.from(name, 'latin1').toString('utf8')`) is needed because multer stores `originalname` as latin1. Don't remove it.
-- **The catch-all route must come after all API routes and after the MCP mount** — Express matches in order; placing it earlier would shadow the API or `/mcp`.
-- **DB is shared** — the single `db` connection is reused for all requests. The promise wrappers `dbRun`/`dbGet`/`dbAll` keep call sites clean.
-- **Upload rate limit** is applied per-IP via `express-rate-limit` on `POST /api/files/upload` and `POST /api/files/upload-json` only.
-- **HTML render endpoint** intentionally does not sanitize the HTML — it's a sandbox inside the user's own iframe (`sandbox="allow-scripts allow-same-origin"`). Be cautious about changing this CSP.
-- **Container port mapping** — `docker-compose.yml` maps host 8858 → container 8858. The container itself doesn't need a port published if behind a reverse proxy.
-- **`.dockerignore` excludes `data/`** so uploaded files don't get baked into the image; the `data/` volume mount in compose is what persists state.
-- **Auth model** — `requireAuth` accepts `req.session.userId` OR `Authorization: Bearer ${MCP_TOKEN}`. When the MCP token is used, `req.session.userId` is set to the first `users.id` so `uploaded_by` records the admin user. `loadFileWithPrivacy` applies the same dual check.
-- **`MCP_TOKEN` is opt-in** — when unset, `mountMcpServer` prints a message and returns; no `/mcp` routes are added. This is by design: the REST API is unaffected.
-- **`uploaded_by` is set from `req.session.userId`** — when MCP uploads, this becomes the admin user id, not the MCP client. Don't add per-MCP-client identity.
+- **默认端口 8858**（非 3000）。通过 `PORT` 环境变量可配置。`Dockerfile`、`docker-compose.yml`、`README.md` 均引用 8858，保持同步。
+- **Multer 文件名编码** — `decodeFilename` 辅助函数（`Buffer.from(name, 'latin1').toString('utf8')`）是必需的，因为 multer 以 latin1 存储 `originalname`。不要移除。
+- **catch-all 路由必须在所有 API 路由和 MCP 挂载之后** — Express 按顺序匹配，提前放置会遮蔽 API 或 `/mcp`。
+- **数据库共享** — 单个 `db` 连接复用于所有请求。Promise 封装 `dbRun`/`dbGet`/`dbAll` 保持调用简洁。
+- **上传限流** — `express-rate-limit` 仅应用于 `POST /api/files/upload` 和 `POST /api/files/upload-json`，按 IP 限流。
+- **HTML 渲染端点** — 故意不清理 HTML，因为在用户自己的 iframe 沙箱中（`sandbox="allow-scripts allow-same-origin"`）。修改此 CSP 需谨慎。
+- **容器端口映射** — `docker-compose.yml` 映射 host 8858 → container 8858。反向代理后可不发布端口。
+- **`.dockerignore` 排除 `data/`** — 上传文件不烘焙进镜像；compose 中的 `data/` volume 持久化状态。
+- **鉴权模型** — `requireAuth` 接受 `req.session.userId` 或 `Authorization: Bearer ${MCP_TOKEN}`。MCP token 使用时，`req.session.userId` 设置为第一个 `users.id`，`uploaded_by` 记录管理员用户。`loadFileWithPrivacy` 应用相同双重检查。
+- **`MCP_TOKEN` 是可选的** — 未设置时，`mountMcpServer` 打印消息并返回，不添加 `/mcp` 路由。REST API 不受影响。
+- **`uploaded_by` 从 `req.session.userId` 设置** — MCP 上传时为管理员用户 id，非 MCP 客户端。不添加 per-MCP-client 身份。
+- **Markdown 渲染增强** — marked + highlight.js（代码高亮）+ KaTeX（数学公式 `$...$` / `$$...$$`）+ Mermaid（图表，支持深色/浅色主题）。渲染代码在 `server.js` 的 `renderMarkdown` 函数。
 
 ## File layout
 
 ```
-server.js                # Express + REST API + auth
+server.js                # Express + REST API + auth + Markdown 渲染增强
 mcp-server.js            # MCP Streamable HTTP server (POST/GET/DELETE /mcp)
-skills-registry.js       # scans skills/ for SKILL.md, parses frontmatter, streams zip
-package.json             # deps include @modelcontextprotocol/sdk, zod, archiver
+skills-registry.js       # 扫描 skills/ 目录，解析 SKILL.md，提供列表/详情/ZIP 打包
+package.json             # 依赖: @modelcontextprotocol/sdk, zod, archiver, marked, highlight.js, katex, mermaid 等
 Dockerfile               # node:20-alpine, EXPOSE 8858
 docker-compose.yml       # port 8858, ./data:/app/data volume
-.mcp.json                # example Claude Code / Desktop MCP client config
-docs/api.md              # full REST API reference
-skills/jpage-upload/     # example Claude Code / Desktop skill
+.env.example             # 环境变量模板
+.mcp.json                # Claude Code / Desktop MCP 客户端配置示例
+docs/api.md              # REST API 完整参考
+skills/jpage-upload/     # Claude Code / Desktop skill
   SKILL.md
 public/
-  index.html             # two <template>s: home + preview
-  css/style.css
-  js/app.js              # single-file vanilla JS controller (hash-based routing)
-data/                    # gitignored — SQLite DB, sessions, uploads (auto-created at runtime)
+  index.html             # 两个 <template>: home + preview
+  css/style.css          # 样式 + 深色模式
+  js/app.js              # 单文件 vanilla JS 控制器（hash 路由）
+data/                    # gitignore — SQLite DB, sessions, uploads（运行时自动创建）
 docs/screenshot-home.png
 ```

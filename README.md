@@ -2,26 +2,45 @@
 
 > 拖入文件，即刻成页。
 
-**即页**是一个零配置的 HTML / Markdown 即时预览与分享工具。把写好的文档拖进来，立刻获得一个干净的在线页面——无需部署流程，无需服务器知识。
+**即页**是一个零配置的 HTML / Markdown 即时预览与分享工具。把写好的文档拖进来，立刻获得一个干净的在线页面——无需部署流程，无需服务器知识。特别适合 AI 生成内容的一键分享。
 
 ---
 
 ## 功能特性
 
+### 核心能力
+
 - **即时预览** — 上传 HTML 或 Markdown 文件，秒级生成在线渲染页面
+- **Markdown 增强渲染** — 代码高亮（highlight.js）、数学公式（KaTeX）、Mermaid 图表，深色/浅色主题自动切换
 - **源码查看** — 渲染 / 源码双模式切换，方便对照
 - **文件管理** — 重命名、删除、下载、公开/私有切换，操作简单直观
 - **拖拽上传** — 支持点击选择和拖拽两种方式，单文件最大 50MB
 - **响应式设计** — 桌面端与移动端自适应，深色模式自动跟随系统
+
+### 安全与权限
+
 - **单管理员鉴权** — 会话 Cookie + bcrypt 密码哈希，登录后可管理全部文件
 - **公开/私有文件** — 上传时可选是否公开，私有文件仅管理员可访问
+- **API 限流** — 登录和上传接口均有频率限制，防止暴力破解和滥用
+
+### AI 集成
+
+- **MCP 协议支持** — 内置 MCP Streamable HTTP 端点，AI 工具可直接调用
+- **Skills 管理** — 自动发现 `skills/` 目录下的 Claude Code/Desktop 技能包
+- **JSON 上传接口** — `/api/files/upload-json` 支持程序化上传，适合 AI 工作流
+
+### 部署
+
 - **零依赖运行** — 单容器即可启动，SQLite 内置存储
+- **Docker 一键部署** — 多阶段构建，环境变量配置，数据卷持久化
 
 ## 技术栈
 
 - **后端**: Node.js + Express + express-session（SQLite 会话存储）
 - **数据库**: SQLite3（零配置，开箱即用）
 - **前端**: 原生 JavaScript（无框架依赖）
+- **渲染**: marked.js + highlight.js + KaTeX + Mermaid
+- **协议**: MCP Streamable HTTP（@modelcontextprotocol/sdk）
 - **容器**: Docker / Docker Compose
 
 ## 快速开始
@@ -131,29 +150,19 @@ jpage/
 
 ## MCP / AI 集成
 
-即页在同一个 Express 进程里挂载了 [MCP Streamable HTTP](https://modelcontextprotocol.io) 端点 `/mcp`，让 Claude Code / Claude Desktop / 其他 MCP 客户端能够：
-
-- **上传 HTML**（你的核心用例：AI 生成的 HTML 一键变成可分享的预览链接）
-- 列出 / 读取 / 重命名 / 删除文件
-- 浏览文件元数据（resources）
+即页内置 [MCP Streamable HTTP](https://modelcontextprotocol.io) 端点，让 Claude Code、Claude Desktop 等 AI 工具能够直接上传、管理文件。
 
 ### 启用
 
-启动时设置 `MCP_TOKEN` 即可启用端点；不设置则端点不挂载（启动日志会提示）：
+设置 `MCP_TOKEN` 环境变量即可启用：
 
 ```bash
-MCP_TOKEN=devtoken \
-ADMIN_USER=admin \
-ADMIN_PASSWORD=test1234 \
-SESSION_SECRET=dev-secret \
-npm start
+MCP_TOKEN=your-secret-token
 ```
-
-启动日志应包含：`[即页] MCP 端点已挂载: http://localhost:8858/mcp (Bearer auth)`
 
 ### 客户端配置
 
-仓库根的 `.mcp.json` 是示例（已附 `_comment` 字段说明）。把它放到项目根或合并到 `~/.claude.json` 即可被 Claude Code 识别：
+**Claude Code** — 把以下配置放到项目根 `.mcp.json` 或合并到 `~/.claude.json`：
 
 ```json
 {
@@ -169,93 +178,54 @@ npm start
 }
 ```
 
-Claude Desktop 用户把 `mcpServers` 块合并到 `~/Library/Application Support/Claude/claude_desktop_config.json`。
+**Claude Desktop** — 把 `mcpServers` 块合并到 `~/Library/Application Support/Claude/claude_desktop_config.json`。
 
-### 暴露的能力
+### 能力
 
 **Tools**（6 个）：
 
 | 工具 | 用途 |
 |---|---|
-| `upload_file` | 上传 HTML 或 Markdown，返回 `{id, url, ...}`，`url` 是预览链接 |
+| `upload_file` | 上传 HTML 或 Markdown，返回预览链接 |
 | `list_files` | 列出所有文件 |
 | `get_file_content` | 读取文件原文 |
-| `get_file_url` | 仅取文件的预览 URL |
-| `rename_file` | 重命名 |
-| `delete_file` | 删除 |
+| `get_file_url` | 获取文件预览 URL |
+| `rename_file` | 重命名文件 |
+| `delete_file` | 删除文件 |
 
 **Resources**（2 个）：
 
 | URI | 说明 |
 |---|---|
 | `jpage://files` | 所有文件元数据（JSON 列表） |
-| `jpage://file/{id}` | 单文件正文（仅 ≤ 256KB，超过请改用 `get_file_content` 工具） |
-
-### 上传 HTML 的最小示例
-
-让 Claude（任何 MCP-aware 客户端）执行：
-
-```
-调用 upload_file
-参数 { name: "demo.html", content: "<!doctype html><h1>Hello</h1>" }
-```
-
-返回：
-
-```json
-{
-  "id": 42,
-  "original_name": "demo.html",
-  "file_type": "html",
-  "size": 28,
-  "is_public": 1,
-  "url": "http://127.0.0.1:8858/api/files/42/render"
-}
-```
-
-把 `url` 给用户即可。**注意**：该 URL 默认为 loopback，仅本机可访问；如部署到服务器，请替换 host。
+| `jpage://file/{id}` | 单文件正文（≤ 256KB） |
 
 ### 配套 Skill
 
-仓库内 `skills/jpage-upload/SKILL.md` 是一个开箱即用的 Claude Code / Desktop skill。安装：
+仓库内 `skills/jpage-upload/SKILL.md` 是 Claude Code / Desktop 的开箱即用技能。安装后，AI 生成 HTML、Markdown、报告、可视化等内容时会自动上传到即页并返回预览链接。
 
 ```bash
 ln -s "$(pwd)/skills/jpage-upload" ~/.claude/skills/jpage-upload
 ```
 
-启动 Claude Code 后即会自动加载 jpage MCP 工具。
+### Web 管理
 
-### 在 Web 页面中管理 Skill
-
-登录 jpage 后，首页底部新增 **AI 技能 (Skills)** 区块：
-
-- 列出 `skills/` 目录下所有可用的 Skill
-- 「查看详情」打开弹窗，显示元数据、文件清单、SKILL.md 全文
-- 「下载 .zip」直接下载该 Skill 目录的 zip 包
-
-API 端点：`GET /api/skills`、`GET /api/skills/:name`、`GET /api/skills/:name/download`（均需登录或 Bearer token）。
-
-要新增 Skill：在 `skills/<name>/SKILL.md` 创建一个目录，编写 frontmatter（`name` / `description` 可选 `version` / `author`），重启服务即可被自动发现。
+登录后首页底部有 **AI 技能 (Skills)** 区块，可查看详情、下载 zip 包。新增 Skill 只需在 `skills/<name>/SKILL.md` 编写 frontmatter，重启服务即可自动发现。
 
 ### 调试
-
-无图形客户端时，可用官方 inspector：
 
 ```bash
 npx -y @modelcontextprotocol/inspector http://localhost:8858/mcp
 ```
 
-会要求填 Bearer token（即 `MCP_TOKEN` 的值）。
-
-### 完整 API 文档
-
-见 [docs/api.md](docs/api.md)。
+完整 API 文档见 [docs/api.md](docs/api.md)。
 
 ## 使用场景
 
-- **临时分享文档** — 写完的 Markdown 笔记、HTML 报告，拖进来就能发给同事
-- **静态页面托管** — 简单的单页 HTML 演示，无需配置服务器
-- **Markdown 预览** — 本地写好 .md 文件，上传后自动渲染为排版精美的页面
+- **AI 生成内容分享** — Claude Code、Cursor 等工具生成的 HTML 报告、可视化页面，一键上传获得可分享链接
+- **技术文档协作** — Markdown 笔记、会议纪要、项目报告，上传后自动渲染代码高亮、数学公式、流程图
+- **静态页面托管** — 单页 HTML Demo、原型、落地页，无需配置服务器
+- **临时文件分享** — 任何 HTML/Markdown 文件，拖入即得链接，无需注册账号
 
 ## 为什么做这个
 
