@@ -49,7 +49,7 @@ function textResult(payload, opts = {}) {
   };
 }
 
-function createMcpServer({ port, api }) {
+function createMcpServer({ port, api, mcpIp }) {
   const server = new McpServer(
     { name: 'jpage', version: '1.0.0' },
     { capabilities: {} }
@@ -104,7 +104,7 @@ function createMcpServer({ port, api }) {
       });
       return textResult({
         ...data,
-        url: `http://127.0.0.1:${port}/api/files/${data.id}/render`,
+        url: `http://${mcpIp}:${port}/api/files/${data.id}/render`,
       });
     }
   );
@@ -171,7 +171,7 @@ function createMcpServer({ port, api }) {
       },
     },
     async ({ id }) => {
-      return textResult({ id, url: `http://127.0.0.1:${port}/api/files/${id}/render` });
+      return textResult({ id, url: `http://${mcpIp}:${port}/api/files/${id}/render` });
     }
   );
 
@@ -243,7 +243,7 @@ function createMcpServer({ port, api }) {
 
 const transports = {};
 
-function mountMcpServer(app, { port, mcpToken }) {
+function mountMcpServer(app, { port, mcpToken, mcpIp }) {
   if (!mcpToken) {
     console.log('[即页] MCP_TOKEN 未设置，MCP 端点 /mcp 已禁用（设置 MCP_TOKEN 后重启生效）');
     return;
@@ -258,7 +258,7 @@ function mountMcpServer(app, { port, mcpToken }) {
   });
 
   function getServer() {
-    return createMcpServer({ port, api });
+    return createMcpServer({ port, api, mcpIp });
   }
 
   const bearerAuth = (req, res, next) => {
@@ -337,7 +337,6 @@ function mountMcpServer(app, { port, mcpToken }) {
   app.get('/mcp', bearerAuth, mcpGetHandler);
   app.delete('/mcp', bearerAuth, mcpDeleteHandler);
 
-  const mcpIp = process.env.MCP_IP || 'localhost';
   console.log(`[即页] MCP 端点已挂载: http://${mcpIp}:${port}/mcp (Bearer auth)`);
 }
 

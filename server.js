@@ -581,7 +581,7 @@ app.get('/api/skills/:name/download', requireAuth, (req, res) => {
   });
 });
 
-mountMcpServer(app, { port: PORT, mcpToken: process.env.MCP_TOKEN });
+mountMcpServer(app, { port: PORT, mcpToken: process.env.MCP_TOKEN, mcpIp: process.env.MCP_IP || 'localhost' });
 
 const NODE_MODULES = path.join(__dirname, 'node_modules');
 app.use('/vendor/katex', express.static(path.join(NODE_MODULES, 'katex', 'dist')));
