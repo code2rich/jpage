@@ -133,8 +133,15 @@ function renderHome(container) {
 
   setupUpload(container);
   loadFiles(container);
-  loadSkills(container);
   setupSkillModal();
+
+  // MCP 配置按钮
+  const mcpBtn = container.querySelector('#btn-mcp-config');
+  if (mcpBtn) mcpBtn.addEventListener('click', openMcpConfigModal);
+
+  // Skills 按钮
+  const skillsBtn = container.querySelector('#btn-skills');
+  if (skillsBtn) skillsBtn.addEventListener('click', openSkillsListModal);
 }
 
 function setupUpload(container) {
@@ -239,6 +246,7 @@ async function loadFiles(container) {
           </div>
         </div>
         <div class="file-actions">
+          <button type="button" class="btn btn-small btn-copy-link" data-id="${f.id}">复制链接</button>
           <button type="button" class="btn btn-small btn-privacy" data-id="${f.id}" data-public="${isPublic}">${isPublic ? '设为私有' : '设为公开'}</button>
           <button type="button" class="btn btn-small btn-rename" data-id="${f.id}">重命名</button>
           <button type="button" class="btn btn-small btn-danger btn-delete" data-id="${f.id}">删除</button>
@@ -254,6 +262,10 @@ async function loadFiles(container) {
           e.preventDefault();
           openPreview();
         }
+      });
+      el.querySelector('.btn-copy-link').addEventListener('click', e => {
+        e.stopPropagation();
+        doCopyLink(f.id);
       });
       el.querySelector('.btn-privacy').addEventListener('click', e => {
         e.stopPropagation();
@@ -279,6 +291,23 @@ async function loadFiles(container) {
       return;
     }
     toast(e.message, 'error');
+  }
+}
+
+async function doCopyLink(id) {
+  const url = `${location.origin}${location.pathname}#/view/${id}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    toast('链接已复制');
+  } catch (e) {
+    // fallback for non-HTTPS
+    const input = document.createElement('input');
+    input.value = url;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    input.remove();
+    toast('链接已复制');
   }
 }
 
@@ -465,61 +494,6 @@ function escapeHtml(text) {
 }
 
 // ---------- Skills ----------
-async function loadSkills(container) {
-  const list = container.querySelector('#skills-list');
-  const empty = container.querySelector('#skills-empty');
-  const count = container.querySelector('#skills-count');
-  if (!list) return;
-  list.setAttribute('aria-busy', 'true');
-  list.classList.add('is-loading');
-  list.textContent = '正在加载…';
-  empty.style.display = 'none';
-  count.textContent = '';
-  try {
-    const data = await api('/api/skills');
-    list.classList.remove('is-loading');
-    list.setAttribute('aria-busy', 'false');
-    list.innerHTML = '';
-    count.textContent = `共 ${data.skills.length} 个 Skill`;
-    if (!data.skills.length) {
-      empty.style.display = 'block';
-      return;
-    }
-    data.skills.forEach(s => {
-      const el = document.createElement('div');
-      el.className = 'skill-card';
-      const desc = s.description || '（无描述）';
-      el.innerHTML = `
-        <div class="skill-card-info">
-          <div class="skill-card-title">
-            <span class="skill-name">${escapeHtml(s.title || s.name)}</span>
-            <span class="skill-version">${escapeHtml(s.version || '')}</span>
-          </div>
-          <p class="skill-card-desc">${escapeHtml(desc)}</p>
-          <div class="skill-card-meta">${s.fileCount} 个文件 · ${formatSize(s.totalSize)}</div>
-        </div>
-        <div class="skill-card-actions">
-          <button type="button" class="btn btn-small skill-view" data-name="${escapeHtml(s.name)}">查看详情</button>
-          <button type="button" class="btn btn-small skill-download" data-name="${escapeHtml(s.name)}">下载 .zip</button>
-        </div>
-      `;
-      el.querySelector('.skill-view').addEventListener('click', () => openSkillModal(s.name));
-      el.querySelector('.skill-download').addEventListener('click', () => downloadSkill(s.name));
-      list.appendChild(el);
-    });
-  } catch (e) {
-    list.classList.remove('is-loading');
-    list.setAttribute('aria-busy', 'false');
-    list.innerHTML = '';
-    if (e.status === 401) {
-      currentUser = null;
-      navigate('/');
-      return;
-    }
-    toast(e.message, 'error');
-  }
-}
-
 let skillModalCurrent = null;
 
 function setupSkillModal() {
@@ -646,3 +620,164 @@ document.addEventListener('click', e => {
   if (!btn) return;
   if (skillModalCurrent) downloadSkill(skillModalCurrent);
 });
+
+// ---------- MCP Config Modal ----------
+function openMcpConfigModal() {
+  const modal = document.getElementById('mcp-config-modal');
+  if (!modal) return;
+
+  // 绑定关闭事件
+  if (!modal.dataset.bound) {
+    modal.dataset.bound = '1';
+    modal.querySelector('#mcp-config-close').addEventListener('click', closeMcpConfigModal);
+    modal.querySelector('#mcp-config-dismiss').addEventListener('click', closeMcpConfigModal);
+    modal.addEventListener('click', e => { if (e.target === modal) closeMcpConfigModal(); });
+  }
+
+  // 加载配置
+  const statusEl = document.getElementById('mcp-status');
+  const detailEl = document.getElementById('mcp-detail');
+  statusEl.innerHTML = '<p style="color:var(--text-secondary)">加载中…</p>';
+  detailEl.innerHTML = '';
+
+  api('/api/mcp/config').then(data => {
+    if (data.enabled) {
+      statusEl.innerHTML = `
+        <div class="mcp-status-badge mcp-status-on">
+          <span class="mcp-status-dot"></span> MCP 已启用
+        </div>
+        <div class="mcp-info-row">
+          <span class="mcp-label">Endpoint</span>
+          <code class="mcp-value">${escapeHtml(data.url)}</code>
+        </div>
+        <div class="mcp-info-row">
+          <span class="mcp-label">Token</span>
+          <code class="mcp-value">${escapeHtml(data.token)}</code>
+        </div>
+      `;
+      const configJson = JSON.stringify(data.config, null, 2);
+      detailEl.innerHTML = `
+        <h3>客户端配置</h3>
+        <p class="mcp-config-hint">将以下配置合并到 Claude Code 的 <code>.mcp.json</code> 或 Claude Desktop 的配置文件中：</p>
+        <div class="mcp-config-block">
+          <button type="button" class="btn btn-small mcp-copy-btn" id="mcp-copy-config">复制</button>
+          <pre class="mcp-config-code"><code>${escapeHtml(configJson)}</code></pre>
+        </div>
+      `;
+      const copyBtn = document.getElementById('mcp-copy-config');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', () => {
+          navigator.clipboard.writeText(configJson).then(() => {
+            toast('已复制到剪贴板');
+            copyBtn.textContent = '已复制';
+            setTimeout(() => { copyBtn.textContent = '复制'; }, 2000);
+          }).catch(() => toast('复制失败', 'error'));
+        });
+      }
+    } else {
+      statusEl.innerHTML = `
+        <div class="mcp-status-badge mcp-status-off">
+          <span class="mcp-status-dot"></span> MCP 未启用
+        </div>
+        <p class="mcp-config-hint">设置环境变量 <code>MCP_TOKEN</code> 后重启服务即可启用 MCP 端点。</p>
+        <div class="mcp-config-block">
+          <pre class="mcp-config-code"><code>MCP_TOKEN=your-secret-token npm start</code></pre>
+        </div>
+      `;
+    }
+    modal.hidden = false;
+    modal.setAttribute('aria-hidden', 'false');
+  }).catch(e => {
+    statusEl.innerHTML = `<p style="color:var(--danger)">加载失败: ${escapeHtml(e.message)}</p>`;
+    modal.hidden = false;
+    modal.setAttribute('aria-hidden', 'false');
+  });
+}
+
+function closeMcpConfigModal() {
+  const modal = document.getElementById('mcp-config-modal');
+  if (!modal) return;
+  modal.hidden = true;
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+// ---------- Skills List Modal ----------
+function openSkillsListModal() {
+  const modal = document.getElementById('skills-list-modal');
+  if (!modal) return;
+
+  // 绑定关闭事件
+  if (!modal.dataset.bound) {
+    modal.dataset.bound = '1';
+    modal.querySelector('#skills-list-close').addEventListener('click', closeSkillsListModal);
+    modal.querySelector('#skills-list-dismiss').addEventListener('click', closeSkillsListModal);
+    modal.addEventListener('click', e => { if (e.target === modal) closeSkillsListModal(); });
+  }
+
+  // 加载 skills
+  loadSkillsForModal();
+  modal.hidden = false;
+  modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeSkillsListModal() {
+  const modal = document.getElementById('skills-list-modal');
+  if (!modal) return;
+  modal.hidden = true;
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+function loadSkillsForModal() {
+  const list = document.getElementById('skills-list');
+  const empty = document.getElementById('skills-empty');
+  if (!list) return;
+  list.setAttribute('aria-busy', 'true');
+  list.classList.add('is-loading');
+  list.textContent = '正在加载…';
+  empty.style.display = 'none';
+  api('/api/skills').then(data => {
+    list.classList.remove('is-loading');
+    list.setAttribute('aria-busy', 'false');
+    list.innerHTML = '';
+    if (!data.skills.length) {
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+    data.skills.forEach(s => {
+      const el = document.createElement('div');
+      el.className = 'skill-card';
+      const desc = s.description || '（无描述）';
+      el.innerHTML = `
+        <div class="skill-card-info">
+          <div class="skill-card-title">
+            <span class="skill-name">${escapeHtml(s.title || s.name)}</span>
+            <span class="skill-version">${escapeHtml(s.version || '')}</span>
+          </div>
+          <p class="skill-card-desc">${escapeHtml(desc)}</p>
+          <div class="skill-card-meta">${s.fileCount} 个文件 · ${formatSize(s.totalSize)}</div>
+        </div>
+        <div class="skill-card-actions">
+          <button type="button" class="btn btn-small skill-view" data-name="${escapeHtml(s.name)}">查看详情</button>
+          <button type="button" class="btn btn-small skill-download" data-name="${escapeHtml(s.name)}">下载 .zip</button>
+        </div>
+      `;
+      el.querySelector('.skill-view').addEventListener('click', () => {
+        closeSkillsListModal();
+        openSkillModal(s.name);
+      });
+      el.querySelector('.skill-download').addEventListener('click', () => downloadSkill(s.name));
+      list.appendChild(el);
+    });
+  }).catch(e => {
+    list.classList.remove('is-loading');
+    list.setAttribute('aria-busy', 'false');
+    list.innerHTML = '';
+    if (e.status === 401) {
+      currentUser = null;
+      navigate('/');
+      return;
+    }
+    toast(e.message, 'error');
+  });
+}

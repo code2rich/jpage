@@ -337,7 +337,8 @@ function mountMcpServer(app, { port, mcpToken }) {
   app.get('/mcp', bearerAuth, mcpGetHandler);
   app.delete('/mcp', bearerAuth, mcpDeleteHandler);
 
-  console.log(`[即页] MCP 端点已挂载: http://localhost:${port}/mcp (Bearer auth)`);
+  const mcpIp = process.env.MCP_IP || 'localhost';
+  console.log(`[即页] MCP 端点已挂载: http://${mcpIp}:${port}/mcp (Bearer auth)`);
 }
 
 async function closeMcpTransports() {

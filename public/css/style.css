@@ -205,6 +205,8 @@ body {
   color: #fff;
   border-color: var(--primary);
 }
+.btn-copy-link { color: var(--primary); border-color: var(--primary); }
+.btn-copy-link:hover { background: var(--primary); color: #fff; }
 
 .auth-message {
   margin-top: 12px;
@@ -1159,5 +1161,137 @@ body {
   padding: 14px 20px;
   border-top: 1px solid var(--border);
   background: var(--bg);
+}
+
+/* Modal wide variant */
+.modal-panel-wide {
+  max-width: 860px;
+}
+
+/* MCP Config Modal */
+.mcp-status {
+  margin-bottom: 16px;
+}
+
+.mcp-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+.mcp-status-on {
+  background: rgba(22, 163, 74, 0.1);
+  color: #16a34a;
+  border: 1px solid rgba(22, 163, 74, 0.25);
+}
+
+.mcp-status-off {
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--danger);
+  border: 1px solid rgba(220, 38, 38, 0.2);
+}
+
+.mcp-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.mcp-status-on .mcp-status-dot { background: #16a34a; }
+.mcp-status-off .mcp-status-dot { background: var(--danger); }
+
+.mcp-info-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.mcp-info-row:last-child { border-bottom: none; }
+
+.mcp-label {
+  flex-shrink: 0;
+  width: 64px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.mcp-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  background: var(--bg);
+  padding: 2px 8px;
+  border-radius: 4px;
+  word-break: break-all;
+  user-select: all;
+}
+
+.mcp-detail h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 20px 0 8px;
+}
+
+.mcp-config-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 10px;
+  line-height: 1.6;
+}
+
+.mcp-config-hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  background: var(--bg);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.mcp-config-block {
+  position: relative;
+}
+
+.mcp-config-code {
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  overflow-x: auto;
+}
+
+.mcp-config-code code { font-family: inherit; }
+
+.mcp-copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  .mcp-status-on {
+    background: rgba(22, 163, 74, 0.15);
+    border-color: rgba(22, 163, 74, 0.35);
+  }
+  .mcp-status-off {
+    background: rgba(248, 113, 113, 0.12);
+    border-color: rgba(248, 113, 113, 0.3);
+  }
 }
 

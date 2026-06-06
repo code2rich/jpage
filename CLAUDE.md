@@ -8,11 +8,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-- `npm install` — install deps
-- `npm start` — run server in production mode (port 8858, see `PORT` env var)
-- `npm run dev` — run with `nodemon` for hot reload
-- `docker-compose up -d` — build & start container; `./data` is bind-mounted to persist DB and uploads
-- `MCP_TOKEN=xxx npm start` — 同时启用 `/mcp` MCP 端点（不设置则端点不挂载）
+**推荐使用 Docker Compose 部署**（本地和生产均适用）：
+
+1. 复制 `.env.example` 或自行创建 `.env`，填入 `SESSION_SECRET`、`ADMIN_PASSWORD`、`MCP_TOKEN` 等
+2. `docker-compose up -d` — 构建镜像并启动容器，`./data` 目录 bind-mount 持久化数据库和上传文件
+3. `docker-compose logs -f` — 查看启动日志（首次会打印自动生成的管理员密码，如未在 `.env` 指定）
+4. `docker-compose down` — 停止容器
+
+**本地开发**（不用 Docker）：
+
+- `npm install` — 安装依赖
+- `npm run dev` — nodemon 热重载开发模式
+- `npm start` — 直接运行（需自行配置 `.env` 或环境变量）
+
+环境变量说明见 `.env` 文件注释。`MCP_TOKEN` 设置后自动启用 `/mcp` 端点。
 
 There is no test suite, linter, or build step. Verify changes by hitting the API, loading the UI in a browser at http://localhost:8858, or using `npx @modelcontextprotocol/inspector http://localhost:8858/mcp` to debug the MCP server.
 

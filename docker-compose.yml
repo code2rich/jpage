@@ -7,9 +7,11 @@ services:
     volumes:
       - ./data:/app/data
     environment:
-      - NODE_ENV=production
-      - PORT=8858
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=${PORT:-8858}
       - ADMIN_USER=${ADMIN_USER:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - SESSION_SECRET=${SESSION_SECRET:-}
+      - MCP_TOKEN=${MCP_TOKEN:-}
+      - MCP_IP=${MCP_IP:-localhost}
     restart: unless-stopped

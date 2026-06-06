@@ -10,8 +10,71 @@ const bcrypt = require('bcryptjs');
 const helmet = require('helmet');
 const sqlite3 = require('sqlite3').verbose();
 const { marked } = require('marked');
+const { markedHighlight } = require('marked-highlight');
+const hljs = require('highlight.js');
+const katex = require('katex');
 const { mountMcpServer, closeMcpTransports } = require('./mcp-server');
 const { listSkills, getSkill, createZipStream } = require('./skills-registry');
+
+function renderKatex(tex, displayMode) {
+  try {
+    return katex.renderToString(tex, {
+      displayMode,
+      throwOnError: false,
+      output: 'html',
+      strict: false
+    });
+  } catch (e) {
+    return `<code class="katex-error">${tex}</code>`;
+  }
+}
+
+marked.use(markedHighlight({
+  langPrefix: 'hljs language-',
+  highlight(code, lang) {
+    const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+    return hljs.highlight(code, { language, ignoreIllegals: true }).value;
+  }
+}));
+
+marked.use({
+  extensions: [
+    {
+      name: 'katexInline',
+      level: 'inline',
+      start(src) { return src.indexOf('$'); },
+      tokenizer(src) {
+        const match = /^\$([^\$\n]+?)\$/.exec(src);
+        if (!match) return;
+        return {
+          type: 'katexInline',
+          raw: match[0],
+          text: match[1]
+        };
+      },
+      renderer(token) {
+        return renderKatex(token.text, false);
+      }
+    },
+    {
+      name: 'katexBlock',
+      level: 'block',
+      start(src) { return src.indexOf('$$'); },
+      tokenizer(src) {
+        const match = /^\$\$([\s\S]+?)\$\$(?:\n|$)/.exec(src);
+        if (!match) return;
+        return {
+          type: 'katexBlock',
+          raw: match[0],
+          text: match[1]
+        };
+      },
+      renderer(token) {
+        return `<div class="katex-display">${renderKatex(token.text, true)}</div>\n`;
+      }
+    }
+  ]
+});
 
 const app = express();
 const PORT = process.env.PORT || 8858;
@@ -120,7 +183,7 @@ app.use(session({
   cookie: {
     httpOnly: true,
     sameSite: 'strict',
-    secure: NODE_ENV === 'production',
+    secure: 'auto',
     maxAge: 7 * 24 * 60 * 60 * 1000
   }
 }));
@@ -376,29 +439,64 @@ app.get('/api/files/:id/render', loadFileWithPrivacy, async (req, res) => {
     const content = fs.readFileSync(filePath, 'utf-8');
 
     if (file.file_type === 'markdown') {
-      const html = marked(content, { headerIds: false, mangle: false });
+      const html = marked.parse(content, { gfm: true, breaks: false })
+        .replace(/<pre><code class="hljs language-mermaid">([\s\S]*?)<\/code><\/pre>/g,
+          (_, code) => `<pre class="mermaid">${code}</pre>`);
       const fullHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${file.original_name}</title>
+<link rel="stylesheet" href="/vendor/katex/katex.min.css">
+<link rel="stylesheet" href="/vendor/highlight.js/styles/github.min.css" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="/vendor/highlight.js/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
 <style>
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; line-height: 1.7; color: #333; background: #fff; }
-h1, h2, h3, h4 { color: #222; margin-top: 1.5em; margin-bottom: 0.6em; }
+:root { color-scheme: light dark; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; line-height: 1.7; color: #24292f; background: #ffffff; }
+h1, h2, h3, h4 { color: #1f2328; margin-top: 1.5em; margin-bottom: 0.6em; }
 pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; }
-code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
 pre code { background: none; padding: 0; }
-blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 16px; color: #666; }
+code { font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace; font-size: 0.9em; }
+:not(pre) > code { background: rgba(175, 184, 193, 0.2); padding: 2px 6px; border-radius: 3px; }
+blockquote { border-left: 4px solid #d0d7de; margin: 0; padding-left: 16px; color: #57606a; }
 table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+th, td { border: 1px solid #d0d7de; padding: 8px 12px; text-align: left; }
 th { background: #f6f8fa; }
 img { max-width: 100%; height: auto; }
-a { color: #0366d6; text-decoration: none; }
+a { color: #0969da; text-decoration: none; }
 a:hover { text-decoration: underline; }
+.katex-display { margin: 1em 0; overflow-x: auto; overflow-y: hidden; }
+pre.mermaid { background: #ffffff; color: #1f2328; text-align: center; }
+.katex-error { color: #cf222e; background: #ffebe9; padding: 1px 4px; border-radius: 3px; }
+@media (prefers-color-scheme: dark) {
+  body { color: #e6edf3; background: #0d1117; }
+  h1, h2, h3, h4 { color: #f0f6fc; }
+  pre { background: #161b22; }
+  blockquote { border-left-color: #3d444d; color: #9198a1; }
+  th, td { border-color: #3d444d; }
+  th { background: #161b22; }
+  a { color: #2f81f7; }
+  pre.mermaid { background: #0d1117; color: #e6edf3; }
+}
 </style>
 </head>
-<body>${html}</body>
+<body>${html}
+<script src="/vendor/mermaid/mermaid.min.js"></script>
+<script>
+(function() {
+  function initMermaid() {
+    var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    mermaid.initialize({ startOnLoad: true, securityLevel: 'loose', theme: dark ? 'dark' : 'default' });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initMermaid);
+  } else {
+    initMermaid();
+  }
+})();
+</script>
+</body>
 </html>`;
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.send(fullHtml);
@@ -447,6 +545,27 @@ app.get('/api/skills/:name', requireAuth, async (req, res) => {
   res.json(skill);
 });
 
+app.get('/api/mcp/config', requireAuth, (req, res) => {
+  const enabled = !!process.env.MCP_TOKEN;
+  const host = req.headers.host || `localhost:${PORT}`;
+  const protocol = req.protocol || 'http';
+  const url = `${protocol}://${host}/mcp`;
+  res.json({
+    enabled,
+    token: enabled ? process.env.MCP_TOKEN : null,
+    url,
+    config: {
+      mcpServers: {
+        jpage: {
+          type: 'http',
+          url,
+          headers: { Authorization: `Bearer ${process.env.MCP_TOKEN || '<YOUR_TOKEN>'}` }
+        }
+      }
+    }
+  });
+});
+
 app.get('/api/skills/:name/download', requireAuth, (req, res) => {
   const archive = createZipStream(req.params.name);
   if (!archive) return res.status(404).json({ error: 'Skill 不存在' });
@@ -463,6 +582,11 @@ app.get('/api/skills/:name/download', requireAuth, (req, res) => {
 });
 
 mountMcpServer(app, { port: PORT, mcpToken: process.env.MCP_TOKEN });
+
+const NODE_MODULES = path.join(__dirname, 'node_modules');
+app.use('/vendor/katex', express.static(path.join(NODE_MODULES, 'katex', 'dist')));
+app.use('/vendor/highlight.js', express.static(path.join(NODE_MODULES, 'highlight.js')));
+app.use('/vendor/mermaid', express.static(path.join(NODE_MODULES, 'mermaid', 'dist')));
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -513,7 +637,8 @@ async function bootstrapAdmin() {
 }
 
 app.listen(PORT, async () => {
-  console.log(`[即页] 服务已启动: http://localhost:${PORT}`);
+  const mcpIp = process.env.MCP_IP || 'localhost';
+  console.log(`[即页] 服务已启动: http://${mcpIp}:${PORT}`);
   if (sessionSecretWarning) console.warn('[即页] SESSION_SECRET 未设置，已生成临时密钥（重启后会话会失效）');
   await bootstrapAdmin();
   try {
@@ -524,6 +649,8 @@ app.listen(PORT, async () => {
   }
   if (process.env.MCP_TOKEN && !adminUserId) {
     console.warn('[即页] MCP_TOKEN 已设置但 users 表为空，MCP 端点将禁用');
+  } else if (process.env.MCP_TOKEN && adminUserId) {
+    console.log(`[即页] MCP 端点已启用: http://${mcpIp}:${PORT}/mcp`);
   }
 });
 

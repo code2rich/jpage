@@ -47,6 +47,8 @@
 </div>
 </div>
 <div class="header-right">
+<button type="button" class="btn btn-small" id="btn-mcp-config" aria-label="MCP 配置">MCP 配置</button>
+<button type="button" class="btn btn-small" id="btn-skills" aria-label="Skills 管理">Skills</button>
 <span class="header-user" id="header-user"></span>
 <button type="button" class="btn btn-small" id="btn-logout" aria-label="退出登录">退出</button>
 </div>
@@ -72,19 +74,6 @@
 <div class="empty-state" id="empty-state" style="display:none">
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
 <p>暂无文件，请上传</p>
-</div>
-
-<div class="skills-section">
-<div class="skills-header">
-<h2>AI 技能 (Skills)</h2>
-<span class="skills-count" id="skills-count" aria-live="polite"></span>
-</div>
-<p class="skills-hint">MCP 已启用后，可下载 Skill 包并安装到 Claude Code / Claude Desktop，让 AI 直接上传文件到即页。</p>
-<div class="skills-list" id="skills-list" aria-busy="false"></div>
-<div class="empty-state empty-state-sm" id="skills-empty" style="display:none">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
-<p>暂无可用 Skill</p>
-</div>
 </div>
 </main>
 </div>
@@ -153,6 +142,44 @@
 <div class="modal-footer">
 <button type="button" class="btn" id="skill-modal-download">下载 .zip</button>
 <button type="button" class="btn btn-small" id="skill-modal-dismiss">关闭</button>
+</div>
+</div>
+</div>
+
+<!-- MCP 配置弹窗 -->
+<div class="modal-backdrop" id="mcp-config-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="mcp-config-title">
+<div class="modal-panel">
+<div class="modal-header">
+<h2 id="mcp-config-title">MCP 配置</h2>
+<button type="button" class="btn btn-small modal-close" id="mcp-config-close" aria-label="关闭">×</button>
+</div>
+<div class="modal-body">
+<div class="mcp-status" id="mcp-status"></div>
+<div class="mcp-detail" id="mcp-detail"></div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn btn-small" id="mcp-config-dismiss">关闭</button>
+</div>
+</div>
+</div>
+
+<!-- Skills 列表弹窗 -->
+<div class="modal-backdrop" id="skills-list-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="skills-list-title">
+<div class="modal-panel modal-panel-wide">
+<div class="modal-header">
+<h2 id="skills-list-title">AI 技能 (Skills)</h2>
+<button type="button" class="btn btn-small modal-close" id="skills-list-close" aria-label="关闭">×</button>
+</div>
+<div class="modal-body">
+<p class="skills-hint">MCP 已启用后，可下载 Skill 包并安装到 Claude Code / Claude Desktop，让 AI 直接上传文件到即页。</p>
+<div class="skills-list" id="skills-list" aria-busy="false"></div>
+<div class="empty-state empty-state-sm" id="skills-empty" style="display:none">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+<p>暂无可用 Skill</p>
+</div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn btn-small" id="skills-list-dismiss">关闭</button>
 </div>
 </div>
 </div>
