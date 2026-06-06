@@ -295,7 +295,7 @@ async function loadFiles(container) {
 }
 
 async function doCopyLink(id) {
-  const url = `${location.origin}${location.pathname}#/view/${id}`;
+  const url = `${location.origin}/api/files/${id}/render`;
   try {
     await navigator.clipboard.writeText(url);
     toast('链接已复制');
