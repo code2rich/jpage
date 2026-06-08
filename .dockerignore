@@ -4,5 +4,5 @@ data
 .git
 .gitignore
 README.md
-promotion.md
+article
 *.md
