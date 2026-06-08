@@ -27,8 +27,9 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 
 ## Architecture
 
-**Three-module backend**:
+**Four-module backend**:
 - `server.js` (~660 lines) — Express app, REST API, auth (session + bcrypt), multer upload, SQLite, Markdown 渲染增强（marked + highlight.js + KaTeX + Mermaid）
+- `logger.js` (~20 lines) — 结构化 JSON Lines 日志工具，导出 info/warn/error/audit 方法，error 输出到 stderr，其余到 stdout
 - `mcp-server.js` (~350 lines) — MCP Streamable HTTP server. Exports `mountMcpServer(app, {port, mcpToken})` and `closeMcpTransports()`. 6 tools + 2 resources; tools call the REST API via loopback fetch with the same Bearer token.
 - `migrations.js` (~65 lines) — Migration runner，启动时自动执行 `migrations/` 目录下未应用的 migration，记录到 `_migrations` 表。
 - `skills-registry.js` (~130 lines) — 自动扫描 `skills/*/SKILL.md`，解析 YAML frontmatter，提供 skill 列表/详情/ZIP 打包下载。
@@ -50,14 +51,22 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 - `categories(id, name, user_id, created_at)` — 分类
 
 **REST API**:
-- `GET /api/auth/me` — 当前用户
+- `GET /api/auth/me` — 当前用户（返回 `{id, username, role}`）
 - `POST /api/auth/login` — `{username, password}`，设置 `jpage.sid` cookie，限流 10/15min
 - `POST /api/auth/logout` — 销毁 session
-- `GET /api/files` — 列出文件（需登录）
+- `POST /api/auth/change-password` — `{currentPassword, newPassword}`，所有用户可用
+- `GET /api/users` — 列出用户（仅 admin）
+- `POST /api/users` — 创建用户 `{username, password, role}`（仅 admin）
+- `PUT /api/users/:id` — 更新角色或重置密码（仅 admin）
+- `DELETE /api/users/:id` — 删除用户，文件转交 admin（仅 admin，不可删自己）
+- `GET /api/tokens` — 列出自己的 API Token
+- `POST /api/tokens` — 创建 Token `{name}`，返回明文（仅一次）
+- `DELETE /api/tokens/:id` — 删除 Token（自己的或 admin 删任意）
+- `GET /api/files` — 列出文件（admin 看全部，普通用户看自己的+公开的）
 - `POST /api/files/upload` — multipart 上传（需登录，50/15min，50MB，.html/.htm/.md/.markdown）
 - `POST /api/files/upload-json` — JSON `{name, content, isPublic?}`（需登录，MCP 使用）
-- `PUT /api/files/:id` — `{name?, isPublic?}`（至少一个）
-- `DELETE /api/files/:id` — 删除数据库记录和磁盘文件
+- `PUT /api/files/:id` — `{name?, isPublic?}`（admin 或文件所有者）
+- `DELETE /api/files/:id` — 删除数据库记录和磁盘文件（admin 或文件所有者）
 - `GET /api/files/:id/content` — 返回原始文件文本 JSON（公开文件无需登录）
 - `GET /api/files/:id/render` — 返回渲染 HTML（Markdown 使用 marked + highlight.js + KaTeX + Mermaid）
 - `GET /s/:key` — 短链接渲染页面（通过 share_key 查找文件并渲染，公开文件无需登录）
@@ -88,9 +97,11 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 - **HTML 渲染端点** — 故意不清理 HTML，因为在用户自己的 iframe 沙箱中（`sandbox="allow-scripts allow-same-origin"`）。修改此 CSP 需谨慎。
 - **容器端口映射** — `docker-compose.yml` 映射 host 8858 → container 8858。反向代理后可不发布端口。
 - **`.dockerignore` 排除 `data/`** — 上传文件不烘焙进镜像；compose 中的 `data/` volume 持久化状态。
-- **鉴权模型** — `requireAuth` 接受 `req.session.userId` 或 `Authorization: Bearer ${MCP_TOKEN}`。MCP token 使用时，`req.session.userId` 设置为第一个 `users.id`，`uploaded_by` 记录管理员用户。`loadFileWithPrivacy` 应用相同双重检查。
-- **`MCP_TOKEN` 是可选的** — 未设置时，`mountMcpServer` 打印消息并返回，不添加 `/mcp` 路由。REST API 不受影响。
-- **`uploaded_by` 从 `req.session.userId` 设置** — MCP 上传时为管理员用户 id，非 MCP 客户端。不添加 per-MCP-client 身份。
+- **鉴权模型** — `requireAuth` 是异步中间件，接受三种认证方式：(1) session cookie，(2) 旧 `MCP_TOKEN` 环境变量（向后兼容），(3) 用户级 API Token（`tokens` 表）。中间件设置 `req.userId` 和 `req.userRole` 供下游使用。`requireAdmin` 检查 `req.userRole === 'admin'`。`loadFileWithPrivacy` 强制文件所有权：admin 可访问一切，普通用户仅可访问自己的文件和公开文件。
+- **角色系统** — `users.role` 列，值为 `admin` 或 `user`。admin 可管理用户、查看所有文件。普通用户只能操作自己的文件。`bootstrapAdmin()` 创建时显式设置 `role='admin'`。
+- **API Token** — 每用户最多 10 个，格式 `jp_` + 32 位 base62。DB 存 SHA-256 哈希 + 前 8 位前缀。明文仅创建时返回一次。
+- **`MCP_TOKEN` 是可选的** — 未设置时仍可通过用户级 Token 访问 MCP。`mountMcpServer` 接受 `authenticateRequest` 函数验证 Token。
+- **`uploaded_by` 从 `req.userId` 设置** — 文件归属隔离：admin 看全部文件，普通用户看自己的 + 公开的。`PUT`/`DELETE` 增加所有权检查（`checkFileOwnership`）。
 - **Markdown 渲染增强** — marked + highlight.js（代码高亮）+ KaTeX（数学公式 `$...$` / `$$...$$`）+ Mermaid（图表，支持深色/浅色主题）。渲染代码在 `server.js` 的 `renderMarkdown` 函数。
 
 ## Logging
@@ -150,6 +161,7 @@ module.exports = {
 
 ```
 server.js                # Express + REST API + auth + Markdown 渲染增强
+logger.js                # 结构化 JSON Lines 日志工具（info/warn/error/audit）
 mcp-server.js            # MCP Streamable HTTP server (POST/GET/DELETE /mcp)
 migrations.js            # Migration runner，启动时自动执行
 migrations/              # Migration 文件目录（按文件名排序执行）

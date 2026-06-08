@@ -3,6 +3,7 @@ const { McpServer, ResourceTemplate } = require('@modelcontextprotocol/sdk/serve
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const { isInitializeRequest } = require('@modelcontextprotocol/sdk/types.js');
 const { z } = require('zod');
+const logger = require('./logger');
 
 const RESOURCE_MAX_BYTES = 256 * 1024;
 
@@ -10,7 +11,7 @@ function decodeFilename(name) {
   return Buffer.from(name, 'latin1').toString('utf8');
 }
 
-const ALLOWED_EXTS = ['.html', '.htm', '.md', '.markdown'];
+const ALLOWED_EXTS = ['.html', '.htm', '.md', '.markdown', '.zip'];
 
 function buildApiClient({ baseUrl, token }) {
   async function call(method, path, body) {
@@ -49,6 +50,19 @@ function textResult(payload, opts = {}) {
   };
 }
 
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function formatTime(iso) {
+  if (!iso) return '未知时间';
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function createMcpServer({ port, api, mcpIp, protocol }) {
   const server = new McpServer(
     { name: 'jpage', version: '1.0.0' },
@@ -73,8 +87,8 @@ function createMcpServer({ port, api, mcpIp, protocol }) {
     {
       title: 'Upload File',
       description:
-        '上传 HTML 或 Markdown 文件到 jpage，用于生成页面并获取预览链接。文件类型按扩展名自动识别（html/htm→html, md/markdown→markdown）。' +
-        '返回的 url 字段是可公开访问的预览地址。适用于将生成的报告、笔记、可视化页面等内容上传分享。',
+        '上传 HTML、Markdown 或 ZIP 文件到 jpage。ZIP 支持两种模式：网站包（含 index.html + 资源，作为整体预览）和批量上传（多个独立 HTML/MD，各自创建记录）。' +
+        '非 ZIP 文件类型按扩展名自动识别。返回的 url 字段是可公开访问的预览地址。适用于将生成的报告、笔记、可视化页面等内容上传分享。',
       inputSchema: {
         name: z.string().describe('文件名，需带扩展名，例如 "report.html" 或 "note.md"'),
         content: z.string().describe('文件正文，UTF-8 字符串'),
@@ -82,11 +96,56 @@ function createMcpServer({ port, api, mcpIp, protocol }) {
           .boolean()
           .optional()
           .describe('是否公开可访问（无需登录）。默认 true。'),
+        overwriteFileId: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('显式指定覆盖目标文件 ID。提供时调用覆盖上传 API（POST /api/files/:id/overwrite-json），不提供时走同名自动覆盖逻辑。'),
+        tags: z
+          .array(z.string())
+          .optional()
+          .describe('标签名列表，上传后自动设置。标签不存在时自动创建。'),
+        categoryId: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('分类 id，上传后将文件归入该分类。'),
       },
     },
-    async ({ name, content, isPublic }) => {
+    async ({ name, content, isPublic, overwriteFileId, tags, categoryId }) => {
       const decoded = decodeFilename(name);
       const ext = (decoded.match(/\.[^.]+$/) || [''])[0].toLowerCase();
+
+      // ZIP 文件：content 为 base64 编码
+      if (ext === '.zip') {
+        const buf = Buffer.from(content, 'base64');
+        if (buf.length > 50 * 1024 * 1024) {
+          return textResult(`ZIP 文件过大 (${buf.length} 字节)，上限 50MB`, { isError: true });
+        }
+        try {
+          const data = await api.post('/api/files/upload-zip-base64', {
+            name: decoded,
+            content: content,
+            isPublic: isPublic ?? true,
+          });
+          if (data.type === 'batch') {
+            return textResult({
+              type: 'batch',
+              count: data.count,
+              files: data.files,
+            });
+          }
+          return textResult({
+            ...data,
+            url: data.share_key ? `${protocol}://${mcpIp}:${port}/s/${data.share_key}` : `${protocol}://${mcpIp}:${port}/api/files/${data.id}/render`,
+          });
+        } catch (e) {
+          return textResult(`ZIP 上传失败: ${e.message}`, { isError: true });
+        }
+      }
+
       if (!ALLOWED_EXTS.includes(ext)) {
         return textResult(
           `不支持的文件扩展名: ${ext}。仅允许 ${ALLOWED_EXTS.join(', ')}`,
@@ -97,11 +156,33 @@ function createMcpServer({ port, api, mcpIp, protocol }) {
       if (size > 50 * 1024 * 1024) {
         return textResult(`文件过大 (${size} 字节)，上限 50MB`, { isError: true });
       }
-      const data = await api.post('/api/files/upload-json', {
+      const uploadPath = overwriteFileId
+        ? `/api/files/${overwriteFileId}/overwrite-json`
+        : '/api/files/upload-json';
+      const data = await api.post(uploadPath, {
         name: decoded,
         content,
         isPublic: isPublic ?? true,
       });
+
+      // 设置标签
+      if (tags && tags.length > 0) {
+        const tagIds = [];
+        for (const t of tags) {
+          const allTags = await api.get('/api/tags');
+          const existing = allTags.tags.find(x => x.name === t);
+          if (existing) { tagIds.push(existing.id); continue; }
+          const created = await api.post('/api/tags', { name: t });
+          tagIds.push(created.id);
+        }
+        await api.put(`/api/files/${data.id}/tags`, { tagIds });
+      }
+
+      // 设置分类
+      if (categoryId) {
+        await api.put(`/api/files/${data.id}/category`, { categoryId });
+      }
+
       return textResult({
         ...data,
         url: data.share_key ? `${protocol}://${mcpIp}:${port}/s/${data.share_key}` : `${protocol}://${mcpIp}:${port}/api/files/${data.id}/render`,
@@ -177,6 +258,163 @@ function createMcpServer({ port, api, mcpIp, protocol }) {
     }
   );
 
+  server.registerTool(
+    'list_file_versions',
+    {
+      title: 'List File Versions',
+      description: '列出指定文件的版本历史，包括当前版本信息。适用于查看文件修改历史、确认版本数量、或决定是否恢复到某个历史版本。',
+      inputSchema: {
+        fileId: z.number().positive().describe('文件 ID'),
+      },
+    },
+    async ({ fileId }) => {
+      const data = await api.get(`/api/files/${fileId}/versions`);
+      const current = data.current;
+      const versions = data.versions || [];
+      const currentSize = formatSize(current.size);
+      const updatedAt = formatTime(current.updated_at);
+      let lines = [`文件 #${fileId} 版本历史（共 ${versions.length} 个历史版本）：`];
+      lines.push(`当前版本: ${currentSize}, 更新于 ${updatedAt}`);
+      for (const v of versions) {
+        const vSize = formatSize(v.size);
+        const vTime = formatTime(v.created_at);
+        lines.push(`v${v.version}: ${vSize}, ${vTime}  [查看 | 恢复 | 删除]`);
+      }
+      return textResult(lines.join('\n'));
+    }
+  );
+
+  server.registerTool(
+    'restore_file_version',
+    {
+      title: 'Restore File Version',
+      description: '恢复指定文件到某个历史版本。恢复后当前版本会被保存为新的历史版本，目标历史版本的内容成为新的当前版本。适用于撤销误修改或回退到之前的版本。',
+      inputSchema: {
+        fileId: z.number().positive().describe('文件 ID'),
+        version: z.number().positive().describe('要恢复的版本号'),
+      },
+    },
+    async ({ fileId, version }) => {
+      const data = await api.post(`/api/files/${fileId}/versions/${version}/restore`);
+      return textResult({
+        fileId,
+        restoredVersion: version,
+        ...data,
+      });
+    }
+  );
+
+  server.registerTool(
+    'list_tags',
+    {
+      title: 'List Tags',
+      description: '列出所有标签及其关联文件数量。',
+      inputSchema: {},
+    },
+    async () => {
+      const data = await api.get('/api/tags');
+      return textResult(data.tags);
+    }
+  );
+
+  server.registerTool(
+    'add_tags_to_file',
+    {
+      title: 'Add Tags to File',
+      description: '为指定文件设置标签（替换现有标签）。标签不存在时会自动创建。',
+      inputSchema: {
+        fileId: z.number().int().positive().describe('文件 id'),
+        tags: z.array(z.string()).describe('标签名列表，如 ["报告", "Q3"]'),
+      },
+    },
+    async ({ fileId, tags }) => {
+      const tagIds = [];
+      for (const name of tags) {
+        const allTags = await api.get('/api/tags');
+        const existing = allTags.tags.find(t => t.name === name);
+        if (existing) { tagIds.push(existing.id); continue; }
+        const created = await api.post('/api/tags', { name });
+        tagIds.push(created.id);
+      }
+      await api.put(`/api/files/${fileId}/tags`, { tagIds });
+      return textResult({ fileId, tags });
+    }
+  );
+
+  server.registerTool(
+    'star_file',
+    {
+      title: 'Star File',
+      description: '收藏指定文件。',
+      inputSchema: {
+        fileId: z.number().int().positive().describe('文件 id'),
+      },
+    },
+    async ({ fileId }) => {
+      await api.post(`/api/files/${fileId}/star`);
+      return textResult({ fileId, starred: true });
+    }
+  );
+
+  server.registerTool(
+    'unstar_file',
+    {
+      title: 'Unstar File',
+      description: '取消收藏指定文件。',
+      inputSchema: {
+        fileId: z.number().int().positive().describe('文件 id'),
+      },
+    },
+    async ({ fileId }) => {
+      await api.del(`/api/files/${fileId}/star`);
+      return textResult({ fileId, starred: false });
+    }
+  );
+
+  server.registerTool(
+    'list_categories',
+    {
+      title: 'List Categories',
+      description: '列出所有分类及其文件数量。',
+      inputSchema: {},
+    },
+    async () => {
+      const data = await api.get('/api/categories');
+      return textResult(data.categories);
+    }
+  );
+
+  server.registerTool(
+    'create_category',
+    {
+      title: 'Create Category',
+      description: '创建一个新分类（文件夹）。',
+      inputSchema: {
+        name: z.string().min(1).describe('分类名称'),
+      },
+    },
+    async ({ name }) => {
+      const data = await api.post('/api/categories', { name });
+      return textResult(data);
+    }
+  );
+
+  server.registerTool(
+    'set_file_category',
+    {
+      title: 'Set File Category',
+      description: '设置文件所属分类。传 null 或不传 categoryId 表示移除分类。',
+      inputSchema: {
+        fileId: z.number().int().positive().describe('文件 id'),
+        categoryId: z.number().int().positive().nullable().optional().describe('分类 id，null 表示移除分类'),
+      },
+    },
+    async ({ fileId, categoryId }) => {
+      await api.put(`/api/files/${fileId}/category`, { categoryId: categoryId ?? null });
+      return textResult({ fileId, categoryId: categoryId ?? null });
+    }
+  );
+
   server.registerResource(
     'files',
     'jpage://files',
@@ -245,30 +483,47 @@ function createMcpServer({ port, api, mcpIp, protocol }) {
 
 const transports = {};
 
-function mountMcpServer(app, { port, mcpToken, mcpIp, protocol }) {
-  if (!mcpToken) {
-    console.log('[即页] MCP_TOKEN 未设置，MCP 端点 /mcp 已禁用（设置 MCP_TOKEN 后重启生效）');
+/**
+ * @param {object} opts
+ * @param {number} opts.port
+ * @param {string} opts.mcpToken - 全局 MCP_TOKEN（可为空，此时必须有用户级 Token）
+ * @param {string} opts.mcpIp
+ * @param {string} opts.protocol
+ * @param {function} opts.authenticateRequest - async (tokenValue) => boolean，验证 Bearer token
+ */
+function mountMcpServer(app, { port, mcpToken, mcpIp, protocol, authenticateRequest }) {
+  if (!mcpToken && !authenticateRequest) {
+    logger.info({ type: 'app', message: 'MCP_TOKEN 未设置且无 Token 验权，MCP 端点 /mcp 已禁用' });
     return;
   }
-  // Note: we don't gate on adminUserId here — server.js resolves it asynchronously
-  // after bootstrapAdmin. requireAuth reads the current adminUserId at request time,
-  // so by the time an MCP client connects the token check will work.
 
-  const api = buildApiClient({
-    baseUrl: `http://127.0.0.1:${port}`,
-    token: mcpToken,
-  });
-
-  function getServer() {
+  function getServer(callerToken) {
+    const api = buildApiClient({
+      baseUrl: `http://127.0.0.1:${port}`,
+      token: callerToken || mcpToken,
+    });
     return createMcpServer({ port, api, mcpIp, protocol });
   }
 
-  const bearerAuth = (req, res, next) => {
+  const bearerAuth = async (req, res, next) => {
     const auth = req.headers.authorization;
-    if (!auth || !auth.startsWith('Bearer ') || auth.slice(7) !== mcpToken) {
+    if (!auth || !auth.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'MCP 鉴权失败' });
     }
-    next();
+    const tokenValue = auth.slice(7);
+
+    // 旧 MCP_TOKEN 向后兼容
+    if (mcpToken && tokenValue === mcpToken) {
+      return next();
+    }
+
+    // 用户级 Token 验证
+    if (authenticateRequest) {
+      const valid = await authenticateRequest(tokenValue).catch(() => false);
+      if (valid) return next();
+    }
+
+    return res.status(401).json({ error: 'MCP 鉴权失败' });
   };
 
   const mcpPostHandler = async (req, res) => {
@@ -288,7 +543,10 @@ function mountMcpServer(app, { port, mcpToken, mcpIp, protocol }) {
           const sid = transport.sessionId;
           if (sid && transports[sid]) delete transports[sid];
         };
-        const server = getServer();
+        const callerToken = req.headers.authorization?.startsWith('Bearer ')
+          ? req.headers.authorization.slice(7)
+          : mcpToken;
+        const server = getServer(callerToken);
         await server.connect(transport);
         await transport.handleRequest(req, res, req.body);
         return;
@@ -301,7 +559,7 @@ function mountMcpServer(app, { port, mcpToken, mcpIp, protocol }) {
       }
       await transport.handleRequest(req, res, req.body);
     } catch (e) {
-      console.error('[即页] MCP POST 错误:', e);
+      logger.error({ type: 'app', message: 'MCP POST 错误', error: e.message });
       if (!res.headersSent) {
         res.status(500).json({
           jsonrpc: '2.0',
@@ -330,7 +588,7 @@ function mountMcpServer(app, { port, mcpToken, mcpIp, protocol }) {
       const transport = transports[sessionId];
       await transport.handleRequest(req, res);
     } catch (e) {
-      console.error('[即页] MCP DELETE 错误:', e);
+      logger.error({ type: 'app', message: 'MCP DELETE 错误', error: e.message });
       if (!res.headersSent) res.status(500).send('Error processing session termination');
     }
   };
@@ -339,7 +597,7 @@ function mountMcpServer(app, { port, mcpToken, mcpIp, protocol }) {
   app.get('/mcp', bearerAuth, mcpGetHandler);
   app.delete('/mcp', bearerAuth, mcpDeleteHandler);
 
-  console.log(`[即页] MCP 端点已挂载: ${protocol}://${mcpIp}:${port}/mcp (Bearer auth)`);
+  logger.info({ type: 'app', message: 'MCP 端点已挂载', url: `${protocol}://${mcpIp}:${port}/mcp` });
 }
 
 async function closeMcpTransports() {
@@ -347,7 +605,7 @@ async function closeMcpTransports() {
     try {
       await transports[sid].close();
     } catch (e) {
-      console.error(`[即页] 关闭 MCP transport ${sid} 失败:`, e);
+      logger.error({ type: 'app', message: '关闭 MCP transport 失败', sessionId: sid, error: e.message });
     }
     delete transports[sid];
   }

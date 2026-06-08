@@ -754,7 +754,7 @@ app.post('/api/files/upload', requireAuth, uploadLimiter, upload.single('file'),
 
     // 不存在同名文件：新建
     const result = await dbRun(
-      'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
       [req.file.originalname, req.file.filename, fileType, req.file.size, isPublic ? 1 : 0, currentUserId(req), generateShareKey()]
     );
     const shareKey = await dbGet('SELECT share_key FROM files WHERE id = ?', [result.lastID]).then(r => r?.share_key);
@@ -847,7 +847,7 @@ app.post('/api/files/upload-json', requireAuth, uploadLimiter, async (req, res) 
   const isPublicFlag = isPublic === false ? 0 : 1;
   try {
     const result = await dbRun(
-      'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
       [decoded, storedName, fileType, size, isPublicFlag, currentUserId(req), generateShareKey()]
     );
     const shareKey = await dbGet('SELECT share_key FROM files WHERE id = ?', [result.lastID]).then(r => r?.share_key);
@@ -1379,21 +1379,31 @@ app.get('/api/skills/:name', requireAuth, async (req, res) => {
   res.json(skill);
 });
 
-app.get('/api/mcp/config', requireAuth, (req, res) => {
-  const enabled = !!process.env.MCP_TOKEN;
+app.get('/api/mcp/config', requireAuth, async (req, res) => {
+  const enabled = !!process.env.MCP_TOKEN || true; // 现在总是可以用用户级 Token
   const host = req.headers.host || `localhost:${PORT}`;
   const protocol = req.protocol || 'http';
   const url = `${protocol}://${host}/mcp`;
+
+  // 获取当前用户的 Token 列表
+  const tokens = await dbAll(
+    'SELECT id, name, token_prefix, created_at FROM tokens WHERE user_id = ? ORDER BY created_at DESC',
+    [req.userId]
+  );
+
+  const globalToken = process.env.MCP_TOKEN && req.userRole === 'admin' ? process.env.MCP_TOKEN : null;
+
   res.json({
     enabled,
-    token: enabled ? process.env.MCP_TOKEN : null,
+    globalToken,
     url,
+    tokens,
     config: {
       mcpServers: {
         jpage: {
           type: 'http',
           url,
-          headers: { Authorization: `Bearer ${process.env.MCP_TOKEN || '<YOUR_TOKEN>'}` }
+          headers: { Authorization: `Bearer ${globalToken || '<YOUR_TOKEN>'}` }
         }
       }
     }
@@ -1415,7 +1425,22 @@ app.get('/api/skills/:name/download', requireAuth, (req, res) => {
   });
 });
 
-mountMcpServer(app, { port: PORT, mcpToken: process.env.MCP_TOKEN, mcpIp: process.env.MCP_IP || 'localhost', protocol: process.env.MCP_PROTOCOL || 'http' });
+async function authenticateMcpToken(tokenValue) {
+  // 旧 MCP_TOKEN
+  if (process.env.MCP_TOKEN && tokenValue === process.env.MCP_TOKEN) return true;
+  // 用户级 Token
+  const hash = crypto.createHash('sha256').update(tokenValue).digest('hex');
+  const row = await dbGet('SELECT id FROM tokens WHERE token_hash = ?', [hash]);
+  return !!row;
+}
+
+mountMcpServer(app, {
+  port: PORT,
+  mcpToken: process.env.MCP_TOKEN,
+  mcpIp: process.env.MCP_IP || 'localhost',
+  protocol: process.env.MCP_PROTOCOL || 'http',
+  authenticateRequest: authenticateMcpToken,
+});
 
 const NODE_MODULES = path.join(__dirname, 'node_modules');
 app.use('/vendor/katex', express.static(path.join(NODE_MODULES, 'katex', 'dist')));

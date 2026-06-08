@@ -62,6 +62,20 @@ Skills 管理
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
 MCP 配置
 </button>
+	<div class="settings-menu-divider" role="separator"></div>
+	<button type="button" class="settings-menu-item" role="menuitem" id="menu-item-tokens">
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+	API 令牌
+	</button>
+	<button type="button" class="settings-menu-item" role="menuitem" id="menu-item-password">
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+	修改密码
+	</button>
+	<div class="settings-menu-divider admin-only" role="separator"></div>
+	<button type="button" class="settings-menu-item admin-only" role="menuitem" id="menu-item-users">
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+	用户管理
+	</button>
 </div>
 </div>
 <button type="button" class="btn btn-small" id="btn-logout" aria-label="退出登录">退出</button>
@@ -70,14 +84,14 @@ MCP 配置
 <main class="main">
 <div class="toolbar">
 <div class="upload-area" id="upload-area" role="button" tabindex="0" aria-label="选择或拖入 HTML、Markdown 文件上传">
-<input type="file" id="file-input" accept=".html,.htm,.md,.markdown" hidden aria-label="选择要上传的文件">
+<input type="file" id="file-input" accept=".html,.htm,.md,.markdown,.zip" hidden aria-label="选择要上传的文件">
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
 <p class="upload-title">点击或拖拽上传</p>
-<span class="upload-hint">支持 .html .htm .md .markdown，单文件最大 50MB</span>
+<span class="upload-hint">支持 .html .htm .md .markdown .zip，单文件最大 50MB</span>
 </div>
 <label class="upload-privacy">
 <input type="checkbox" id="upload-is-public" checked>
-<span>公开访问（未勾选则仅管理员可访问）</span>
+<span>公开访问（未勾选则仅自己可访问）</span>
 </label>
 <div class="upload-progress" id="upload-progress" style="display:none">
 <div class="upload-progress-bar" id="upload-progress-bar"></div>
@@ -101,6 +115,16 @@ MCP 配置
 <span class="filter-divider" aria-hidden="true"></span>
 <button type="button" class="filter-chip" data-filter="public">公开</button>
 <button type="button" class="filter-chip" data-filter="private">私有</button>
+<span class="filter-divider" aria-hidden="true"></span>
+<button type="button" class="filter-chip" data-filter="starred">☆ 收藏</button>
+<div class="filter-dropdown" id="tag-filter-dropdown">
+<button type="button" class="filter-chip filter-dropdown-trigger">标签 ▾</button>
+<div class="filter-dropdown-menu" id="tag-filter-menu"></div>
+</div>
+<div class="filter-dropdown" id="category-filter-dropdown">
+<button type="button" class="filter-chip filter-dropdown-trigger">分类 ▾</button>
+<div class="filter-dropdown-menu" id="category-filter-menu"></div>
+</div>
 </div>
 </div>
 <div class="file-list" id="file-list" aria-busy="false"></div>
@@ -137,6 +161,11 @@ MCP 配置
 <button type="button" class="btn btn-small" data-mode="source">源码</button>
 </div>
 <button type="button" class="btn btn-small" id="btn-download">下载</button>
+<button type="button" class="btn btn-small" id="btn-upload-version" title="上传新版本">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="width:14px;height:14px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+<span>上传新版本</span>
+</button>
+<button type="button" class="btn btn-small" id="btn-version-history">历史</button>
 <button type="button" class="btn btn-small btn-preview-to-compact" id="btn-preview-compact-only" aria-label="仅显示标题" title="仅显示标题">···</button>
 <button type="button" class="btn btn-small btn-header-fold" id="btn-toggle-preview-header" aria-expanded="true" aria-controls="preview-header" aria-label="收起顶栏" title="收起顶栏">
 <svg class="icon-fold-chevron icon-fold-chevron--up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="18 15 12 9 6 15"></polyline></svg>
@@ -150,12 +179,20 @@ MCP 配置
 <button type="button" class="preview-expand-floating" id="btn-preview-expand-floating" aria-label="展开顶栏" title="展开顶栏">
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
 </button>
+<input type="file" id="version-file-input" accept=".html,.htm,.md,.markdown" hidden aria-label="选择要上传的新版本文件">
 <div class="preview-container">
+<div class="version-panel" id="version-panel" hidden>
+<div class="version-panel-header">
+<h3>版本历史</h3>
+<button type="button" class="btn btn-small" id="btn-close-version-panel" aria-label="关闭">✕</button>
+</div>
+<div class="version-panel-body" id="version-panel-body"></div>
+</div>
 <div class="preview-spinner" id="preview-spinner">
 <div class="spinner"></div>
 <span>加载中…</span>
 </div>
-<iframe id="preview-iframe" sandbox="allow-scripts"></iframe>
+<iframe id="preview-iframe" sandbox="allow-scripts allow-same-origin"></iframe>
 <pre id="preview-source" class="source-view"><code id="source-code"></code></pre>
 </div>
 </div>
@@ -223,6 +260,76 @@ MCP 配置
 </div>
 
 <!-- 通用交互 Modal (prompt / confirm / alert) -->
+
+<!-- 用户管理弹窗（仅 admin） -->
+<div class="modal-backdrop" id="users-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="users-modal-title">
+<div class="modal-panel modal-panel-wide">
+<div class="modal-header">
+<h2 id="users-modal-title">用户管理</h2>
+<button type="button" class="btn btn-small modal-close" id="users-modal-close" aria-label="关闭">×</button>
+</div>
+<div class="modal-body">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+<p class="modal-hint">管理用户账户和角色分配</p>
+<button type="button" class="btn btn-primary btn-small" id="btn-create-user">+ 创建用户</button>
+</div>
+<div class="users-table-wrap" id="users-table-wrap"></div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn btn-small" id="users-modal-dismiss">关闭</button>
+</div>
+</div>
+</div>
+
+<!-- API 令牌管理弹窗 -->
+<div class="modal-backdrop" id="tokens-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="tokens-modal-title">
+<div class="modal-panel modal-panel-wide">
+<div class="modal-header">
+<h2 id="tokens-modal-title">API 令牌</h2>
+<button type="button" class="btn btn-small modal-close" id="tokens-modal-close" aria-label="关闭">×</button>
+</div>
+<div class="modal-body">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+<p class="modal-hint">令牌用于 MCP 端点或 API 调用鉴权。创建后仅显示一次完整令牌。</p>
+<button type="button" class="btn btn-primary btn-small" id="btn-create-token">+ 创建令牌</button>
+</div>
+<div class="tokens-list" id="tokens-list"></div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn btn-small" id="tokens-modal-dismiss">关闭</button>
+</div>
+</div>
+</div>
+
+<!-- 修改密码弹窗 -->
+<div class="modal-backdrop" id="password-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="password-modal-title">
+<div class="modal-panel modal-panel-sm">
+<div class="modal-header">
+<h2 id="password-modal-title">修改密码</h2>
+<button type="button" class="btn btn-small modal-close" id="password-modal-close" aria-label="关闭">×</button>
+</div>
+<div class="modal-body">
+<label class="login-field">
+<span>当前密码</span>
+<input type="password" id="current-password" autocomplete="current-password">
+</label>
+<label class="login-field">
+<span>新密码（至少 8 位）</span>
+<input type="password" id="new-password" autocomplete="new-password">
+</label>
+<label class="login-field">
+<span>确认新密码</span>
+<input type="password" id="confirm-password" autocomplete="new-password">
+</label>
+<div class="login-error" id="password-error" role="alert" hidden></div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn btn-small" id="password-modal-cancel">取消</button>
+<button type="button" class="btn btn-primary" id="password-modal-submit">修改密码</button>
+</div>
+</div>
+</div>
+
 <div class="modal-backdrop" id="dialog-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="dialog-modal-title">
 <div class="modal-panel modal-panel-sm">
 <div class="modal-header">
@@ -240,6 +347,46 @@ MCP 配置
 <div class="modal-footer">
 <button type="button" class="btn btn-small" id="dialog-modal-cancel">取消</button>
 <button type="button" class="btn btn-primary" id="dialog-modal-confirm">确认</button>
+</div>
+</div>
+</div>
+
+<!-- 标签编辑器弹窗 -->
+<div class="modal-backdrop" id="tag-editor-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="tag-editor-title">
+<div class="modal-panel modal-panel-sm">
+<div class="modal-header">
+<h2 id="tag-editor-title">编辑标签</h2>
+<button type="button" class="btn btn-small modal-close" id="tag-editor-close" aria-label="关闭">×</button>
+</div>
+<div class="modal-body">
+<div class="tag-editor-selected" id="tag-editor-selected"></div>
+<div class="tag-editor-input-wrap">
+<input type="text" id="tag-editor-input" placeholder="输入标签名，回车添加…" autocomplete="off">
+<ul class="tag-editor-suggestions" id="tag-editor-suggestions"></ul>
+</div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn btn-small" id="tag-editor-cancel">取消</button>
+<button type="button" class="btn btn-primary" id="tag-editor-save">保存</button>
+</div>
+</div>
+</div>
+
+<!-- 分类选择弹窗 -->
+<div class="modal-backdrop" id="category-select-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="category-select-title">
+<div class="modal-panel modal-panel-sm">
+<div class="modal-header">
+<h2 id="category-select-title">选择分类</h2>
+<div style="display:flex;gap:6px">
+<button type="button" class="btn btn-small btn-primary" id="category-select-create">新建</button>
+<button type="button" class="btn btn-small modal-close" id="category-select-close" aria-label="关闭">×</button>
+</div>
+</div>
+<div class="modal-body">
+<div id="category-select-list"></div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn btn-small" id="category-select-cancel">取消</button>
 </div>
 </div>
 </div>
