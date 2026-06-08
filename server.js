@@ -343,7 +343,7 @@ app.post('/api/auth/logout', (req, res) => {
 
 app.get('/api/files', requireAuth, async (req, res) => {
   try {
-    const files = await dbAll('SELECT id, original_name, file_type, size, is_public, created_at FROM files ORDER BY created_at DESC');
+    const files = await dbAll('SELECT id, original_name, file_type, size, is_public, created_at, share_key FROM files ORDER BY created_at DESC');
     res.json({ files });
   } catch (e) {
     res.status(500).json({ error: '获取文件列表失败' });
