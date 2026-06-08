@@ -233,7 +233,7 @@ function renderHome(container) {
 
   // 根据角色显示/隐藏 admin-only 元素
   const adminEls = container.querySelectorAll('.admin-only');
-  adminEls.forEach(el => { el.style.display = currentUser.role === 'admin' ? '' : 'none'; });
+  adminEls.forEach(el => { el.style.display = currentUser.role === 'admin' ? 'block' : 'none'; });
 
   const logoutBtn = container.querySelector('#btn-logout');
   logoutBtn.addEventListener('click', async () => {
