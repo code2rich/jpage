@@ -390,7 +390,16 @@ const loginLimiter = rateLimit({
 });
 
 function decodeFilename(name) {
-  return Buffer.from(name, 'latin1').toString('utf8');
+  if (!name) return name;
+  // 如果字符串已包含非 latin1 字符（如中文），说明 multer 已正确解码，直接返回
+  for (let i = 0; i < name.length; i++) {
+    if (name.charCodeAt(i) > 255) return name;
+  }
+  // 纯 latin1 字符串 — 尝试当作原始 UTF-8 字节解读并验证
+  const buf = Buffer.from(name, 'latin1');
+  const decoded = buf.toString('utf8');
+  if (Buffer.from(decoded).equals(buf)) return decoded;
+  return name;
 }
 
 function generateReadablePassword(length) {
