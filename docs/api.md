@@ -140,6 +140,83 @@ curl -b jpage.sid -X PUT http://localhost:8858/api/files/1 \
 
 ---
 
+## 标签
+
+### `GET /api/tags`
+
+列出所有标签及其关联文件数量。需登录。
+
+```json
+{ "tags": [{ "id": 1, "name": "报告", "file_count": 3 }] }
+```
+
+### `POST /api/tags`
+
+创建标签。若同名标签已存在则返回现有记录。需登录。
+
+- Body: `{ "name": "Q3" }`
+- 返回: `{ "id": 2, "name": "Q3" }`
+
+### `DELETE /api/tags/:id`
+
+删除标签（同时清除所有文件的该标签关联）。需登录。
+
+### `PUT /api/files/:id/tags`
+
+替换文件的标签列表。需登录。
+
+- Body: `{ "tagIds": [1, 2, 3] }`
+- 返回: `{ "success": true, "tags": [{ "id": 1, "name": "报告" }] }`
+
+---
+
+## 收藏
+
+### `POST /api/files/:id/star`
+
+收藏文件。需登录。重复收藏不报错。
+
+### `DELETE /api/files/:id/star`
+
+取消收藏。需登录。
+
+---
+
+## 分类
+
+### `GET /api/categories`
+
+列出当前用户的分类及其文件数量。需登录。
+
+```json
+{ "categories": [{ "id": 1, "name": "工作", "file_count": 5 }] }
+```
+
+### `POST /api/categories`
+
+创建分类。需登录。
+
+- Body: `{ "name": "学习" }`
+- 返回: `{ "id": 2, "name": "学习" }`
+
+### `PUT /api/categories/:id`
+
+重命名分类。需登录。
+
+- Body: `{ "name": "新名称" }`
+
+### `DELETE /api/categories/:id`
+
+删除分类。文件自动变为未分类（`category_id = NULL`）。需登录。
+
+### `PUT /api/files/:id/category`
+
+设置文件的分类。需登录。
+
+- Body: `{ "categoryId": 1 }` 或 `{ "categoryId": null }`（移除分类）
+
+---
+
 ## Skills（AI 技能包）
 
 技能包是与 jpage MCP server 配套的 [Claude Code / Claude Desktop Skill](https://modelcontextprotocol.io) 仓库。Web UI 的"AI 技能"区域支持浏览与下载。
@@ -204,7 +281,7 @@ curl -b jpage.sid -OJ http://localhost:8858/api/skills/jpage-upload/download
 | 路径 | `POST`/`GET`/`DELETE` `/mcp` |
 | 鉴权 | `Authorization: Bearer ${MCP_TOKEN}` |
 | 协议 | MCP Streamable HTTP（最新规范） |
-| 工具 | `list_files` / `upload_file` / `get_file_content` / `delete_file` / `rename_file` / `get_file_url` |
+| 工具 | `list_files` / `upload_file` / `get_file_content` / `delete_file` / `rename_file` / `get_file_url` / `list_file_versions` / `restore_file_version` / `list_tags` / `add_tags_to_file` / `star_file` / `unstar_file` / `list_categories` / `create_category` / `set_file_category` |
 | 资源 | `jpage://files` / `jpage://file/{id}` |
 
 工具和资源通过 loopback `http://127.0.0.1:${PORT}/api/...` 调用 REST API，复用相同 Bearer token。
