@@ -104,6 +104,8 @@ db.serialize(() => {
     password_hash TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_files_created_at ON files(created_at DESC)');
+
   db.all(`PRAGMA table_info(files)`, (err, cols) => {
     if (err) return;
     const names = new Set(cols.map(c => c.name));
@@ -113,7 +115,29 @@ db.serialize(() => {
     if (!names.has('uploaded_by')) {
       db.run(`ALTER TABLE files ADD COLUMN uploaded_by INTEGER`);
     }
+    if (!names.has('share_key')) {
+      db.run(`ALTER TABLE files ADD COLUMN share_key TEXT UNIQUE`);
+    }
   });
+});
+
+function generateShareKey() {
+  return crypto.randomBytes(6).toString('base64url').slice(0, 8);
+}
+
+// Backfill: 为已有文件生成 share_key
+db.all('SELECT id FROM files WHERE share_key IS NULL', [], async (err, rows) => {
+  if (err || !rows || !rows.length) return;
+  for (const row of rows) {
+    const key = generateShareKey();
+    try {
+      await dbRun('UPDATE files SET share_key = ? WHERE id = ? AND share_key IS NULL', [key, row.id]);
+    } catch (e) {
+      // key 冲突时重试一次
+      const retryKey = generateShareKey();
+      await dbRun('UPDATE files SET share_key = ? WHERE id = ? AND share_key IS NULL', [retryKey, row.id]);
+    }
+  }
 });
 
 function dbRun(sql, params = []) {
@@ -163,6 +187,16 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
+// CSP 中间件：保护即页主应用，跳过用户内容渲染端点
+app.use((req, res, next) => {
+  if (/^\/api\/files\/\d+\/render$/.test(req.path)) return next();
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-src 'self'; frame-ancestors 'none'"
+  );
+  next();
+});
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -188,12 +222,16 @@ app.use(session({
   }
 }));
 
+function currentUserId(req) {
+  return (req.session && req.session.userId) || req.mcpUserId || null;
+}
+
 function requireAuth(req, res, next) {
   if (req.session && req.session.userId) return next();
   if (process.env.MCP_TOKEN && adminUserId) {
     const auth = req.headers.authorization;
     if (auth && auth.startsWith('Bearer ') && auth.slice(7) === process.env.MCP_TOKEN) {
-      req.session.userId = adminUserId;
+      req.mcpUserId = adminUserId;
       return next();
     }
   }
@@ -203,11 +241,7 @@ function requireAuth(req, res, next) {
 function loadFileWithPrivacy(req, res, next) {
   dbGet('SELECT * FROM files WHERE id = ?', [req.params.id]).then(file => {
     if (!file) return res.status(404).json({ error: '文件不存在' });
-    const effectiveUserId = (req.session && req.session.userId)
-      || (process.env.MCP_TOKEN && adminUserId
-        && req.headers.authorization === `Bearer ${process.env.MCP_TOKEN}`
-        ? adminUserId
-        : null);
+    const effectiveUserId = currentUserId(req);
     if (!file.is_public && !effectiveUserId) {
       return res.status(401).json({ error: '未登录' });
     }
@@ -325,15 +359,17 @@ app.post('/api/files/upload', requireAuth, uploadLimiter, upload.single('file'),
   const isPublic = req.body.isPublic === 'true' || req.body.isPublic === true;
   try {
     const result = await dbRun(
-      'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)',
-      [req.file.originalname, req.file.filename, fileType, req.file.size, isPublic ? 1 : 0, req.session.userId]
+      'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [req.file.originalname, req.file.filename, fileType, req.file.size, isPublic ? 1 : 0, currentUserId(req), generateShareKey()]
     );
+    const shareKey = await dbGet('SELECT share_key FROM files WHERE id = ?', [result.lastID]).then(r => r?.share_key);
     res.json({
       id: result.lastID,
       original_name: req.file.originalname,
       file_type: fileType,
       size: req.file.size,
-      is_public: isPublic ? 1 : 0
+      is_public: isPublic ? 1 : 0,
+      share_key: shareKey
     });
   } catch (e) {
     res.status(500).json({ error: '保存文件记录失败' });
@@ -363,15 +399,17 @@ app.post('/api/files/upload-json', requireAuth, uploadLimiter, async (req, res) 
   const isPublicFlag = isPublic === false ? 0 : 1;
   try {
     const result = await dbRun(
-      'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)',
-      [decoded, storedName, fileType, size, isPublicFlag, req.session.userId]
+      'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [decoded, storedName, fileType, size, isPublicFlag, currentUserId(req), generateShareKey()]
     );
+    const shareKey = await dbGet('SELECT share_key FROM files WHERE id = ?', [result.lastID]).then(r => r?.share_key);
     res.json({
       id: result.lastID,
       original_name: decoded,
       file_type: fileType,
       size,
-      is_public: isPublicFlag
+      is_public: isPublicFlag,
+      share_key: shareKey
     });
   } catch (e) {
     try { fs.unlinkSync(filePath); } catch {}
@@ -431,8 +469,7 @@ app.get('/api/files/:id/content', loadFileWithPrivacy, async (req, res) => {
   }
 });
 
-app.get('/api/files/:id/render', loadFileWithPrivacy, async (req, res) => {
-  const file = req.fileRecord;
+async function renderFile(res, file) {
   const filePath = path.join(UPLOAD_DIR, file.stored_name);
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: '文件已丢失' });
   try {
@@ -487,7 +524,7 @@ pre.mermaid { background: #ffffff; color: #1f2328; text-align: center; }
 (function() {
   function initMermaid() {
     var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    mermaid.initialize({ startOnLoad: true, securityLevel: 'loose', theme: dark ? 'dark' : 'default' });
+    mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: dark ? 'dark' : 'default' });
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initMermaid);
@@ -519,6 +556,10 @@ pre.mermaid { background: #ffffff; color: #1f2328; text-align: center; }
   } catch (e) {
     res.status(500).json({ error: '渲染失败' });
   }
+}
+
+app.get('/api/files/:id/render', loadFileWithPrivacy, async (req, res) => {
+  await renderFile(res, req.fileRecord);
 });
 
 app.get('/api/files/:id/download', loadFileWithPrivacy, async (req, res) => {
@@ -542,6 +583,9 @@ app.get('/api/skills', requireAuth, async (req, res) => {
 app.get('/api/skills/:name', requireAuth, async (req, res) => {
   const skill = getSkill(req.params.name);
   if (!skill) return res.status(404).json({ error: 'Skill 不存在' });
+  if (skill.installBody) {
+    skill.installHtml = marked.parse(skill.installBody, { gfm: true, breaks: false });
+  }
   res.json(skill);
 });
 
@@ -581,7 +625,7 @@ app.get('/api/skills/:name/download', requireAuth, (req, res) => {
   });
 });
 
-mountMcpServer(app, { port: PORT, mcpToken: process.env.MCP_TOKEN, mcpIp: process.env.MCP_IP || 'localhost' });
+mountMcpServer(app, { port: PORT, mcpToken: process.env.MCP_TOKEN, mcpIp: process.env.MCP_IP || 'localhost', protocol: process.env.MCP_PROTOCOL || 'http' });
 
 const NODE_MODULES = path.join(__dirname, 'node_modules');
 app.use('/vendor/katex', express.static(path.join(NODE_MODULES, 'katex', 'dist')));
@@ -589,6 +633,17 @@ app.use('/vendor/highlight.js', express.static(path.join(NODE_MODULES, 'highligh
 app.use('/vendor/mermaid', express.static(path.join(NODE_MODULES, 'mermaid', 'dist')));
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/s/:key', async (req, res) => {
+  try {
+    const file = await dbGet('SELECT * FROM files WHERE share_key = ?', [req.params.key]);
+    if (!file) return res.status(404).send('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:sans-serif;text-align:center;padding:4em"><h1>404</h1><p>页面不存在</p><a href="/">返回首页</a></body></html>');
+    if (!file.is_public && !currentUserId(req)) return res.redirect('/');
+    await renderFile(res, file);
+  } catch (e) {
+    res.status(500).json({ error: '渲染失败' });
+  }
+});
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

@@ -3,12 +3,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# python3/make/g++ 用于 node-gyp 本地编译；预编译二进制下载失败时也能回退成功
 RUN apk add --no-cache python3 make g++
 
 COPY package*.json ./
 
-# 优先用 lockfile 安装；预编译下载超时则回退本地编译
 RUN npm ci --omit=dev
 
 # --- runner：纯运行环境，不带编译工具链，镜像保持小体积 ---
@@ -25,5 +23,8 @@ ENV NODE_ENV=production
 ENV PORT=8858
 
 EXPOSE 8858
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -qO /dev/null http://localhost:8858/ || exit 1
 
 CMD ["node", "server.js"]

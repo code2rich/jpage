@@ -1,5 +1,7 @@
 const API_BASE = '';
 let currentUser = null;
+let allFiles = [];
+let filterState = { query: '', filter: 'all' };
 
 async function api(path, opts = {}) {
   const url = API_BASE + path;
@@ -28,7 +30,109 @@ function toast(msg, type = 'success') {
   setTimeout(() => el.remove(), 3000);
 }
 
-// ---------- Auth ----------
+// ---------- Dialog Modal (prompt / confirm / alert) ----------
+const dialogModal = {
+  el: null, input: null, error: null, msg: null, field: null,
+  confirmBtn: null, cancelBtn: null, closeBtn: null,
+  _resolve: null, _mode: null, _validate: null, _escHandler: null,
+
+  init() {
+    this.el = document.getElementById('dialog-modal');
+    this.input = document.getElementById('dialog-modal-input');
+    this.error = document.getElementById('dialog-modal-error');
+    this.msg = document.getElementById('dialog-modal-message');
+    this.field = document.getElementById('dialog-modal-field');
+    this.confirmBtn = document.getElementById('dialog-modal-confirm');
+    this.cancelBtn = document.getElementById('dialog-modal-cancel');
+    this.closeBtn = document.getElementById('dialog-modal-close');
+    this.titleEl = document.getElementById('dialog-modal-title');
+    this.labelEl = document.getElementById('dialog-modal-label');
+
+    this.closeBtn.addEventListener('click', () => this._dismiss());
+    this.cancelBtn.addEventListener('click', () => this._dismiss());
+    this.el.addEventListener('click', e => { if (e.target === this.el) this._dismiss(); });
+    this.input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') this._accept();
+      if (e.key === 'Escape') this._dismiss();
+    });
+    this.input.addEventListener('input', () => { this.error.hidden = true; });
+    this.confirmBtn.addEventListener('click', () => this._accept());
+  },
+
+  _open(mode, opts) {
+    this._mode = mode;
+    this._resolve = null;
+    this._validate = opts.validate || null;
+    this.error.hidden = true;
+
+    this.titleEl.textContent = opts.title || '';
+    this.msg.innerHTML = opts.message || '';
+    this.msg.hidden = !opts.message;
+
+    if (mode === 'prompt') {
+      this.field.hidden = false;
+      this.labelEl.textContent = opts.label || '';
+      this.input.value = opts.value || '';
+      this.input.placeholder = opts.placeholder || '';
+    } else {
+      this.field.hidden = true;
+    }
+
+    this.confirmBtn.textContent = opts.confirmText || '确认';
+    this.confirmBtn.className = opts.danger ? 'btn btn-danger' : 'btn btn-primary';
+    this.confirmBtn.disabled = false;
+    this.cancelBtn.hidden = mode === 'alert';
+    this.cancelBtn.textContent = opts.cancelText || '取消';
+
+    this.el.hidden = false;
+    this.el.setAttribute('aria-hidden', 'false');
+
+    if (mode === 'prompt') {
+      this.input.focus();
+      this.input.select();
+    } else {
+      this.confirmBtn.focus();
+    }
+
+    this._escHandler = e => { if (e.key === 'Escape') this._dismiss(); };
+    document.addEventListener('keydown', this._escHandler);
+
+    return new Promise(resolve => { this._resolve = resolve; });
+  },
+
+  _accept() {
+    if (this._mode === 'prompt') {
+      const val = this.input.value.trim();
+      if (this._validate) {
+        const err = this._validate(val);
+        if (err) { this.error.textContent = err; this.error.hidden = false; return; }
+      }
+      this._close(val);
+    } else {
+      this._close(true);
+    }
+  },
+
+  _dismiss() {
+    this._close(this._mode === 'prompt' ? null : false);
+  },
+
+  _close(result) {
+    this.el.hidden = true;
+    this.el.setAttribute('aria-hidden', 'true');
+    if (this._escHandler) {
+      document.removeEventListener('keydown', this._escHandler);
+      this._escHandler = null;
+    }
+    const resolve = this._resolve;
+    this._resolve = null;
+    if (resolve) resolve(result);
+  },
+
+  confirm(opts) { return this._open('confirm', opts); },
+  prompt(opts)  { return this._open('prompt', opts);  },
+  alert(opts)   { return this._open('alert', opts);   },
+};
 async function fetchCurrentUser() {
   try {
     const data = await api('/api/auth/me');
@@ -70,6 +174,7 @@ function route() {
 
 window.addEventListener('hashchange', route);
 window.addEventListener('load', async () => {
+  dialogModal.init();
   await fetchCurrentUser();
   route();
 });
@@ -132,16 +237,44 @@ function renderHome(container) {
   });
 
   setupUpload(container);
+  setupFileFilter(container);
   loadFiles(container);
   setupSkillModal();
 
-  // MCP 配置按钮
-  const mcpBtn = container.querySelector('#btn-mcp-config');
-  if (mcpBtn) mcpBtn.addEventListener('click', openMcpConfigModal);
+  // 设置下拉菜单
+  const settingsBtn = container.querySelector('#btn-settings');
+  const settingsDropdown = container.querySelector('#settings-dropdown');
+  const settingsMenu = container.querySelector('#settings-menu');
 
-  // Skills 按钮
-  const skillsBtn = container.querySelector('#btn-skills');
-  if (skillsBtn) skillsBtn.addEventListener('click', openSkillsListModal);
+  if (settingsBtn && settingsDropdown) {
+    settingsBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const isOpen = settingsDropdown.classList.toggle('open');
+      settingsBtn.setAttribute('aria-expanded', String(isOpen));
+    });
+
+    // 点击菜单项后关闭
+    settingsDropdown.querySelector('#menu-item-skills').addEventListener('click', () => {
+      settingsDropdown.classList.remove('open');
+      settingsBtn.setAttribute('aria-expanded', 'false');
+      openSkillsListModal();
+    });
+    settingsDropdown.querySelector('#menu-item-mcp').addEventListener('click', () => {
+      settingsDropdown.classList.remove('open');
+      settingsBtn.setAttribute('aria-expanded', 'false');
+      openMcpConfigModal();
+    });
+  }
+
+  // 点击外部关闭下拉菜单
+  document.addEventListener('click', e => {
+    const dd = document.querySelector('#settings-dropdown');
+    if (dd && dd.classList.contains('open') && !dd.contains(e.target)) {
+      dd.classList.remove('open');
+      const btn = dd.querySelector('#btn-settings');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+  });
 }
 
 function setupUpload(container) {
@@ -177,28 +310,55 @@ async function uploadFile(container, file) {
   const area = container.querySelector('#upload-area');
   const prevPointer = area.style.pointerEvents;
   area.style.pointerEvents = 'none';
+
+  const progressEl = container.querySelector('#upload-progress');
+  const progressBar = container.querySelector('#upload-progress-bar');
+  const progressText = container.querySelector('#upload-progress-text');
+  if (progressEl) progressEl.style.display = 'block';
+  if (progressBar) progressBar.style.width = '0%';
+  if (progressText) progressText.textContent = '0%';
+
   const fd = new FormData();
   fd.append('file', file);
   const isPublicEl = container.querySelector('#upload-is-public');
   fd.append('isPublic', isPublicEl && isPublicEl.checked ? 'true' : 'false');
-  try {
-    await fetch(API_BASE + '/api/files/upload', {
-      method: 'POST',
-      body: fd,
-      credentials: 'same-origin'
-    }).then(async r => {
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
-      return data;
-    });
-    toast('上传成功');
-    container.querySelector('#file-input').value = '';
-    loadFiles(container);
-  } catch (e) {
-    toast(e.message, 'error');
-  } finally {
-    area.style.pointerEvents = prevPointer;
-  }
+
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', API_BASE + '/api/files/upload');
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 100);
+        if (progressBar) progressBar.style.width = pct + '%';
+        if (progressText) progressText.textContent = pct + '%';
+      }
+    };
+    xhr.onload = () => {
+      const data = JSON.parse(xhr.responseText || '{}');
+      if (xhr.status >= 200 && xhr.status < 300) {
+        toast('上传成功');
+        container.querySelector('#file-input').value = '';
+        loadFiles(container);
+      } else {
+        toast(data.error || `HTTP ${xhr.status}`, 'error');
+      }
+      finish();
+    };
+    xhr.onerror = () => {
+      toast('上传失败，请检查网络', 'error');
+      finish();
+    };
+    function finish() {
+      area.style.pointerEvents = prevPointer;
+      if (progressBar) progressBar.style.width = '100%';
+      setTimeout(() => {
+        if (progressEl) progressEl.style.display = 'none';
+      }, 400);
+      resolve();
+    }
+    xhr.send(fd);
+  });
 }
 
 async function loadFiles(container) {
@@ -208,7 +368,7 @@ async function loadFiles(container) {
 
   list.setAttribute('aria-busy', 'true');
   list.classList.add('is-loading');
-  list.textContent = '正在加载…';
+  list.innerHTML = buildSkeletonCards(5);
   empty.style.display = 'none';
   count.textContent = '';
 
@@ -216,71 +376,9 @@ async function loadFiles(container) {
     const data = await api('/api/files');
     list.classList.remove('is-loading');
     list.setAttribute('aria-busy', 'false');
-    list.innerHTML = '';
 
-    count.textContent = `共 ${data.files.length} 个文件`;
-
-    if (!data.files.length) {
-      empty.style.display = 'block';
-      return;
-    }
-    empty.style.display = 'none';
-
-    data.files.forEach(f => {
-      const el = document.createElement('div');
-      el.className = 'file-item';
-      const size = formatSize(f.size);
-      const date = new Date(f.created_at).toLocaleString('zh-CN');
-      const iconClass = f.file_type === 'markdown' ? 'md' : 'html';
-      const iconText = f.file_type === 'markdown' ? 'MD' : 'HTML';
-      const safeName = escapeHtml(f.original_name);
-      const isPublic = !!f.is_public;
-      const lockBadge = isPublic ? '' : '<span class="file-lock" title="私有文件" aria-label="私有文件">🔒</span>';
-
-      el.innerHTML = `
-        <div class="file-info" data-id="${f.id}" role="button" tabindex="0">
-          <div class="file-icon ${iconClass}" aria-hidden="true">${iconText}</div>
-          <div class="file-meta">
-            <div class="file-name">${lockBadge}${safeName}</div>
-            <div class="file-detail">${size} · ${date}</div>
-          </div>
-        </div>
-        <div class="file-actions">
-          <button type="button" class="btn btn-small btn-copy-link" data-id="${f.id}">复制链接</button>
-          <button type="button" class="btn btn-small btn-privacy" data-id="${f.id}" data-public="${isPublic}">${isPublic ? '设为私有' : '设为公开'}</button>
-          <button type="button" class="btn btn-small btn-rename" data-id="${f.id}">重命名</button>
-          <button type="button" class="btn btn-small btn-danger btn-delete" data-id="${f.id}">删除</button>
-        </div>
-      `;
-
-      const info = el.querySelector('.file-info');
-      info.setAttribute('aria-label', `打开 ${f.original_name}`);
-      const openPreview = () => navigate('/view/' + f.id);
-      info.addEventListener('click', openPreview);
-      info.addEventListener('keydown', e => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          openPreview();
-        }
-      });
-      el.querySelector('.btn-copy-link').addEventListener('click', e => {
-        e.stopPropagation();
-        doCopyLink(f.id);
-      });
-      el.querySelector('.btn-privacy').addEventListener('click', e => {
-        e.stopPropagation();
-        doSetPrivacy(container, f.id, isPublic);
-      });
-      el.querySelector('.btn-rename').addEventListener('click', e => {
-        e.stopPropagation();
-        doRename(container, f.id, f.original_name);
-      });
-      el.querySelector('.btn-delete').addEventListener('click', e => {
-        e.stopPropagation();
-        doDelete(container, f.id);
-      });
-      list.appendChild(el);
-    });
+    allFiles = data.files;
+    applyFilters(container);
   } catch (e) {
     list.classList.remove('is-loading');
     list.setAttribute('aria-busy', 'false');
@@ -294,31 +392,202 @@ async function loadFiles(container) {
   }
 }
 
-async function doCopyLink(id) {
-  const url = `${location.origin}/api/files/${id}/render`;
+function applyFilters(container) {
+  const list = container.querySelector('#file-list');
+  const empty = container.querySelector('#empty-state');
+  const count = container.querySelector('#file-count');
+
+  let filtered = allFiles;
+
+  if (filterState.filter === 'html') {
+    filtered = filtered.filter(f => f.file_type === 'html');
+  } else if (filterState.filter === 'markdown') {
+    filtered = filtered.filter(f => f.file_type === 'markdown');
+  } else if (filterState.filter === 'public') {
+    filtered = filtered.filter(f => f.is_public === 1);
+  } else if (filterState.filter === 'private') {
+    filtered = filtered.filter(f => f.is_public === 0);
+  }
+
+  if (filterState.query) {
+    const q = filterState.query.toLowerCase();
+    filtered = filtered.filter(f => f.original_name.toLowerCase().includes(q));
+  }
+
+  const hasFilter = filterState.query || filterState.filter !== 'all';
+  count.textContent = hasFilter
+    ? `${filtered.length} / ${allFiles.length} 个文件`
+    : `共 ${allFiles.length} 个文件`;
+
+  list.innerHTML = '';
+
+  if (!filtered.length) {
+    if (!allFiles.length) {
+      empty.style.display = 'block';
+      const cta = empty.querySelector('#empty-state-cta');
+      if (cta && !cta.dataset.bound) {
+        cta.dataset.bound = '1';
+        cta.addEventListener('click', () => {
+          const input = container.querySelector('#file-input');
+          if (input) input.click();
+        });
+      }
+    } else {
+      empty.style.display = 'none';
+      list.innerHTML = `
+        <div class="empty-state" style="padding:32px 20px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:36px;height:36px;margin-bottom:8px;opacity:.4"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <p style="color:var(--text-secondary)">无匹配文件</p>
+        </div>`;
+    }
+    return;
+  }
+
+  empty.style.display = 'none';
+  renderFileList(container, list, filtered);
+}
+
+function renderFileList(container, list, files) {
+  files.forEach(f => {
+    const el = document.createElement('div');
+    el.className = 'file-item';
+    const size = formatSize(f.size);
+    const date = new Date(f.created_at).toLocaleString('zh-CN');
+    const iconClass = f.file_type === 'markdown' ? 'md' : 'html';
+    const iconText = f.file_type === 'markdown' ? 'MD' : 'HTML';
+    const safeName = escapeHtml(f.original_name);
+    const isPublic = !!f.is_public;
+    const typeBadge = `<span class="file-badge file-badge-type">${iconText}</span>`;
+    const privacyBadge = isPublic
+      ? '<span class="file-badge file-badge-public">公开</span>'
+      : '<span class="file-badge file-badge-private">私有</span>';
+
+    el.innerHTML = `
+      <div class="file-info" data-id="${f.id}" role="button" tabindex="0">
+        <div class="file-icon ${iconClass}" aria-hidden="true">${iconText}</div>
+        <div class="file-meta">
+          <div class="file-name">${safeName}</div>
+          <div class="file-subline">${typeBadge}${privacyBadge}<span class="file-detail">${size} · ${date}</span></div>
+        </div>
+      </div>
+      <div class="file-actions">
+        <button type="button" class="btn btn-small btn-copy-link" data-id="${f.id}">复制链接</button>
+        <button type="button" class="btn btn-small btn-privacy" data-id="${f.id}" data-public="${isPublic}">${isPublic ? '设为私有' : '设为公开'}</button>
+        <button type="button" class="btn btn-small btn-rename" data-id="${f.id}">重命名</button>
+        <button type="button" class="btn btn-small btn-danger btn-delete" data-id="${f.id}">删除</button>
+      </div>
+    `;
+
+    const info = el.querySelector('.file-info');
+    info.setAttribute('aria-label', `打开 ${f.original_name}`);
+    const openPreview = () => navigate('/view/' + f.id);
+    info.addEventListener('click', openPreview);
+    info.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openPreview();
+      }
+    });
+    el.querySelector('.btn-copy-link').addEventListener('click', e => {
+      e.stopPropagation();
+      doCopyLink(f.share_key);
+    });
+    el.querySelector('.btn-privacy').addEventListener('click', e => {
+      e.stopPropagation();
+      doSetPrivacy(container, f.id, isPublic);
+    });
+    el.querySelector('.btn-rename').addEventListener('click', e => {
+      e.stopPropagation();
+      doRename(container, f.id, f.original_name);
+    });
+    el.querySelector('.btn-delete').addEventListener('click', e => {
+      e.stopPropagation();
+      doDelete(container, f.id, f.original_name);
+    });
+    list.appendChild(el);
+  });
+}
+
+function setupFileFilter(container) {
+  const searchInput = container.querySelector('#search-input');
+  const searchClear = container.querySelector('#search-clear');
+  const chips = container.querySelectorAll('.filter-chip');
+
+  searchInput.addEventListener('input', () => {
+    filterState.query = searchInput.value.trim();
+    searchClear.hidden = !filterState.query;
+    applyFilters(container);
+  });
+
+  searchInput.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      searchInput.value = '';
+      filterState.query = '';
+      searchClear.hidden = true;
+      searchInput.blur();
+      applyFilters(container);
+    }
+  });
+
+  searchClear.addEventListener('click', () => {
+    searchInput.value = '';
+    filterState.query = '';
+    searchClear.hidden = true;
+    searchInput.focus();
+    applyFilters(container);
+  });
+
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      chips.forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      filterState.filter = chip.dataset.filter;
+      applyFilters(container);
+    });
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+      e.preventDefault();
+      searchInput.focus();
+    }
+  });
+}
+
+async function doCopyLink(shareKey) {
+  const url = `${location.origin}/s/${shareKey}`;
   try {
     await navigator.clipboard.writeText(url);
     toast('链接已复制');
-  } catch (e) {
-    // fallback for non-HTTPS
-    const input = document.createElement('input');
-    input.value = url;
-    document.body.appendChild(input);
-    input.select();
-    document.execCommand('copy');
-    input.remove();
-    toast('链接已复制');
+  } catch (_) {
+    try {
+      const input = document.createElement('input');
+      input.value = url;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      input.remove();
+      toast('链接已复制');
+    } catch (e) {
+      toast('复制失败，请手动复制链接', 'error');
+    }
   }
 }
 
 async function doRename(container, id, currentName) {
-  const name = prompt('请输入新文件名:', currentName);
-  if (!name || name === currentName) return;
+  const name = await dialogModal.prompt({
+    title: '重命名文件',
+    label: '文件名',
+    value: currentName,
+    validate: v => {
+      if (!v.trim()) return '文件名不能为空';
+      if (/[\/\\]/.test(v)) return '文件名不能包含 / 或 \\';
+      return null;
+    },
+  });
+  if (name === null || name === currentName) return;
   try {
-    await api(`/api/files/${id}`, {
-      method: 'PUT',
-      body: { name }
-    });
+    await api(`/api/files/${id}`, { method: 'PUT', body: { name } });
     toast('重命名成功');
     loadFiles(container);
   } catch (e) {
@@ -339,8 +608,14 @@ async function doSetPrivacy(container, id, currentPublic) {
   }
 }
 
-async function doDelete(container, id) {
-  if (!confirm('确定要删除这个文件吗？')) return;
+async function doDelete(container, id, fileName) {
+  const ok = await dialogModal.confirm({
+    title: '确认删除',
+    message: `确定要删除 <strong>${escapeHtml(fileName)}</strong> 吗？此操作不可撤销。`,
+    confirmText: '删除',
+    danger: true,
+  });
+  if (!ok) return;
   try {
     await api(`/api/files/${id}`, { method: 'DELETE' });
     toast('删除成功');
@@ -399,7 +674,12 @@ function renderPreview(container, hash) {
   const iframe = container.querySelector('#preview-iframe');
   const source = container.querySelector('#preview-source');
   const code = container.querySelector('#source-code');
+  const spinner = container.querySelector('#preview-spinner');
   const toggles = container.querySelectorAll('.view-toggle .btn');
+
+  iframe.addEventListener('load', () => {
+    if (spinner) spinner.style.display = 'none';
+  });
 
   let fileName;
 
@@ -470,11 +750,26 @@ function renderPreview(container, hash) {
     expandFloatingBtn.setAttribute('aria-label', `展开顶栏 · ${data.original_name}`);
     syncToolbarCompact(layout, titleStrip, fileName);
     code.textContent = data.content;
+    if (spinner) spinner.style.display = 'flex';
     iframe.src = API_BASE + `/api/files/${id}/render`;
   }).catch(e => {
     toast(e.message, 'error');
     navigate('/');
   });
+}
+
+// ---------- Skeleton Helper ----------
+function buildSkeletonCards(n) {
+  let html = '';
+  for (let i = 0; i < n; i++) {
+    html += '<div class="skeleton-item" aria-hidden="true">'
+      + '<div class="skeleton-icon"></div>'
+      + '<div class="skeleton-lines">'
+      + '<div class="skeleton-line skeleton-w60"></div>'
+      + '<div class="skeleton-line skeleton-w40"></div>'
+      + '</div></div>';
+  }
+  return html;
 }
 
 // ---------- Utils ----------
@@ -526,9 +821,9 @@ function openSkillModal(name) {
     document.getElementById('skill-modal-source').textContent = skill.body || '（SKILL.md 正文为空）';
     const installBox = document.getElementById('skill-install-rendered');
     const installHeading = document.getElementById('skill-install-heading');
-    if (skill.installBody && skill.installBody.trim()) {
+    if (skill.installHtml || (skill.installBody && skill.installBody.trim())) {
       installHeading.style.display = '';
-      installBox.innerHTML = renderMarkdown(skill.installBody);
+      installBox.innerHTML = skill.installHtml || renderMarkdown(skill.installBody);
     } else {
       installHeading.style.display = 'none';
       installBox.innerHTML = '';
@@ -659,6 +954,7 @@ function openMcpConfigModal() {
       detailEl.innerHTML = `
         <h3>客户端配置</h3>
         <p class="mcp-config-hint">将以下配置合并到 Claude Code 的 <code>.mcp.json</code> 或 Claude Desktop 的配置文件中：</p>
+        <p class="mcp-config-hint">请根据实际部署环境调整 URL。</p>
         <div class="mcp-config-block">
           <button type="button" class="btn btn-small mcp-copy-btn" id="mcp-copy-config">复制</button>
           <pre class="mcp-config-code"><code>${escapeHtml(configJson)}</code></pre>
@@ -733,7 +1029,7 @@ function loadSkillsForModal() {
   if (!list) return;
   list.setAttribute('aria-busy', 'true');
   list.classList.add('is-loading');
-  list.textContent = '正在加载…';
+  list.innerHTML = buildSkeletonCards(5);
   empty.style.display = 'none';
   api('/api/skills').then(data => {
     list.classList.remove('is-loading');

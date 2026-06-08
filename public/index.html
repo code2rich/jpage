@@ -47,9 +47,23 @@
 </div>
 </div>
 <div class="header-right">
-<button type="button" class="btn btn-small" id="btn-mcp-config" aria-label="MCP 配置">MCP 配置</button>
-<button type="button" class="btn btn-small" id="btn-skills" aria-label="Skills 管理">Skills</button>
 <span class="header-user" id="header-user"></span>
+<div class="settings-dropdown" id="settings-dropdown">
+<button type="button" class="btn btn-small btn-settings" id="btn-settings" aria-label="设置" aria-haspopup="true" aria-expanded="false">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+<span>设置</span>
+</button>
+<div class="settings-menu" id="settings-menu" role="menu">
+<button type="button" class="settings-menu-item" role="menuitem" id="menu-item-skills">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5z"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+Skills 管理
+</button>
+<button type="button" class="settings-menu-item" role="menuitem" id="menu-item-mcp">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+MCP 配置
+</button>
+</div>
+</div>
 <button type="button" class="btn btn-small" id="btn-logout" aria-label="退出登录">退出</button>
 </div>
 </header>
@@ -65,15 +79,35 @@
 <input type="checkbox" id="upload-is-public" checked>
 <span>公开访问（未勾选则仅管理员可访问）</span>
 </label>
+<div class="upload-progress" id="upload-progress" style="display:none">
+<div class="upload-progress-bar" id="upload-progress-bar"></div>
+<span class="upload-progress-text" id="upload-progress-text">0%</span>
+</div>
 </div>
 <div class="file-list-header">
 <h2>文件列表</h2>
 <span class="file-count" id="file-count" aria-live="polite"></span>
 </div>
+<div class="file-filter-bar">
+<div class="search-input-wrap">
+<svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+<input type="text" id="search-input" placeholder="搜索文件名… (/)" autocomplete="off">
+<button type="button" class="search-clear" id="search-clear" hidden aria-label="清除搜索">×</button>
+</div>
+<div class="filter-chips">
+<button type="button" class="filter-chip active" data-filter="all">全部</button>
+<button type="button" class="filter-chip" data-filter="html">HTML</button>
+<button type="button" class="filter-chip" data-filter="markdown">Markdown</button>
+<span class="filter-divider" aria-hidden="true"></span>
+<button type="button" class="filter-chip" data-filter="public">公开</button>
+<button type="button" class="filter-chip" data-filter="private">私有</button>
+</div>
+</div>
 <div class="file-list" id="file-list" aria-busy="false"></div>
 <div class="empty-state" id="empty-state" style="display:none">
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
 <p>暂无文件，请上传</p>
+<button type="button" class="empty-state-cta" id="empty-state-cta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>上传文件</button>
 </div>
 </main>
 </div>
@@ -117,7 +151,11 @@
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
 </button>
 <div class="preview-container">
-<iframe id="preview-iframe" sandbox="allow-scripts allow-same-origin"></iframe>
+<div class="preview-spinner" id="preview-spinner">
+<div class="spinner"></div>
+<span>加载中…</span>
+</div>
+<iframe id="preview-iframe" sandbox="allow-scripts"></iframe>
 <pre id="preview-source" class="source-view"><code id="source-code"></code></pre>
 </div>
 </div>
@@ -180,6 +218,28 @@
 </div>
 <div class="modal-footer">
 <button type="button" class="btn btn-small" id="skills-list-dismiss">关闭</button>
+</div>
+</div>
+</div>
+
+<!-- 通用交互 Modal (prompt / confirm / alert) -->
+<div class="modal-backdrop" id="dialog-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="dialog-modal-title">
+<div class="modal-panel modal-panel-sm">
+<div class="modal-header">
+<h2 id="dialog-modal-title"></h2>
+<button type="button" class="btn btn-small modal-close" id="dialog-modal-close" aria-label="关闭">×</button>
+</div>
+<div class="modal-body">
+<div class="dialog-message" id="dialog-modal-message"></div>
+<label class="login-field dialog-field" id="dialog-modal-field" hidden>
+<span id="dialog-modal-label"></span>
+<input type="text" id="dialog-modal-input" autocomplete="off">
+</label>
+<div class="login-error" id="dialog-modal-error" role="alert" hidden></div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn btn-small" id="dialog-modal-cancel">取消</button>
+<button type="button" class="btn btn-primary" id="dialog-modal-confirm">确认</button>
 </div>
 </div>
 </div>
