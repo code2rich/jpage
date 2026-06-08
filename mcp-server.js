@@ -49,7 +49,7 @@ function textResult(payload, opts = {}) {
   };
 }
 
-function createMcpServer({ port, api, mcpIp }) {
+function createMcpServer({ port, api, mcpIp, protocol }) {
   const server = new McpServer(
     { name: 'jpage', version: '1.0.0' },
     { capabilities: {} }
@@ -59,7 +59,7 @@ function createMcpServer({ port, api, mcpIp }) {
     'list_files',
     {
       title: 'List Files',
-      description: '列出 jpage 中存储的所有 HTML/Markdown 文件元数据。',
+      description: '列出 jpage 中存储的所有 HTML/Markdown 文件元数据。适用于查看已上传文件列表、确认上传结果、或决定后续操作目标。',
       inputSchema: {},
     },
     async () => {
@@ -73,8 +73,8 @@ function createMcpServer({ port, api, mcpIp }) {
     {
       title: 'Upload File',
       description:
-        '上传 HTML 或 Markdown 文件到 jpage。文件名将自动按扩展名归类（html/htm→html, md/markdown→markdown）。' +
-        '返回的 url 字段是可访问的预览地址（基于 /api/files/:id/render）。',
+        '上传 HTML 或 Markdown 文件到 jpage，用于生成页面并获取预览链接。文件类型按扩展名自动识别（html/htm→html, md/markdown→markdown）。' +
+        '返回的 url 字段是可公开访问的预览地址。适用于将生成的报告、笔记、可视化页面等内容上传分享。',
       inputSchema: {
         name: z.string().describe('文件名，需带扩展名，例如 "report.html" 或 "note.md"'),
         content: z.string().describe('文件正文，UTF-8 字符串'),
@@ -104,7 +104,7 @@ function createMcpServer({ port, api, mcpIp }) {
       });
       return textResult({
         ...data,
-        url: `http://${mcpIp}:${port}/api/files/${data.id}/render`,
+        url: data.share_key ? `${protocol}://${mcpIp}:${port}/s/${data.share_key}` : `${protocol}://${mcpIp}:${port}/api/files/${data.id}/render`,
       });
     }
   );
@@ -113,7 +113,7 @@ function createMcpServer({ port, api, mcpIp }) {
     'get_file_content',
     {
       title: 'Get File Content',
-      description: '读取指定 id 的文件原始内容（UTF-8 文本）。',
+      description: '读取指定 id 的文件原始内容（UTF-8 文本）。适用于查看或编辑已有文件内容，不限文件大小。',
       inputSchema: {
         id: z.number().int().positive().describe('文件 id（list_files 返回的 id 字段）'),
       },
@@ -134,7 +134,7 @@ function createMcpServer({ port, api, mcpIp }) {
     'delete_file',
     {
       title: 'Delete File',
-      description: '删除指定 id 的文件（同时移除数据库记录与磁盘文件）。',
+      description: '删除指定 id 的文件（同时移除数据库记录与磁盘文件）。适用于清理不需要的页面。此操作不可撤销。',
       inputSchema: {
         id: z.number().int().positive().describe('文件 id'),
       },
@@ -149,7 +149,7 @@ function createMcpServer({ port, api, mcpIp }) {
     'rename_file',
     {
       title: 'Rename File',
-      description: '修改指定 id 的文件名（仅 original_name 字段，不影响磁盘存储名）。',
+      description: '修改指定 id 的文件名（仅 original_name 字段，不影响磁盘存储名）。适用于修正文件名或更改显示标题。',
       inputSchema: {
         id: z.number().int().positive().describe('文件 id'),
         name: z.string().min(1).describe('新文件名，需带扩展名'),
@@ -165,13 +165,15 @@ function createMcpServer({ port, api, mcpIp }) {
     'get_file_url',
     {
       title: 'Get File Public URL',
-      description: '返回指定 id 的公开预览 URL（基于 /api/files/:id/render）。',
+      description: '返回指定 id 的公开预览短链接（/s/:key）。适用于获取分享链接，无需读取文件内容。',
       inputSchema: {
         id: z.number().int().positive().describe('文件 id'),
       },
     },
     async ({ id }) => {
-      return textResult({ id, url: `http://${mcpIp}:${port}/api/files/${id}/render` });
+      const data = await api.get(`/api/files/${id}/content`);
+      const url = data.share_key ? `${protocol}://${mcpIp}:${port}/s/${data.share_key}` : `${protocol}://${mcpIp}:${port}/api/files/${id}/render`;
+      return textResult({ id, url });
     }
   );
 
@@ -180,7 +182,7 @@ function createMcpServer({ port, api, mcpIp }) {
     'jpage://files',
     {
       title: 'All Files',
-      description: 'jpage 中所有文件的元数据列表（id, name, type, size, is_public, created_at）',
+      description: 'jpage 中所有文件的元数据列表（id, name, type, size, is_public, created_at）。适用于快速浏览文件概况，无需逐个查询。',
       mimeType: 'application/json',
     },
     async () => {
@@ -203,7 +205,7 @@ function createMcpServer({ port, api, mcpIp }) {
     {
       title: 'Single File Content',
       description:
-        '单文件内容（资源）。仅当文件 ≤ 256KB 时返回正文；超过则返回提示，让模型改用 get_file_content 工具。',
+        '单文件内容（资源）。仅当文件 ≤ 256KB 时返回正文；超过则返回提示，让模型改用 get_file_content 工具。适用于 AI 上下文注入或轻量内容查看。',
       mimeType: 'text/plain',
     },
     async (uri, vars) => {
@@ -243,7 +245,7 @@ function createMcpServer({ port, api, mcpIp }) {
 
 const transports = {};
 
-function mountMcpServer(app, { port, mcpToken, mcpIp }) {
+function mountMcpServer(app, { port, mcpToken, mcpIp, protocol }) {
   if (!mcpToken) {
     console.log('[即页] MCP_TOKEN 未设置，MCP 端点 /mcp 已禁用（设置 MCP_TOKEN 后重启生效）');
     return;
@@ -258,7 +260,7 @@ function mountMcpServer(app, { port, mcpToken, mcpIp }) {
   });
 
   function getServer() {
-    return createMcpServer({ port, api, mcpIp });
+    return createMcpServer({ port, api, mcpIp, protocol });
   }
 
   const bearerAuth = (req, res, next) => {
@@ -337,7 +339,7 @@ function mountMcpServer(app, { port, mcpToken, mcpIp }) {
   app.get('/mcp', bearerAuth, mcpGetHandler);
   app.delete('/mcp', bearerAuth, mcpDeleteHandler);
 
-  console.log(`[即页] MCP 端点已挂载: http://${mcpIp}:${port}/mcp (Bearer auth)`);
+  console.log(`[即页] MCP 端点已挂载: ${protocol}://${mcpIp}:${port}/mcp (Bearer auth)`);
 }
 
 async function closeMcpTransports() {

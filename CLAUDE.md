@@ -38,7 +38,7 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 - `data/uploads/` — 上传文件内容，命名 `<timestamp>-<random><ext>`
 
 **Database schema**:
-- `files(id, original_name, stored_name, file_type, size, created_at, is_public, uploaded_by)` — `is_public=1` means anonymous can read; `uploaded_by` references `users.id`
+- `files(id, original_name, stored_name, file_type, size, created_at, is_public, uploaded_by, share_key)` — `is_public=1` means anonymous can read; `uploaded_by` references `users.id`; `share_key` is 8-char URL-safe random string for short links
 - `users(id, username UNIQUE, password_hash, created_at)`
 
 **REST API**:
@@ -52,6 +52,7 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 - `DELETE /api/files/:id` — 删除数据库记录和磁盘文件
 - `GET /api/files/:id/content` — 返回原始文件文本 JSON（公开文件无需登录）
 - `GET /api/files/:id/render` — 返回渲染 HTML（Markdown 使用 marked + highlight.js + KaTeX + Mermaid）
+- `GET /s/:key` — 短链接渲染页面（通过 share_key 查找文件并渲染，公开文件无需登录）
 - `GET /api/files/:id/download` — 流式下载文件
 - `GET /api/skills` — 列出已安装的 skill 包（需登录）
 - `GET /api/skills/:name` — skill 详情（含 SKILL.md 内容和文件列表）
@@ -65,7 +66,7 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 - Tools（6 个）：`list_files`, `upload_file`, `get_file_content`, `delete_file`, `rename_file`, `get_file_url`
 - Resources（2 个）：`jpage://files`（列表）, `jpage://file/{id}`（内容，≤ 256KB）
 
-**Static + SPA fallback** — `public/` served by `express.static`; catch-all `app.get('*')` returns `public/index.html` for client-side routing between home and preview views.
+**Static + SPA fallback** — `public/` served by `express.static`; `/s/:key` short link route renders files directly; catch-all `app.get('*')` returns `public/index.html` for client-side routing between home and preview views.
 
 **Frontend** — `public/index.html` 定义两个 `<template>` 块（home / preview）；`public/js/app.js` 是单文件 vanilla-JS 控制器，基于 URL hash 切换视图。无构建、无打包器、无框架。CSS 在 `public/css/style.css`，支持系统深色模式。Markdown 渲染增强使用 marked + highlight.js + KaTeX + Mermaid。
 
@@ -73,7 +74,7 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 
 - **默认端口 8858**（非 3000）。通过 `PORT` 环境变量可配置。`Dockerfile`、`docker-compose.yml`、`README.md` 均引用 8858，保持同步。
 - **Multer 文件名编码** — `decodeFilename` 辅助函数（`Buffer.from(name, 'latin1').toString('utf8')`）是必需的，因为 multer 以 latin1 存储 `originalname`。不要移除。
-- **catch-all 路由必须在所有 API 路由和 MCP 挂载之后** — Express 按顺序匹配，提前放置会遮蔽 API 或 `/mcp`。
+- **catch-all 路由必须在所有 API 路由、`/s/:key` 和 MCP 挂载之后** — Express 按顺序匹配，提前放置会遮蔽 API、短链接或 `/mcp`。
 - **数据库共享** — 单个 `db` 连接复用于所有请求。Promise 封装 `dbRun`/`dbGet`/`dbAll` 保持调用简洁。
 - **上传限流** — `express-rate-limit` 仅应用于 `POST /api/files/upload` 和 `POST /api/files/upload-json`，按 IP 限流。
 - **HTML 渲染端点** — 故意不清理 HTML，因为在用户自己的 iframe 沙箱中（`sandbox="allow-scripts allow-same-origin"`）。修改此 CSP 需谨慎。
