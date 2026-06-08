@@ -116,29 +116,29 @@ db.serialize(() => {
       db.run(`ALTER TABLE files ADD COLUMN uploaded_by INTEGER`);
     }
     if (!names.has('share_key')) {
-      db.run(`ALTER TABLE files ADD COLUMN share_key TEXT UNIQUE`);
+      db.run(`ALTER TABLE files ADD COLUMN share_key TEXT`);
     }
+    db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_files_share_key ON files(share_key)`, () => {
+      // Backfill: 为已有文件生成 share_key
+      db.all('SELECT id FROM files WHERE share_key IS NULL', [], async (err, rows) => {
+        if (err || !rows || !rows.length) return;
+        for (const row of rows) {
+          const key = generateShareKey();
+          try {
+            await dbRun('UPDATE files SET share_key = ? WHERE id = ?', [key, row.id]);
+          } catch (_) {
+            const retryKey = generateShareKey();
+            await dbRun('UPDATE files SET share_key = ? WHERE id = ?', [retryKey, row.id]);
+          }
+        }
+      });
+    });
   });
 });
 
 function generateShareKey() {
   return crypto.randomBytes(6).toString('base64url').slice(0, 8);
 }
-
-// Backfill: 为已有文件生成 share_key
-db.all('SELECT id FROM files WHERE share_key IS NULL', [], async (err, rows) => {
-  if (err || !rows || !rows.length) return;
-  for (const row of rows) {
-    const key = generateShareKey();
-    try {
-      await dbRun('UPDATE files SET share_key = ? WHERE id = ? AND share_key IS NULL', [key, row.id]);
-    } catch (e) {
-      // key 冲突时重试一次
-      const retryKey = generateShareKey();
-      await dbRun('UPDATE files SET share_key = ? WHERE id = ? AND share_key IS NULL', [retryKey, row.id]);
-    }
-  }
-});
 
 function dbRun(sql, params = []) {
   return new Promise((resolve, reject) => {
