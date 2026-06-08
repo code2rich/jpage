@@ -27,12 +27,12 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 
 ## Architecture
 
-**Four-module backend**:
-- `server.js` (~660 lines) — Express app, REST API, auth (session + bcrypt), multer upload, SQLite, Markdown 渲染增强（marked + highlight.js + KaTeX + Mermaid）
+**Five-module backend**:
+- `server.js` (~1534 lines) — Express app, REST API, auth (session + bcrypt), multer upload, ZIP 包上传/批量处理, SQLite, Markdown 渲染增强（marked + highlight.js + KaTeX + Mermaid）
 - `logger.js` (~20 lines) — 结构化 JSON Lines 日志工具，导出 info/warn/error/audit 方法，error 输出到 stderr，其余到 stdout
-- `mcp-server.js` (~350 lines) — MCP Streamable HTTP server. Exports `mountMcpServer(app, {port, mcpToken})` and `closeMcpTransports()`. 6 tools + 2 resources; tools call the REST API via loopback fetch with the same Bearer token.
+- `mcp-server.js` (~614 lines) — MCP Streamable HTTP server. Exports `mountMcpServer(app, {port, mcpToken, mcpIp, protocol, authenticateRequest})` and `closeMcpTransports()`. 15 tools + 2 resources; tools call the REST API via loopback fetch with the same Bearer token.
 - `migrations.js` (~65 lines) — Migration runner，启动时自动执行 `migrations/` 目录下未应用的 migration，记录到 `_migrations` 表。
-- `skills-registry.js` (~130 lines) — 自动扫描 `skills/*/SKILL.md`，解析 YAML frontmatter，提供 skill 列表/详情/ZIP 打包下载。
+- `skills-registry.js` (~135 lines) — 自动扫描 `skills/*/SKILL.md`，解析 YAML frontmatter，提供 skill 列表/详情/ZIP 打包下载。
 
 **Storage**（均自动创建）：
 - `data/database.sqlite` — 业务表（files、users 等）+ `_migrations` 版本追踪表
@@ -63,24 +63,49 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 - `POST /api/tokens` — 创建 Token `{name}`，返回明文（仅一次）
 - `DELETE /api/tokens/:id` — 删除 Token（自己的或 admin 删任意）
 - `GET /api/files` — 列出文件（admin 看全部，普通用户看自己的+公开的）
-- `POST /api/files/upload` — multipart 上传（需登录，50/15min，50MB，.html/.htm/.md/.markdown）
-- `POST /api/files/upload-json` — JSON `{name, content, isPublic?}`（需登录，MCP 使用）
+- `POST /api/files/upload` — multipart 上传（需登录，50/15min，50MB，支持 .html/.htm/.md/.markdown/.zip）
+- `POST /api/files/upload-json` — JSON `{name, content, isPublic?}`（需登录，同名自动覆盖）
 - `PUT /api/files/:id` — `{name?, isPublic?}`（admin 或文件所有者）
 - `DELETE /api/files/:id` — 删除数据库记录和磁盘文件（admin 或文件所有者）
 - `GET /api/files/:id/content` — 返回原始文件文本 JSON（公开文件无需登录）
-- `GET /api/files/:id/render` — 返回渲染 HTML（Markdown 使用 marked + highlight.js + KaTeX + Mermaid）
+- `GET /api/files/:id/render` — 返回渲染 HTML（Markdown 使用 marked + highlight.js + KaTeX + Mermaid；Bundle 注入 `<base>` 标签）
+- `GET /api/files/:id/download` — 流式下载文件（Bundle 以 ZIP 形式下载）
+- `GET /api/files/:id/asset/*` — Bundle 资源文件访问（路径穿越校验）
+- `POST /api/files/:id/overwrite` — multipart 覆盖上传（预览页专用，自动版本备份）
+- `POST /api/files/:id/overwrite-json` — JSON 覆盖上传（MCP 使用，自动版本备份）
+- `GET /api/files/:id/versions` — 版本历史列表
+- `GET /api/files/:id/versions/:ver/content` — 历史版本原文
+- `GET /api/files/:id/versions/:ver/render` — 渲染历史版本
+- `POST /api/files/:id/versions/:ver/restore` — 恢复到指定版本
+- `DELETE /api/files/:id/versions/:ver` — 删除指定历史版本
 - `GET /s/:key` — 短链接渲染页面（通过 share_key 查找文件并渲染，公开文件无需登录）
-- `GET /api/files/:id/download` — 流式下载文件
+- `GET /api/tags` — 列出所有标签（含 file_count）
+- `POST /api/tags` — `{name}` 创建标签（已存在则返回现有）
+- `DELETE /api/tags/:id` — 删除标签
+- `PUT /api/files/:id/tags` — `{tagIds: [1,2,3]}` 替换文件的标签
+- `POST /api/files/:id/star` — 收藏文件
+- `DELETE /api/files/:id/star` — 取消收藏
+- `GET /api/categories` — 列出分类（含 file_count）
+- `POST /api/categories` — `{name}` 创建分类
+- `PUT /api/categories/:id` — `{name}` 重命名分类
+- `DELETE /api/categories/:id` — 删除分类（文件变未分类）
+- `PUT /api/files/:id/category` — `{categoryId: number|null}` 设置文件分类
 - `GET /api/skills` — 列出已安装的 skill 包（需登录）
-- `GET /api/skills/:name` — skill 详情（含 SKILL.md 内容和文件列表）
+- `GET /api/skills/:name` — skill 详情（含 SKILL.md 内容、文件列表、INSTALL.md 渲染）
 - `GET /api/skills/:name/download` — ZIP 下载整个 skill 目录
+- `GET /api/mcp/config` — 返回 MCP 连接配置（URL、Token 列表、JSON 配置片段）
 
 **Skills registry** — `skills-registry.js` 自动发现 `skills/*/SKILL.md`，解析 YAML frontmatter（`name`, `description`, `version`, `author`）。Web UI 首页展示 Skills 区块，管理员可查看详情（弹窗）和下载 ZIP。ZIP 包与磁盘目录结构一致，可直接解压到 `~/.claude/skills/`。
 
-**MCP endpoint**（仅当 `MCP_TOKEN` 环境变量设置时挂载）：
+**MCP endpoint**（`MCP_TOKEN` 或用户级 Token 二选一即可挂载）：
 - `POST`/`GET`/`DELETE /mcp` — Streamable HTTP transport
-- Bearer auth via `Authorization: Bearer ${MCP_TOKEN}`
-- Tools（6 个）：`list_files`, `upload_file`, `get_file_content`, `delete_file`, `rename_file`, `get_file_url`
+- Bearer auth: 全局 `MCP_TOKEN`（向后兼容）或用户级 API Token
+- Tools（15 个）：
+  - 文件管理：`list_files`, `upload_file`（支持 ZIP base64/覆盖/标签/分类）, `get_file_content`, `delete_file`, `rename_file`, `get_file_url`
+  - 版本管理：`list_file_versions`, `restore_file_version`
+  - 标签管理：`list_tags`, `add_tags_to_file`
+  - 收藏管理：`star_file`, `unstar_file`
+  - 分类管理：`list_categories`, `create_category`, `set_file_category`
 - Resources（2 个）：`jpage://files`（列表）, `jpage://file/{id}`（内容，≤ 256KB）
 
 **Static + SPA fallback** — `public/` served by `express.static`; `/s/:key` short link route renders files directly; catch-all `app.get('*')` returns `public/index.html` for client-side routing between home and preview views.
@@ -93,7 +118,7 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 - **Multer 文件名编码** — `decodeFilename` 辅助函数（`Buffer.from(name, 'latin1').toString('utf8')`）是必需的，因为 multer 以 latin1 存储 `originalname`。不要移除。
 - **catch-all 路由必须在所有 API 路由、`/s/:key` 和 MCP 挂载之后** — Express 按顺序匹配，提前放置会遮蔽 API、短链接或 `/mcp`。
 - **数据库共享** — 单个 `db` 连接复用于所有请求。Promise 封装 `dbRun`/`dbGet`/`dbAll` 保持调用简洁。
-- **上传限流** — `express-rate-limit` 仅应用于 `POST /api/files/upload` 和 `POST /api/files/upload-json`，按 IP 限流。
+- **上传限流** — `express-rate-limit` 应用于 `POST /api/files/upload`、`POST /api/files/upload-json`、`POST /api/files/:id/overwrite`、`POST /api/files/:id/overwrite-json`，按 IP 限流。
 - **HTML 渲染端点** — 故意不清理 HTML，因为在用户自己的 iframe 沙箱中（`sandbox="allow-scripts allow-same-origin"`）。修改此 CSP 需谨慎。
 - **容器端口映射** — `docker-compose.yml` 映射 host 8858 → container 8858。反向代理后可不发布端口。
 - **`.dockerignore` 排除 `data/`** — 上传文件不烘焙进镜像；compose 中的 `data/` volume 持久化状态。
@@ -103,6 +128,9 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 - **`MCP_TOKEN` 是可选的** — 未设置时仍可通过用户级 Token 访问 MCP。`mountMcpServer` 接受 `authenticateRequest` 函数验证 Token。
 - **`uploaded_by` 从 `req.userId` 设置** — 文件归属隔离：admin 看全部文件，普通用户看自己的 + 公开的。`PUT`/`DELETE` 增加所有权检查（`checkFileOwnership`）。
 - **Markdown 渲染增强** — marked + highlight.js（代码高亮）+ KaTeX（数学公式 `$...$` / `$$...$$`）+ Mermaid（图表，支持深色/浅色主题）。渲染代码在 `server.js` 的 `renderMarkdown` 函数。
+- **ZIP 上传与 Bundle** — `POST /api/files/upload` 支持 `.zip` 文件。ZIP 分两种模式：(1) 网站包（含 index.html + 资源目录），存储为解压后的目录，`is_bundle=1`，渲染时注入 `<base>` 标签使相对路径指向 `/api/files/:id/asset/`；(2) 批量上传（多个独立 HTML/MD），各自创建文件记录。MCP 的 `upload_file` tool 通过 base64 编码调用 `POST /api/files/upload-zip-base64`。
+- **同名自动覆盖** — `upload` 和 `upload-json` 端点遇到同名文件时自动覆盖（备份当前版本到 `file_versions` 表），非报错。MCP 可通过 `overwriteFileId` 显式指定覆盖目标。
+- **版本历史** — 每次覆盖上传（同名覆盖或显式 overwrite）都会将旧版本存入 `file_versions`。版本 API 支持列出、查看、渲染、恢复、删除历史版本。
 
 ## Logging
 
