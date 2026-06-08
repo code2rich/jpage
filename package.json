@@ -18,10 +18,12 @@
     "express-session": "^1.18.0",
     "helmet": "^7.1.0",
     "highlight.js": "^11.11.1",
+    "jszip": "^3.10.1",
     "katex": "^0.16.47",
     "marked": "^12.0.0",
     "marked-highlight": "^2.2.4",
     "mermaid": "^11.15.0",
+    "morgan": "^1.11.0",
     "multer": "^1.4.5-lts.1",
     "sqlite3": "^5.1.7",
     "zod": "^3.25.76"

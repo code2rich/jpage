@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
+const logger = require('./logger');
 
 const SKILLS_DIR = path.join(__dirname, 'skills');
 
@@ -122,10 +123,10 @@ function createZipStream(name) {
   const skillRoot = path.join(SKILLS_DIR, name);
   const archive = archiver('zip', { zlib: { level: 9 } });
   archive.on('warning', (err) => {
-    if (err.code !== 'ENOENT') console.error('[即页] archiver 警告:', err);
+    if (err.code !== 'ENOENT') logger.error({ type: 'app', message: 'archiver 警告', error: err.message });
   });
   archive.on('error', (err) => {
-    console.error('[即页] archiver 错误:', err);
+    logger.error({ type: 'app', message: 'archiver 错误', error: err.message });
   });
   archive.directory(skillRoot, name);
   return archive;
