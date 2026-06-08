@@ -30,16 +30,24 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 **Three-module backend**:
 - `server.js` (~660 lines) — Express app, REST API, auth (session + bcrypt), multer upload, SQLite, Markdown 渲染增强（marked + highlight.js + KaTeX + Mermaid）
 - `mcp-server.js` (~350 lines) — MCP Streamable HTTP server. Exports `mountMcpServer(app, {port, mcpToken})` and `closeMcpTransports()`. 6 tools + 2 resources; tools call the REST API via loopback fetch with the same Bearer token.
+- `migrations.js` (~65 lines) — Migration runner，启动时自动执行 `migrations/` 目录下未应用的 migration，记录到 `_migrations` 表。
 - `skills-registry.js` (~130 lines) — 自动扫描 `skills/*/SKILL.md`，解析 YAML frontmatter，提供 skill 列表/详情/ZIP 打包下载。
 
 **Storage**（均自动创建）：
-- `data/database.sqlite` — `files` 和 `users` 表
+- `data/database.sqlite` — 业务表（files、users 等）+ `_migrations` 版本追踪表
 - `data/sessions.sqlite` — express-session store (connect-sqlite3)
 - `data/uploads/` — 上传文件内容，命名 `<timestamp>-<random><ext>`
 
 **Database schema**:
-- `files(id, original_name, stored_name, file_type, size, created_at, is_public, uploaded_by, share_key)` — `is_public=1` means anonymous can read; `uploaded_by` references `users.id`; `share_key` is 8-char URL-safe random string for short links
-- `users(id, username UNIQUE, password_hash, created_at)`
+- `_migrations(id, name UNIQUE, applied_at)` — 记录已执行的 migration
+- `files(id, original_name, stored_name, file_type, size, created_at, is_public, uploaded_by, share_key, updated_at, category_id, is_bundle, entry_path)` — `is_public=1` means anonymous can read; `uploaded_by` references `users.id`; `share_key` is 8-char URL-safe random string for short links
+- `users(id, username UNIQUE, password_hash, role, created_at)`
+- `file_versions(id, file_id, version, stored_name, size, created_at, uploaded_by)` — 文件版本历史
+- `tokens(id, user_id, name, token_hash, token_prefix, last_used_at, created_at)` — API token
+- `tags(id, name UNIQUE, created_at)` — 标签词典
+- `file_tags(file_id, tag_id)` — 文件-标签多对多
+- `starred_files(user_id, file_id, created_at)` — 收藏
+- `categories(id, name, user_id, created_at)` — 分类
 
 **REST API**:
 - `GET /api/auth/me` — 当前用户
@@ -85,11 +93,72 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 - **`uploaded_by` 从 `req.session.userId` 设置** — MCP 上传时为管理员用户 id，非 MCP 客户端。不添加 per-MCP-client 身份。
 - **Markdown 渲染增强** — marked + highlight.js（代码高亮）+ KaTeX（数学公式 `$...$` / `$$...$$`）+ Mermaid（图表，支持深色/浅色主题）。渲染代码在 `server.js` 的 `renderMarkdown` 函数。
 
+## Logging
+
+**结构化 JSON Lines 日志**，输出到 stdout/stderr（12-factor 做法），Docker 自动捕获，`docker compose logs` 查看。
+
+**三个模块**：
+- `logger.js` — 日志工具，导出 `logger.info(obj)` / `logger.warn(obj)` / `logger.error(obj)` / `logger.audit(action, details)`
+- `morgan` — HTTP 请求日志（自定义 JSON 格式，跳过静态资源），挂载在 session 中间件之后以获取 userId
+- 各模块直接调用 `logger.*` — 应用日志和审计日志
+
+**三种日志类型**（`type` 字段区分）：
+- `http` — morgan 自动记录，含 method、url、status、responseTime、userId 等
+- `audit` — 通过 `logger.audit(action, details)` 记录关键操作（login、logout、file.upload、file.update、file.delete、file.overwrite、file.restore 等）
+- `app` — 应用事件（启动、警告、错误等）
+
+**日志级别**：`info` → stdout，`error` → stderr，`warn` → stdout
+
+**新增代码的日志原则**：
+- **禁止使用 `console.log/error/warn`**，统一使用 `const logger = require('./logger')`
+- HTTP 请求由 morgan 自动记录，路由处理中不要再手动记录请求日志
+- 关键写操作（增删改）必须添加审计日志：`logger.audit('action.name', { fileId, ip: clientIp(req), ... })`
+- `logger.audit` 的 `details` 应包含操作目标标识（如 fileId、fileName）和 `ip: clientIp(req)`
+- 错误日志只记 `error: e.message`，不传原始 Error 对象（JSON.stringify(Error) 结果为 `{}`）
+- 不要记录静态资源请求（morgan 的 skip 已配置），不要记录高频只读操作（如 GET /api/auth/me）
+
+## Database Migrations
+
+### 机制
+
+- `migrations.js` 导出 `runMigrations(db)`，在 `app.listen` 回调中 `await` 调用
+- `_migrations` 表记录已执行的 migration（按 `name` 去重）
+- `migrations/` 目录下按文件名排序执行，跳过已记录的
+- 每个 migration 文件导出 `{ name, up(db, helpers) }`，`helpers` 提供 `{ dbRun, dbGet, dbAll }`
+- 启动日志 `[migration] Running/Done: xxx` 确认执行情况
+
+### 新增 migration 步骤
+
+1. 在 `migrations/` 目录创建文件，命名格式 `{序号}_{描述}.js`，序号接续当前最大值
+2. 文件内容模板：
+
+```js
+module.exports = {
+  name: '描述（唯一标识，用下划线分隔）',
+  async up(db, { dbRun, dbGet, dbAll }) {
+    // 写 SQL
+  }
+};
+```
+
+3. 新增列时**必须幂等**：先 `PRAGMA table_info` 检查列是否存在，不存在再 `ALTER TABLE ADD COLUMN`
+4. 新建表用 `CREATE TABLE IF NOT EXISTS`
+5. **SQLite 限制**：`ALTER TABLE ADD COLUMN` 不支持 `DEFAULT CURRENT_TIMESTAMP` 等非恒定默认值，需先加列（无默认或恒定默认），再 `UPDATE` 回填
+6. 同步更新此文件中的 **Database schema** 描述
+
 ## File layout
 
 ```
 server.js                # Express + REST API + auth + Markdown 渲染增强
 mcp-server.js            # MCP Streamable HTTP server (POST/GET/DELETE /mcp)
+migrations.js            # Migration runner，启动时自动执行
+migrations/              # Migration 文件目录（按文件名排序执行）
+  001_init_schema.js
+  002_add_share_key.js
+  003_add_roles_and_tokens.js
+  004_add_version_history.js
+  005_tags_starred_categories.js
+  006_zip_bundle.js
 skills-registry.js       # 扫描 skills/ 目录，解析 SKILL.md，提供列表/详情/ZIP 打包
 package.json             # 依赖: @modelcontextprotocol/sdk, zod, archiver, marked, highlight.js, katex, mermaid 等
 Dockerfile               # node:20-alpine, EXPOSE 8858
