@@ -17,6 +17,7 @@ const katex = require('katex');
 const JSZip = require('jszip');
 const { mountMcpServer, closeMcpTransports } = require('./mcp-server');
 const { listSkills, getSkill, createZipStream } = require('./skills-registry');
+const cron = require('node-cron');
 const archiver = require('archiver');
 const morgan = require('morgan');
 const logger = require('./logger');
@@ -119,6 +120,64 @@ function classifyZip(entries) {
 }
 
 
+// --- 模板系统 ---
+const TEMPLATES_DIR = path.join(__dirname, 'templates');
+const templateCache = {};
+
+const TEMPLATE_PLACEHOLDERS = {
+  katex_css_url: '/vendor/katex/katex.min.css',
+  hljs_css_url: '/vendor/highlight.js/styles',
+  mermaid_js_url: '/vendor/mermaid/mermaid.min.js',
+  hljs_js_url: '/vendor/highlight.js/highlight.min.js',
+  katex_js_url: '/vendor/katex/katex.min.js',
+  marked_js_url: '/vendor/marked/marked.min.js',
+};
+
+function loadTemplates() {
+  if (!fs.existsSync(TEMPLATES_DIR)) return;
+  const files = fs.readdirSync(TEMPLATES_DIR).filter(f => f.endsWith('.html'));
+  for (const f of files) {
+    const name = path.basename(f, '.html');
+    templateCache[name] = fs.readFileSync(path.join(TEMPLATES_DIR, f), 'utf-8');
+  }
+  logger.info({ type: 'app', msg: 'templates loaded', count: Object.keys(templateCache).length });
+}
+
+function applyTemplate(tpl, title, content, hljsTheme) {
+  let html = tpl;
+  html = html.replace(/\{\{title\}\}/g, title);
+  html = html.replace(/\{\{content\}\}/g, content);
+  html = html.replace(/\{\{hljs_theme\}\}/g, hljsTheme || 'github');
+  for (const [key, value] of Object.entries(TEMPLATE_PLACEHOLDERS)) {
+    html = html.replace(new RegExp('\\{\\{' + key + '\\}\\}', 'g'), value);
+  }
+  return html;
+}
+
+const BUILTIN_TEMPLATE_THEMES = {
+  default: 'github',
+  github: 'github',
+  academic: 'github',
+  'dark-pro': 'github-dark-dimmed',
+};
+
+let templateNameToId = {};
+
+async function loadTemplateNameMap() {
+  const rows = await dbAll('SELECT id, name FROM templates');
+  templateNameToId = {};
+  for (const r of rows) templateNameToId[r.name] = r.id;
+}
+
+async function getTemplateForFile(file) {
+  const tplId = file.template_id;
+  if (tplId) {
+    const row = await dbGet('SELECT name FROM templates WHERE id = ?', [tplId]);
+    if (row && templateCache[row.name]) return row.name;
+  }
+  return 'default';
+}
+
 function renderKatex(tex, displayMode) {
   try {
     return katex.renderToString(tex, {
@@ -204,6 +263,71 @@ function dbGet(sql, params = []) {
 
 function dbAll(sql, params = []) {
   return _dbAll(db, sql, params);
+}
+
+// --- FTS5 全文搜索 ---
+
+const FTS_INDEXABLE_EXTS = new Set(['.html', '.htm', '.md', '.markdown', '.txt']);
+const FTS_MAX_CONTENT_SIZE = 100 * 1024; // 100KB
+
+function isFtsIndexable(fileType, storedName) {
+  if (fileType === 'bundle') return false;
+  const ext = path.extname(storedName || '').toLowerCase();
+  return FTS_INDEXABLE_EXTS.has(ext);
+}
+
+async function indexFileContent(fileId, storedName) {
+  try {
+    const filePath = path.join(UPLOAD_DIR, storedName);
+    if (!fs.existsSync(filePath)) return;
+    let content = await fs.promises.readFile(filePath, 'utf-8');
+    if (content.length > FTS_MAX_CONTENT_SIZE) content = content.slice(0, FTS_MAX_CONTENT_SIZE);
+    // 去除 HTML 标签，只保留纯文本用于索引
+    content = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    // 对 CJK 字符逐字加空格，使 unicode61 tokenizer 能按字符分词
+    content = content.replace(/([一-鿿])/g, ' $1 ');
+    content = content.replace(/\s+/g, ' ').trim();
+    await dbRun('DELETE FROM file_contents_fts WHERE file_id = ?', [fileId]);
+    await dbRun('INSERT INTO file_contents_fts(rowid, file_id, content) VALUES (?, ?, ?)', [fileId, fileId, content]);
+  } catch (e) {
+    logger.error({ type: 'app', message: 'FTS 索引失败', fileId, error: e.message });
+  }
+}
+
+async function deleteFileIndex(fileId) {
+  try {
+    await dbRun('DELETE FROM file_contents_fts WHERE file_id = ?', [fileId]);
+  } catch (e) {
+    logger.error({ type: 'app', message: 'FTS 删除索引失败', fileId, error: e.message });
+  }
+}
+
+async function backfillFtsIndex() {
+  try {
+    const count = await dbGet('SELECT COUNT(*) AS cnt FROM file_contents_fts');
+    if (count.cnt > 0) return;
+    const files = await dbAll('SELECT id, stored_name, file_type, is_bundle FROM files');
+    let indexed = 0;
+    for (const f of files) {
+      if (f.is_bundle) continue;
+      if (!isFtsIndexable(f.file_type, f.stored_name)) continue;
+      await indexFileContent(f.id, f.stored_name);
+      indexed++;
+    }
+    if (indexed > 0) logger.info({ type: 'app', message: 'FTS 索引回填完成', count: indexed });
+  } catch (e) {
+    logger.error({ type: 'app', message: 'FTS 索引回填失败', error: e.message });
+  }
+}
+
+function escapeFtsQuery(q) {
+  // 移除 FTS5 特殊字符
+  let cleaned = q.replace(/["'*:(){}[\]\\^+\-&|!~]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!cleaned) return '';
+  // 对 CJK 字符逐字加空格，与索引时一致
+  cleaned = cleaned.replace(/([一-鿿])/g, ' $1 ').replace(/\s+/g, ' ').trim();
+  // 对每个 token 加引号，避免 FTS5 语法错误
+  return cleaned.split(/\s+/).map(w => `"${w}"`).join(' ');
 }
 
 let sessionSecret = process.env.SESSION_SECRET;
@@ -719,7 +843,7 @@ app.get('/api/files', requireAuth, async (req, res) => {
     const totalPages = Math.ceil(total / limit) || 1;
 
     // 数据查询
-    const sql = `SELECT f.id, f.original_name, f.file_type, f.size, f.is_public, f.created_at, f.updated_at, f.share_key, f.category_id, f.uploaded_by, f.is_bundle, f.entry_path,
+    const sql = `SELECT f.id, f.original_name, f.file_type, f.size, f.is_public, f.created_at, f.updated_at, f.share_key, f.category_id, f.uploaded_by, f.is_bundle, f.entry_path, f.view_count, f.template_id,
       (SELECT COUNT(*) FROM file_versions WHERE file_id = f.id) AS version_count
     FROM files f ${whereClause} ORDER BY f.${sort} ${order} LIMIT ? OFFSET ?`;
     const files = await dbAll(sql, [...params, limit, offset]);
@@ -768,6 +892,113 @@ app.get('/api/files', requireAuth, async (req, res) => {
   }
 });
 
+// --- 全文搜索 ---
+app.get('/api/files/search', requireAuth, async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (!q) return res.status(400).json({ error: '搜索关键词不能为空' });
+
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+  const offset = (page - 1) * limit;
+  const userId = req.userId;
+  const role = req.userRole;
+
+  const ftsQuery = escapeFtsQuery(q);
+  if (!ftsQuery) return res.json({ files: [], pagination: { page, limit, total: 0, totalPages: 0 } });
+
+  try {
+    let permClause = '';
+    const permParams = [];
+    if (role !== 'admin') {
+      permClause = 'AND (f.uploaded_by = ? OR f.is_public = 1)';
+      permParams.push(userId);
+    }
+
+    const countRow = await dbGet(
+      `SELECT COUNT(*) AS total FROM files f JOIN file_contents_fts fts ON f.id = fts.file_id WHERE fts.content MATCH ? ${permClause}`,
+      [ftsQuery, ...permParams]
+    );
+    const total = countRow.total;
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    const files = await dbAll(
+      `SELECT f.id, f.original_name, f.file_type, f.size, f.is_public, f.created_at, f.updated_at, f.share_key, f.category_id, f.uploaded_by, f.is_bundle, f.entry_path, f.view_count,
+        (SELECT COUNT(*) FROM file_versions WHERE file_id = f.id) AS version_count,
+        snippet(file_contents_fts, 0, '<mark>', '</mark>', '...', 32) AS snippet
+      FROM files f JOIN file_contents_fts fts ON f.id = fts.file_id
+      WHERE fts.content MATCH ? ${permClause}
+      ORDER BY f.updated_at DESC LIMIT ? OFFSET ?`,
+      [ftsQuery, ...permParams, limit, offset]
+    );
+
+    // 同时按文件名匹配（LIKE），合并去重
+    let nameFiles = [];
+    const likeQ = `%${q}%`;
+    if (role !== 'admin') {
+      nameFiles = await dbAll(
+        `SELECT f.id, f.original_name, f.file_type, f.size, f.is_public, f.created_at, f.updated_at, f.share_key, f.category_id, f.uploaded_by, f.is_bundle, f.entry_path, f.view_count,
+          (SELECT COUNT(*) FROM file_versions WHERE file_id = f.id) AS version_count
+        FROM files f WHERE f.original_name LIKE ? AND (f.uploaded_by = ? OR f.is_public = 1)
+        ORDER BY f.updated_at DESC`,
+        [likeQ, userId]
+      );
+    } else {
+      nameFiles = await dbAll(
+        `SELECT f.id, f.original_name, f.file_type, f.size, f.is_public, f.created_at, f.updated_at, f.share_key, f.category_id, f.uploaded_by, f.is_bundle, f.entry_path, f.view_count,
+          (SELECT COUNT(*) FROM file_versions WHERE file_id = f.id) AS version_count
+        FROM files f WHERE f.original_name LIKE ?
+        ORDER BY f.updated_at DESC`,
+        [likeQ]
+      );
+    }
+
+    const ftsIds = new Set(files.map(f => f.id));
+    const extraNameFiles = nameFiles.filter(f => !ftsIds.has(f.id)).map(f => ({ ...f, snippet: null }));
+    const allFiles = [...files, ...extraNameFiles];
+
+    const fileIdStr = allFiles.length ? allFiles.map(f => f.id).join(',') : '0';
+
+    const tagRows = await dbAll(
+      `SELECT ft.file_id, t.id AS tag_id, t.name AS tag_name FROM file_tags ft JOIN tags t ON ft.tag_id = t.id WHERE ft.file_id IN (${fileIdStr})`
+    );
+    const tagsMap = {};
+    tagRows.forEach(r => {
+      if (!tagsMap[r.file_id]) tagsMap[r.file_id] = [];
+      tagsMap[r.file_id].push({ id: r.tag_id, name: r.tag_name });
+    });
+
+    let starredSet = new Set();
+    if (userId) {
+      const starRows = await dbAll(
+        `SELECT file_id FROM starred_files WHERE user_id = ? AND file_id IN (${fileIdStr})`, [userId]
+      );
+      starredSet = new Set(starRows.map(r => r.file_id));
+    }
+
+    const catMap = {};
+    if (allFiles.some(f => f.category_id)) {
+      const catRows = await dbAll('SELECT id, name FROM categories');
+      catRows.forEach(c => { catMap[c.id] = c.name; });
+    }
+
+    const result = allFiles.map(f => ({
+      ...f,
+      tags: tagsMap[f.id] || [],
+      starred: starredSet.has(f.id),
+      category_name: f.category_id ? (catMap[f.category_id] || null) : null,
+    }));
+
+    const realTotal = countRow.total + extraNameFiles.length;
+    res.json({
+      files: result,
+      query: q,
+      pagination: { page, limit, total: realTotal, totalPages: Math.ceil(realTotal / limit) || 1 }
+    });
+  } catch (e) {
+    res.status(500).json({ error: '搜索失败' });
+  }
+});
+
 app.post('/api/files/upload', requireAuth, uploadLimiter, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: '未上传文件' });
   req.file.originalname = decodeFilename(req.file.originalname);
@@ -813,6 +1044,11 @@ app.post('/api/files/upload', requireAuth, uploadLimiter, upload.single('file'),
         [req.file.filename, req.file.size, now(), existing.id]
       );
 
+      // FTS 索引同步
+      if (isFtsIndexable(fileType, req.file.filename)) {
+        indexFileContent(existing.id, req.file.filename);
+      }
+
       const shareKey = await dbGet('SELECT share_key FROM files WHERE id = ?', [existing.id]).then(r => r?.share_key);
       logger.audit('file.overwrite', { fileId: existing.id, fileName: req.file.originalname, version: nextVer + 1, fileType, size: req.file.size, ip: clientIp(req) });
       return res.json({
@@ -832,6 +1068,10 @@ app.post('/api/files/upload', requireAuth, uploadLimiter, upload.single('file'),
       'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [req.file.originalname, req.file.filename, fileType, req.file.size, isPublic ? 1 : 0, currentUserId(req), generateShareKey(), now()]
     );
+    // FTS 索引同步
+    if (isFtsIndexable(fileType, req.file.filename)) {
+      indexFileContent(result.lastID, req.file.filename);
+    }
     const shareKey = await dbGet('SELECT share_key FROM files WHERE id = ?', [result.lastID]).then(r => r?.share_key);
     logger.audit('file.upload', { fileId: result.lastID, fileName: req.file.originalname, fileType, size: req.file.size, ip: clientIp(req) });
     res.json({
@@ -901,6 +1141,11 @@ app.post('/api/files/upload-json', requireAuth, uploadLimiter, async (req, res) 
         [storedName, size, now(), existing.id]
       );
 
+      // FTS 索引同步
+      if (isFtsIndexable(fileType, storedName)) {
+        indexFileContent(existing.id, storedName);
+      }
+
       logger.audit('file.overwrite', { fileId: existing.id, fileName: decoded, version: nextVer + 1, fileType, size, ip: clientIp(req) });
       return res.json({
         id: existing.id,
@@ -925,6 +1170,10 @@ app.post('/api/files/upload-json', requireAuth, uploadLimiter, async (req, res) 
       'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [decoded, storedName, fileType, size, isPublicFlag, currentUserId(req), generateShareKey(), now()]
     );
+    // FTS 索引同步
+    if (isFtsIndexable(fileType, storedName)) {
+      indexFileContent(result.lastID, storedName);
+    }
     const shareKey = await dbGet('SELECT share_key FROM files WHERE id = ?', [result.lastID]).then(r => r?.share_key);
     logger.audit('file.upload', { fileId: result.lastID, fileName: decoded, fileType, size, ip: clientIp(req) });
     res.json({
@@ -942,8 +1191,8 @@ app.post('/api/files/upload-json', requireAuth, uploadLimiter, async (req, res) 
 });
 
 app.put('/api/files/:id', requireAuth, async (req, res) => {
-  const { name, isPublic } = req.body || {};
-  if (name === undefined && isPublic === undefined) {
+  const { name, isPublic, templateId } = req.body || {};
+  if (name === undefined && isPublic === undefined && templateId === undefined) {
     return res.status(400).json({ error: '无更新字段' });
   }
   try {
@@ -957,7 +1206,15 @@ app.put('/api/files/:id', requireAuth, async (req, res) => {
     if (isPublic !== undefined) {
       await dbRun('UPDATE files SET is_public = ? WHERE id = ?', [isPublic ? 1 : 0, req.params.id]);
     }
-    logger.audit('file.update', { fileId: req.params.id, changes: { name, isPublic }, ip: clientIp(req) });
+    if (templateId !== undefined) {
+      const tid = templateId ? parseInt(templateId) : null;
+      if (tid) {
+        const tpl = await dbGet('SELECT id FROM templates WHERE id = ?', [tid]);
+        if (!tpl) return res.status(400).json({ error: '模板不存在' });
+      }
+      await dbRun('UPDATE files SET template_id = ? WHERE id = ?', [tid, req.params.id]);
+    }
+    logger.audit('file.update', { fileId: req.params.id, changes: { name, isPublic, templateId }, ip: clientIp(req) });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: '更新失败' });
@@ -973,6 +1230,7 @@ app.delete('/api/files/:id', requireAuth, async (req, res) => {
     // 清理关联数据
     await dbRun('DELETE FROM file_tags WHERE file_id = ?', [req.params.id]);
     await dbRun('DELETE FROM starred_files WHERE file_id = ?', [req.params.id]);
+    await deleteFileIndex(req.params.id);
 
     // 清理版本记录及对应磁盘文件
     const versions = await dbAll('SELECT stored_name FROM file_versions WHERE file_id = ?', [req.params.id]);
@@ -993,6 +1251,64 @@ app.delete('/api/files/:id', requireAuth, async (req, res) => {
   }
 });
 
+// --- 批量操作 ---
+app.post('/api/files/batch', requireAuth, async (req, res) => {
+  try {
+    const { action, ids, data } = req.body;
+    if (!action || !Array.isArray(ids) || !ids.length) {
+      return res.status(400).json({ error: '缺少 action 或 ids 参数' });
+    }
+    if (ids.length > 200) return res.status(400).json({ error: '单次最多操作 200 个文件' });
+    const validActions = ['delete', 'setPublic', 'setPrivate', 'setCategory'];
+    if (!validActions.includes(action)) return res.status(400).json({ error: '不支持的操作: ' + action });
+
+    const placeholders = ids.map(() => '?').join(',');
+    const files = await dbAll(`SELECT * FROM files WHERE id IN (${placeholders})`, ids);
+    if (!files.length) return res.json({ success: true, affected: 0 });
+    for (const f of files) {
+      if (!checkFileOwnership(req, f)) return res.status(403).json({ error: '无权操作部分文件' });
+    }
+
+    const fileIds = files.map(f => f.id);
+    const idPlaceholders = fileIds.map(() => '?').join(',');
+
+    if (action === 'delete') {
+      await dbRun('BEGIN');
+      try {
+        await dbRun(`DELETE FROM file_tags WHERE file_id IN (${idPlaceholders})`, fileIds);
+        await dbRun(`DELETE FROM starred_files WHERE file_id IN (${idPlaceholders})`, fileIds);
+        const versions = await dbAll(`SELECT stored_name FROM file_versions WHERE file_id IN (${idPlaceholders})`, fileIds);
+        for (const v of versions) {
+          await unlinkQuiet(path.join(UPLOAD_DIR, v.stored_name));
+        }
+        await dbRun(`DELETE FROM file_versions WHERE file_id IN (${idPlaceholders})`, fileIds);
+        for (const f of files) {
+          await unlinkQuiet(path.join(UPLOAD_DIR, f.stored_name));
+        }
+        await dbRun(`DELETE FROM files WHERE id IN (${idPlaceholders})`, fileIds);
+        await dbRun('COMMIT');
+      } catch (e) {
+        await dbRun('ROLLBACK');
+        throw e;
+      }
+      logger.audit('file.batchDelete', { count: fileIds.length, ip: clientIp(req) });
+    } else if (action === 'setPublic' || action === 'setPrivate') {
+      const isPublic = action === 'setPublic' ? 1 : 0;
+      await dbRun(`UPDATE files SET is_public = ? WHERE id IN (${idPlaceholders})`, [isPublic, ...fileIds]);
+      logger.audit('file.batchSetPrivacy', { action, count: fileIds.length, ip: clientIp(req) });
+    } else if (action === 'setCategory') {
+      const categoryId = data && data.categoryId ? data.categoryId : null;
+      await dbRun(`UPDATE files SET category_id = ? WHERE id IN (${idPlaceholders})`, [categoryId, ...fileIds]);
+      logger.audit('file.batchSetCategory', { categoryId, count: fileIds.length, ip: clientIp(req) });
+    }
+
+    res.json({ success: true, affected: fileIds.length });
+  } catch (e) {
+    logger.error({ type: 'app', action: 'file.batch', error: e.message });
+    res.status(500).json({ error: '批量操作失败' });
+  }
+});
+
 app.get('/api/files/:id/content', loadFileWithPrivacy, async (req, res) => {
   const file = req.fileRecord;
   const filePath = path.join(UPLOAD_DIR, file.stored_name);
@@ -1004,6 +1320,9 @@ app.get('/api/files/:id/content', loadFileWithPrivacy, async (req, res) => {
       original_name: file.original_name,
       file_type: file.file_type,
       is_public: file.is_public,
+      uploaded_by: file.uploaded_by,
+      is_bundle: file.is_bundle,
+      template_id: file.template_id,
       content
     });
   } catch (e) {
@@ -1053,62 +1372,10 @@ async function renderFile(res, file) {
       const html = marked.parse(content, { gfm: true, breaks: false })
         .replace(/<pre><code class="hljs language-mermaid">([\s\S]*?)<\/code><\/pre>/g,
           (_, code) => `<pre class="mermaid">${code}</pre>`);
-      const fullHtml = `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${file.original_name}</title>
-<link rel="stylesheet" href="/vendor/katex/katex.min.css">
-<link rel="stylesheet" href="/vendor/highlight.js/styles/github.min.css" media="(prefers-color-scheme: light)">
-<link rel="stylesheet" href="/vendor/highlight.js/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
-<style>
-:root { color-scheme: light dark; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; line-height: 1.7; color: #24292f; background: #ffffff; }
-h1, h2, h3, h4 { color: #1f2328; margin-top: 1.5em; margin-bottom: 0.6em; }
-pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; }
-pre code { background: none; padding: 0; }
-code { font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace; font-size: 0.9em; }
-:not(pre) > code { background: rgba(175, 184, 193, 0.2); padding: 2px 6px; border-radius: 3px; }
-blockquote { border-left: 4px solid #d0d7de; margin: 0; padding-left: 16px; color: #57606a; }
-table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-th, td { border: 1px solid #d0d7de; padding: 8px 12px; text-align: left; }
-th { background: #f6f8fa; }
-img { max-width: 100%; height: auto; }
-a { color: #0969da; text-decoration: none; }
-a:hover { text-decoration: underline; }
-.katex-display { margin: 1em 0; overflow-x: auto; overflow-y: hidden; }
-pre.mermaid { background: #ffffff; color: #1f2328; text-align: center; }
-.katex-error { color: #cf222e; background: #ffebe9; padding: 1px 4px; border-radius: 3px; }
-@media (prefers-color-scheme: dark) {
-  body { color: #e6edf3; background: #0d1117; }
-  h1, h2, h3, h4 { color: #f0f6fc; }
-  pre { background: #161b22; }
-  blockquote { border-left-color: #3d444d; color: #9198a1; }
-  th, td { border-color: #3d444d; }
-  th { background: #161b22; }
-  a { color: #2f81f7; }
-  pre.mermaid { background: #0d1117; color: #e6edf3; }
-}
-</style>
-</head>
-<body>${html}
-<script src="/vendor/mermaid/mermaid.min.js"></script>
-<script>
-(function() {
-  function initMermaid() {
-    var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: dark ? 'dark' : 'default' });
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initMermaid);
-  } else {
-    initMermaid();
-  }
-})();
-</script>
-</body>
-</html>`;
+      const tplName = await getTemplateForFile(file);
+      const tpl = templateCache[tplName] || templateCache['default'];
+      const hljsTheme = BUILTIN_TEMPLATE_THEMES[tplName] || 'github';
+      const fullHtml = applyTemplate(tpl, file.original_name, html, hljsTheme);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.send(fullHtml);
     }
@@ -1218,6 +1485,11 @@ app.post('/api/files/:id/overwrite', requireAuth, uploadLimiter, upload.single('
       [req.file.filename, req.file.size, now(), file.id]
     );
 
+    // FTS 索引同步
+    if (isFtsIndexable(fileType, req.file.filename)) {
+      indexFileContent(file.id, req.file.filename);
+    }
+
     logger.audit('file.overwrite', { fileId: file.id, fileName: file.original_name, version: nextVer + 1, fileType, size: req.file.size, ip: clientIp(req) });
     res.json({
       id: file.id,
@@ -1251,7 +1523,7 @@ app.post('/api/files/:id/overwrite-json', requireAuth, uploadLimiter, async (req
     const filePath = path.join(UPLOAD_DIR, storedName);
 
     try {
-      fs.writeFileSync(filePath, content, 'utf-8');
+      await fs.promises.writeFile(filePath, content, 'utf-8');
     } catch (e) {
       logger.error({ type: 'app', message: '写入文件失败', error: e.message });
       return res.status(500).json({ error: '写入文件失败' });
@@ -1276,6 +1548,11 @@ app.post('/api/files/:id/overwrite-json', requireAuth, uploadLimiter, async (req
       [storedName, size, now(), file.id]
     );
 
+    // FTS 索引同步
+    if (isFtsIndexable(file.file_type, storedName)) {
+      indexFileContent(file.id, storedName);
+    }
+
     logger.audit('file.overwrite', { fileId: file.id, fileName: file.original_name, version: nextVer + 1, fileType: file.file_type, size, ip: clientIp(req) });
     res.json({
       id: file.id,
@@ -1288,7 +1565,7 @@ app.post('/api/files/:id/overwrite-json', requireAuth, uploadLimiter, async (req
       share_key: file.share_key
     });
   } catch (e) {
-    if (storedName) { try { fs.unlinkSync(path.join(UPLOAD_DIR, storedName)); } catch {} }
+    if (storedName) { await unlinkQuiet(path.join(UPLOAD_DIR, storedName)); }
     res.status(500).json({ error: '覆盖上传失败' });
   }
 });
@@ -1329,7 +1606,7 @@ app.get('/api/files/:id/versions/:ver/content', requireAuth, async (req, res) =>
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: '版本文件已丢失' });
 
     const file = await dbGet('SELECT original_name, file_type FROM files WHERE id = ?', [req.params.id]);
-    const content = fs.readFileSync(filePath, 'utf-8');
+    const content = await fs.promises.readFile(filePath, 'utf-8');
     res.json({
       id: parseInt(req.params.id),
       version: ver.version,
@@ -1377,13 +1654,13 @@ app.post('/api/files/:id/versions/:ver/restore', requireAuth, async (req, res) =
     // 读取目标版本文件内容
     const targetPath = path.join(UPLOAD_DIR, targetVer.stored_name);
     if (!fs.existsSync(targetPath)) return res.status(404).json({ error: '版本文件已丢失' });
-    const targetContent = fs.readFileSync(targetPath, 'utf-8');
+    const targetContent = await fs.promises.readFile(targetPath, 'utf-8');
 
     // 复制到新磁盘文件
     const ext = file.file_type === 'markdown' ? '.md' : '.html';
     const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
     const newStoredName = unique + ext;
-    fs.writeFileSync(path.join(UPLOAD_DIR, newStoredName), targetContent, 'utf-8');
+    await fs.promises.writeFile(path.join(UPLOAD_DIR, newStoredName), targetContent, 'utf-8');
 
     // 当前版本备份到 file_versions
     const verRow = await dbGet(
@@ -1412,7 +1689,7 @@ app.post('/api/files/:id/versions/:ver/restore', requireAuth, async (req, res) =
       size: newSize
     });
   } catch (e) {
-    if (newStoredName) { try { fs.unlinkSync(path.join(UPLOAD_DIR, newStoredName)); } catch {} }
+    if (newStoredName) { await unlinkQuiet(path.join(UPLOAD_DIR, newStoredName)); }
     res.status(500).json({ error: '恢复版本失败' });
   }
 });
@@ -1428,7 +1705,7 @@ app.delete('/api/files/:id/versions/:ver', requireAuth, async (req, res) => {
 
     // 删除磁盘文件
     const filePath = path.join(UPLOAD_DIR, ver.stored_name);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    if (fs.existsSync(filePath)) await unlinkQuiet(filePath);
 
     // 删除版本记录
     await dbRun('DELETE FROM file_versions WHERE id = ?', [ver.id]);
@@ -1522,6 +1799,15 @@ app.delete('/api/files/:id/star', requireAuth, async (req, res) => {
   }
 });
 
+app.get('/api/templates', requireAuth, async (req, res) => {
+  try {
+    const templates = await dbAll('SELECT * FROM templates ORDER BY is_builtin DESC, name ASC');
+    res.json({ templates });
+  } catch (e) {
+    res.status(500).json({ error: '获取模板列表失败' });
+  }
+});
+
 app.get('/api/categories', requireAuth, async (req, res) => {
   try {
     const categories = await dbAll(`
@@ -1585,6 +1871,112 @@ app.put('/api/files/:id/category', requireAuth, async (req, res) => {
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: '设置分类失败' });
+  }
+});
+
+// --- 管理员：数据备份与恢复 ---
+
+// 用于 import 的独立 multer 实例（不限文件类型）
+const adminUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, DATA_DIR),
+    filename: (req, file, cb) => cb(null, 'import-' + Date.now() + '.zip')
+  }),
+  limits: { fileSize: 500 * 1024 * 1024 }
+});
+
+function createBackupArchive() {
+  const archive = archiver('zip', { zlib: { level: 9 } });
+  db.run('PRAGMA wal_checkpoint(FULL)', (err) => {
+    if (err) logger.warn({ type: 'app', message: 'WAL checkpoint 失败', error: err.message });
+  });
+  archive.file(path.join(DATA_DIR, 'database.sqlite'), { name: 'database.sqlite' });
+  const sessionFile = path.join(DATA_DIR, 'sessions.sqlite');
+  if (fs.existsSync(sessionFile)) archive.file(sessionFile, { name: 'sessions.sqlite' });
+  if (fs.existsSync(UPLOAD_DIR)) archive.directory(UPLOAD_DIR, 'uploads');
+  return archive;
+}
+
+app.get('/api/admin/export', requireAuth, requireAdmin, (req, res) => {
+  try {
+    const date = new Date().toISOString().slice(0, 10);
+    const fname = `jpage-backup-${date}.zip`;
+    const encoded = encodeURIComponent(fname);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${encoded}"; filename*=UTF-8''${encoded}`);
+    const archive = createBackupArchive();
+    archive.on('end', () => res.end());
+    archive.pipe(res);
+    archive.finalize().catch(e => {
+      logger.error({ type: 'app', message: '备份导出失败', error: e.message });
+      if (!res.headersSent) res.status(500).json({ error: '导出失败' });
+    });
+    logger.audit('backup.export', { ip: clientIp(req) });
+  } catch (e) {
+    res.status(500).json({ error: '导出失败' });
+  }
+});
+
+app.post('/api/admin/import', requireAuth, requireAdmin, adminUpload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: '请上传 ZIP 文件' });
+  const zipPath = req.file.path;
+  try {
+    const zipBuf = fs.readFileSync(zipPath);
+    const zip = await JSZip.loadAsync(zipBuf);
+    if (!zip.file('database.sqlite')) {
+      fs.unlinkSync(zipPath);
+      return res.status(400).json({ error: '无效的备份文件：缺少 database.sqlite' });
+    }
+    const backupDate = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const backupDir = path.join(path.dirname(DATA_DIR), `data-backup-${backupDate}`);
+    fs.cpSync(DATA_DIR, backupDir, { recursive: true });
+    logger.info({ type: 'app', message: '导入前备份已创建', backupDir });
+    for (const entry of fs.readdirSync(DATA_DIR)) {
+      fs.rmSync(path.join(DATA_DIR, entry), { recursive: true, force: true });
+    }
+    for (const [relPath, entry] of Object.entries(zip.files)) {
+      if (entry.dir) {
+        fs.mkdirSync(path.join(DATA_DIR, relPath), { recursive: true });
+      } else {
+        const buf = await entry.async('nodebuffer');
+        const filePath = path.join(DATA_DIR, relPath);
+        fs.mkdirSync(path.dirname(filePath), { recursive: true });
+        fs.writeFileSync(filePath, buf);
+      }
+    }
+    if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    db.close();
+    const newDb = new sqlite3.Database(path.join(DATA_DIR, 'database.sqlite'));
+    db.run = newDb.run.bind(newDb);
+    db.get = newDb.get.bind(newDb);
+    db.all = newDb.all.bind(newDb);
+    db.close = newDb.close.bind(newDb);
+    logger.audit('backup.import', { ip: clientIp(req), backupDir });
+    res.json({ success: true, message: '数据已恢复，建议刷新页面重新加载' });
+  } catch (e) {
+    logger.error({ type: 'app', message: '数据导入失败', error: e.message });
+    res.status(500).json({ error: '导入失败: ' + e.message });
+  } finally {
+    if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
+  }
+});
+
+app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const fileCount = await dbGet('SELECT COUNT(*) AS c FROM files');
+    let dbSize = 0;
+    const dbPath = path.join(DATA_DIR, 'database.sqlite');
+    if (fs.existsSync(dbPath)) dbSize = fs.statSync(dbPath).size;
+    let uploadsSize = 0;
+    if (fs.existsSync(UPLOAD_DIR)) {
+      for (const f of fs.readdirSync(UPLOAD_DIR)) {
+        const s = fs.statSync(path.join(UPLOAD_DIR, f));
+        if (s.isFile()) uploadsSize += s.size;
+      }
+    }
+    res.json({ fileCount: fileCount.c, dbSize, uploadsSize, totalSize: dbSize + uploadsSize });
+  } catch (e) {
+    res.status(500).json({ error: '获取统计失败' });
   }
 });
 
@@ -1681,9 +2073,50 @@ app.get('/s/:key', async (req, res) => {
     const file = await dbGet('SELECT * FROM files WHERE share_key = ?', [req.params.key]);
     if (!file) return res.status(404).send('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:sans-serif;text-align:center;padding:4em"><h1>404</h1><p>页面不存在</p><a href="/">返回首页</a></body></html>');
     if (!file.is_public && !currentUserId(req)) return res.redirect('/');
+    recordVisit(file, req).catch(() => {});
     await renderFile(res, file);
   } catch (e) {
     res.status(500).json({ error: '渲染失败' });
+  }
+});
+
+async function recordVisit(file, req) {
+  const ip = clientIp(req);
+  const ipHash = crypto.createHash('sha256').update(ip + process.env.SESSION_SECRET).digest('hex').slice(0, 16);
+  const ua = (req.headers['user-agent'] || '').slice(0, 200);
+  const recent = await dbGet(
+    "SELECT id FROM link_visits WHERE file_id = ? AND ip_hash = ? AND visited_at > datetime('now','-5 minutes') LIMIT 1",
+    [file.id, ipHash]
+  );
+  if (recent) return;
+  await dbRun(db,
+    'INSERT INTO link_visits (file_id, share_key, ip_hash, user_agent) VALUES (?, ?, ?, ?)',
+    [file.id, file.share_key, ipHash, ua]
+  );
+  await dbRun(db, 'UPDATE files SET view_count = view_count + 1 WHERE id = ?', [file.id]);
+}
+
+// --- 访问统计 API ---
+app.get('/api/files/:id/stats', requireAuth, async (req, res) => {
+  try {
+    const file = await dbGet('SELECT id, uploaded_by, view_count FROM files WHERE id = ?', [req.params.id]);
+    if (!file) return res.status(404).json({ error: '文件不存在' });
+    if (req.userRole !== 'admin' && file.uploaded_by !== req.userId) {
+      return res.status(403).json({ error: '无权访问' });
+    }
+    const [daily7, daily30] = await Promise.all([
+      dbAll(db,
+        "SELECT date(visited_at) as date, COUNT(*) as count FROM link_visits WHERE file_id = ? AND visited_at > datetime('now','-7 days') GROUP BY date(visited_at) ORDER BY date",
+        [file.id]
+      ),
+      dbAll(db,
+        "SELECT date(visited_at) as date, COUNT(*) as count FROM link_visits WHERE file_id = ? AND visited_at > datetime('now','-30 days') GROUP BY date(visited_at) ORDER BY date",
+        [file.id]
+      )
+    ]);
+    res.json({ viewCount: file.view_count || 0, daily7, daily30 });
+  } catch (e) {
+    res.status(500).json({ error: '获取统计失败' });
   }
 });
 
@@ -1736,6 +2169,9 @@ async function bootstrapAdmin() {
 app.listen(PORT, async () => {
   const mcpIp = process.env.MCP_IP || 'localhost';
   await runMigrations(db);
+  loadTemplates();
+  await loadTemplateNameMap();
+  await backfillFtsIndex();
   logger.info({ type: 'app', message: '服务已启动', url: `http://${mcpIp}:${PORT}` });
   if (sessionSecretWarning) logger.warn({ type: 'app', message: 'SESSION_SECRET 未设置，已生成临时密钥（重启后会话会失效）' });
   await bootstrapAdmin();
@@ -1744,6 +2180,40 @@ app.listen(PORT, async () => {
     if (row) adminUserId = row.id;
   } catch (e) {
     logger.error({ type: 'app', message: '解析 admin user id 失败', error: e.message });
+  }
+
+  // 自动定时备份
+  const backupCron = process.env.BACKUP_CRON;
+  if (backupCron) {
+    const backupDir = process.env.BACKUP_DIR || path.join(DATA_DIR, 'backups');
+    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+    if (cron.validate(backupCron)) {
+      cron.schedule(backupCron, () => {
+        try {
+          const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+          const fname = `jpage-backup-${ts}.zip`;
+          const fpath = path.join(backupDir, fname);
+          const output = fs.createWriteStream(fpath);
+          const archive = createBackupArchive();
+          output.on('close', () => {
+            logger.info({ type: 'app', message: '自动备份完成', file: fpath });
+            const backups = fs.readdirSync(backupDir)
+              .filter(f => f.startsWith('jpage-backup-') && f.endsWith('.zip'))
+              .sort();
+            while (backups.length > 7) {
+              fs.unlinkSync(path.join(backupDir, backups.shift()));
+            }
+          });
+          archive.pipe(output);
+          archive.finalize();
+        } catch (e) {
+          logger.error({ type: 'app', message: '自动备份失败', error: e.message });
+        }
+      });
+      logger.info({ type: 'app', message: '自动备份已启用', cron: backupCron, dir: backupDir });
+    } else {
+      logger.warn({ type: 'app', message: 'BACKUP_CRON 格式无效', cron: backupCron });
+    }
   }
   if (process.env.MCP_TOKEN && !adminUserId) {
     logger.warn({ type: 'app', message: 'MCP_TOKEN 已设置但 users 表为空，MCP 端点将禁用' });
