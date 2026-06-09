@@ -73,11 +73,28 @@ function createMcpServer({ port, api, mcpIp, protocol }) {
     'list_files',
     {
       title: 'List Files',
-      description: '列出 jpage 中存储的所有 HTML/Markdown 文件元数据。适用于查看已上传文件列表、确认上传结果、或决定后续操作目标。',
-      inputSchema: {},
+      description: '列出 jpage 中存储的所有 HTML/Markdown 文件元数据。适用于查看已上传文件列表、确认上传结果、或决定后续操作目标。支持分页和排序。',
+      inputSchema: {
+        page: z.number().optional().describe('页码（默认 1）'),
+        limit: z.number().optional().describe('每页数量（默认 20，最大 100）'),
+        sort: z.enum(['updated_at', 'created_at', 'original_name', 'size']).optional().describe('排序字段（默认 updated_at）'),
+        order: z.enum(['asc', 'desc']).optional().describe('排序方向（默认 desc）'),
+        keyword: z.string().optional().describe('按文件名搜索'),
+        category: z.string().optional().describe('按分类 ID 筛选，"uncategorized" 表示未分类'),
+        tag: z.string().optional().describe('按标签 ID 筛选'),
+      },
     },
-    async () => {
-      const data = await api.get('/api/files');
+    async ({ page, limit, sort, order, keyword, category, tag }) => {
+      const params = new URLSearchParams();
+      if (page) params.set('page', page);
+      if (limit) params.set('limit', limit);
+      if (sort) params.set('sort', sort);
+      if (order) params.set('order', order);
+      if (keyword) params.set('keyword', keyword);
+      if (category) params.set('category', category);
+      if (tag) params.set('tag', tag);
+      const qs = params.toString();
+      const data = await api.get('/api/files' + (qs ? '?' + qs : ''));
       return textResult(data.files);
     }
   );

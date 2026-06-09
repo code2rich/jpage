@@ -61,7 +61,7 @@
 ### Docker 部署（推荐）
 
 ```bash
-git clone https://github.com/yourname/jpage.git
+git clone https://github.com/code2rich/jpage.git
 cd jpage
 cp .env.example .env       # 编辑 .env 填入 ADMIN_PASSWORD 和 SESSION_SECRET
 docker-compose up -d
