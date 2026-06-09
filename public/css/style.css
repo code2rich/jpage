@@ -2321,3 +2321,39 @@ body {
 .stats-bar { width: 100%; max-width: 20px; background: var(--primary); border-radius: 2px 2px 0 0; min-height: 2px; transition: height .3s; }
 .stats-bar-val { font-size: 9px; color: var(--text-secondary); line-height: 1; margin-bottom: 2px; }
 .stats-bar-label { font-size: 9px; color: var(--text-secondary); position: absolute; bottom: -16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+/* --- 内容模板市场 --- */
+.ct-filter-bar { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.ct-filter-bar .search-input-wrap { width: 100%; }
+.ct-filter-bar .search-input-wrap input { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 14px; }
+.ct-filter-bar .filter-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.filter-chip { padding: 4px 12px; border-radius: 16px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); font-size: 12px; cursor: pointer; transition: all .2s; }
+.filter-chip:hover { border-color: var(--primary); color: var(--primary); }
+.filter-chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.ct-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.ct-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; cursor: pointer; transition: box-shadow .2s, border-color .2s; display: flex; flex-direction: column; gap: 6px; }
+.ct-card:hover { box-shadow: 0 2px 8px var(--shadow); border-color: var(--primary); }
+.ct-card-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.ct-card-title { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.ct-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; line-height: 1.4; }
+.ct-badge-html { background: #e0f2fe; color: #0369a1; }
+.ct-badge-md { background: #dbeafe; color: #1d4ed8; }
+.ct-badge-scene { background: var(--primary-light, #ede9fe); color: var(--primary); }
+.ct-badge-tag { background: var(--bg-secondary, #f1f5f9); color: var(--text-secondary); }
+.ct-card-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; margin: 0; }
+.ct-card-footer { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-secondary); margin-top: auto; }
+.ct-use-count { color: var(--primary); font-weight: 500; }
+.ct-owner-mark { color: var(--success, #10b981); font-weight: 500; }
+.ct-loading, .ct-empty { text-align: center; padding: 40px; color: var(--text-secondary); font-size: 14px; grid-column: 1 / -1; }
+.ct-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; grid-column: 1 / -1; padding: 12px 0; }
+.ct-page-info { font-size: 13px; color: var(--text-secondary); }
+.ct-detail-meta { margin-bottom: 16px; }
+.ct-meta-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.ct-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin: 8px 0; }
+.ct-meta-info { font-size: 12px; color: var(--text-secondary); }
+@media (prefers-color-scheme: dark) {
+  .ct-badge-html { background: #172554; color: #7dd3fc; }
+  .ct-badge-md { background: #1e3a5f; color: #93c5fd; }
+  .ct-badge-scene { background: #2e1065; color: #c4b5fd; }
+  .ct-badge-tag { background: #1e293b; color: #94a3b8; }
+}

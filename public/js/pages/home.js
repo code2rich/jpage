@@ -5,6 +5,7 @@ import { toast } from '../components/toast.js';
 import { dialogModal } from '../components/dialog.js';
 import { escapeHtml, formatSize, relativeTime, esc, buildSkeletonCards, formatDate } from '../utils.js';
 import { state, navigate } from '../app.js';
+import { openContentTemplateMarket } from './content-templates.js';
 
 // ---------- 模块级状态 ----------
 let allFiles = [];
@@ -109,6 +110,11 @@ function renderHome(container) {
       settingsDropdown.classList.remove('open');
       settingsBtn.setAttribute('aria-expanded', 'false');
       openSkillsListModal();
+    });
+    settingsDropdown.querySelector('#menu-item-content-templates').addEventListener('click', () => {
+      settingsDropdown.classList.remove('open');
+      settingsBtn.setAttribute('aria-expanded', 'false');
+      openContentTemplateMarket();
     });
     settingsDropdown.querySelector('#menu-item-mcp').addEventListener('click', () => {
       settingsDropdown.classList.remove('open');
