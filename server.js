@@ -2250,11 +2250,11 @@ async function recordVisit(file, req) {
     [file.id, ipHash]
   );
   if (recent) return;
-  await dbRun(db,
+  await dbRun(
     'INSERT INTO link_visits (file_id, share_key, ip_hash, user_agent) VALUES (?, ?, ?, ?)',
     [file.id, file.share_key, ipHash, ua]
   );
-  await dbRun(db, 'UPDATE files SET view_count = view_count + 1 WHERE id = ?', [file.id]);
+  await dbRun( 'UPDATE files SET view_count = view_count + 1 WHERE id = ?', [file.id]);
 }
 
 // --- 访问统计 API ---
@@ -2266,11 +2266,11 @@ app.get('/api/files/:id/stats', requireAuth, async (req, res) => {
       return res.status(403).json({ error: '无权访问' });
     }
     const [daily7, daily30] = await Promise.all([
-      dbAll(db,
+      dbAll(
         "SELECT date(visited_at) as date, COUNT(*) as count FROM link_visits WHERE file_id = ? AND visited_at > datetime('now','-7 days') GROUP BY date(visited_at) ORDER BY date",
         [file.id]
       ),
-      dbAll(db,
+      dbAll(
         "SELECT date(visited_at) as date, COUNT(*) as count FROM link_visits WHERE file_id = ? AND visited_at > datetime('now','-30 days') GROUP BY date(visited_at) ORDER BY date",
         [file.id]
       )

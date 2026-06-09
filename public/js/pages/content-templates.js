@@ -69,7 +69,7 @@ async function loadTemplates() {
   params.set('sort', 'use_count');
 
   try {
-    const data = await api.get('/api/content-templates?' + params.toString());
+    const data = await api('/api/content-templates?' + params.toString());
     ctState.templates = data.templates || [];
     ctState.pagination = data.pagination || { page: 1, limit: 12, total: 0, totalPages: 1 };
     renderGrid(grid);
@@ -163,15 +163,20 @@ function openUploadModal(prefill) {
     if (Buffer_byteLength(content) > 512000) return toast('样例内容不能超过 500KB', 'error');
 
     try {
-      await api.post('/api/content-templates', {
-        title,
-        description: descEl.value.trim() || undefined,
-        scene: sceneEl.value || undefined,
-        styleTags: tagsEl.value.trim() || undefined,
-        content,
-        fileType: filetypeEl.value,
-        isPublic: modal.querySelector('#ct-upload-public').checked,
-      });
+    const body = {
+      title,
+      description: descEl.value.trim() || undefined,
+      scene: sceneEl.value || undefined,
+      styleTags: tagsEl.value.trim() || undefined,
+      content,
+      fileType: filetypeEl.value,
+      isPublic: modal.querySelector('#ct-upload-public').checked,
+    };
+    if (prefill?.id) {
+      await api(`/api/content-templates/${prefill.id}`, { method: 'PUT', body });
+    } else {
+      await api('/api/content-templates', { method: 'POST', body });
+    }
       toast('模板上传成功');
       close();
       loadTemplates();
@@ -199,8 +204,8 @@ async function openDetailModal(id) {
 
   try {
     const [meta, contentData] = await Promise.all([
-      api.get(`/api/content-templates/${id}`),
-      api.get(`/api/content-templates/${id}/content`),
+      api(`/api/content-templates/${id}`),
+      api(`/api/content-templates/${id}/content`),
     ]);
 
     modal.querySelector('#ct-detail-title').textContent = meta.title;
@@ -224,9 +229,6 @@ async function openDetailModal(id) {
     if (contentData.file_type === 'html') {
       iframe.srcdoc = contentData.content;
     } else {
-      const renderUrl = `${API_BASE}/api/files/render-markdown`;
-      iframe.srcdoc = `<iframe src="${API_BASE}/api/content-templates/${id}/render-preview" style="width:100%;height:100%;border:none"></iframe>`;
-      // 简化：直接展示 Markdown 原文
       iframe.srcdoc = `<pre style="padding:16px;font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word;margin:0">${escapeHtml(contentData.content)}</pre>`;
     }
 
@@ -252,7 +254,7 @@ async function openDetailModal(id) {
       const ok = await dialogModal('确定删除此模板？', '此操作不可撤销。', '删除');
       if (!ok) return;
       try {
-        await api.del(`/api/content-templates/${id}`);
+        await api(`/api/content-templates/${id}`, { method: 'DELETE' });
         toast('模板已删除');
         close();
         loadTemplates();
