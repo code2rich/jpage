@@ -21,6 +21,14 @@ const archiver = require('archiver');
 const morgan = require('morgan');
 const logger = require('./logger');
 
+// --- 北京时间工具 ---
+function now() {
+  return new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' });
+}
+
+// --- 异步文件清理 ---
+function unlinkQuiet(p) { return fs.promises.unlink(p).catch(() => {}); }
+
 // --- ZIP 安全常量 ---
 const ZIP_MAX_FILE_COUNT = 1000;
 const ZIP_MAX_EXTRACTED_SIZE = 200 * 1024 * 1024;
@@ -63,8 +71,8 @@ async function extractEntries(zip, entries, targetDir) {
     if (totalSize > ZIP_MAX_EXTRACTED_SIZE) throw new Error('解压总大小超过 ' + Math.round(ZIP_MAX_EXTRACTED_SIZE / 1024 / 1024) + 'MB 限制');
     const filePath = path.join(targetDir, entry.name);
     if (!path.resolve(filePath).startsWith(resolvedTarget)) throw new Error('路径穿越: ' + entry.name);
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, buf);
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.promises.writeFile(filePath, buf);
     results.push({ name: entry.name, size: buf.length });
   }
   return { entries: results, totalSize };
@@ -220,7 +228,7 @@ app.use(helmet({
 
 // CSP 中间件：保护即页主应用，跳过用户内容渲染端点
 app.use((req, res, next) => {
-  if (/^\/api\/files\/\d+\/(render|asset\/)/.test(req.path) || /^\/s\//.test(req.path)) return next();
+  if (/^\/api\/files\/\d+\/(render|versions\/\d+\/render|asset\/)/.test(req.path) || /^\/s\//.test(req.path)) return next();
   res.setHeader(
     'Content-Security-Policy',
     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-src 'self'; frame-ancestors 'none'"
@@ -325,7 +333,7 @@ async function requireAuth(req, res, next) {
       [hash]
     );
     if (tokenRow) {
-      dbRun('UPDATE tokens SET last_used_at = CURRENT_TIMESTAMP WHERE token_hash = ?', [hash]).catch(() => {});
+      dbRun('UPDATE tokens SET last_used_at = ? WHERE token_hash = ?', [now(), hash]).catch(() => {});
       req.tokenUserId = tokenRow.user_id;
       req.userId = tokenRow.user_id;
       req.userRole = tokenRow.role;
@@ -434,6 +442,23 @@ const upload = multer({
     if (allowed.includes(ext)) return cb(null, true);
     cb(new Error('仅支持 HTML、Markdown 和 ZIP 文件'));
   }
+});
+
+const { version: PACKAGE_VERSION } = require('./package.json');
+
+app.get('/health', async (req, res) => {
+  let dbOk = false;
+  let diskOk = false;
+  try { await dbGet('SELECT 1'); dbOk = true; } catch {}
+  try { diskOk = fs.existsSync(UPLOAD_DIR); } catch {}
+  const ok = dbOk && diskOk;
+  res.status(ok ? 200 : 503).json({
+    status: ok ? 'ok' : 'degraded',
+    db: dbOk,
+    disk: diskOk,
+    uptime: process.uptime(),
+    version: PACKAGE_VERSION
+  });
 });
 
 app.get('/api/auth/me', async (req, res) => {
@@ -647,20 +672,58 @@ app.get('/api/files', requireAuth, async (req, res) => {
     const userId = req.userId;
     const role = req.userRole;
 
-    let sql = `SELECT f.id, f.original_name, f.file_type, f.size, f.is_public, f.created_at, f.updated_at, f.share_key, f.category_id, f.uploaded_by, f.is_bundle, f.entry_path,
-      (SELECT COUNT(*) FROM file_versions WHERE file_id = f.id) AS version_count
-    FROM files f`;
+    // 分页参数
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const maxLimit = 100;
+    const limit = Math.min(maxLimit, Math.max(1, parseInt(req.query.limit) || 20));
+    const offset = (page - 1) * limit;
+
+    // 排序参数
+    const allowedSorts = ['updated_at', 'created_at', 'original_name', 'size'];
+    const sort = allowedSorts.includes(req.query.sort) ? req.query.sort : 'updated_at';
+    const order = req.query.order === 'asc' ? 'ASC' : 'DESC';
+
+    // 筛选参数
+    const keyword = (req.query.keyword || '').trim();
+    const categoryId = req.query.category || null;
+    const tagId = req.query.tag || null;
+
+    // 构建 WHERE 条件
+    const conditions = [];
     const params = [];
 
-    // 普通用户只能看到自己的文件 + 公开文件
     if (role !== 'admin') {
-      sql += ` WHERE f.uploaded_by = ? OR f.is_public = 1`;
+      conditions.push(`(f.uploaded_by = ? OR f.is_public = 1)`);
       params.push(userId);
     }
+    if (keyword) {
+      conditions.push(`f.original_name LIKE ?`);
+      params.push(`%${keyword}%`);
+    }
+    if (categoryId === 'uncategorized') {
+      conditions.push(`f.category_id IS NULL`);
+    } else if (categoryId) {
+      conditions.push(`f.category_id = ?`);
+      params.push(parseInt(categoryId));
+    }
+    if (tagId) {
+      conditions.push(`EXISTS (SELECT 1 FROM file_tags ft WHERE ft.file_id = f.id AND ft.tag_id = ?)`);
+      params.push(parseInt(tagId));
+    }
 
-    sql += ` ORDER BY f.updated_at DESC`;
+    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const files = await dbAll(sql, params);
+    // 总数查询
+    const countRow = await dbGet(`SELECT COUNT(*) AS total FROM files f ${whereClause}`, params);
+    const total = countRow.total;
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    // 数据查询
+    const sql = `SELECT f.id, f.original_name, f.file_type, f.size, f.is_public, f.created_at, f.updated_at, f.share_key, f.category_id, f.uploaded_by, f.is_bundle, f.entry_path,
+      (SELECT COUNT(*) FROM file_versions WHERE file_id = f.id) AS version_count
+    FROM files f ${whereClause} ORDER BY f.${sort} ${order} LIMIT ? OFFSET ?`;
+    const files = await dbAll(sql, [...params, limit, offset]);
+
     const fileIdStr = files.length ? files.map(f => f.id).join(',') : '0';
 
     // 批量获取标签
@@ -696,7 +759,10 @@ app.get('/api/files', requireAuth, async (req, res) => {
       category_name: f.category_id ? (catMap[f.category_id] || null) : null,
     }));
 
-    res.json({ files: result });
+    res.json({
+      files: result,
+      pagination: { page, limit, total, totalPages }
+    });
   } catch (e) {
     res.status(500).json({ error: '获取文件列表失败' });
   }
@@ -708,7 +774,7 @@ app.post('/api/files/upload', requireAuth, uploadLimiter, upload.single('file'),
   const ext = path.extname(req.file.originalname).toLowerCase();
   // ZIP 处理
   if (ext === '.zip') {
-    return handleZipUpload(req, res, fs.readFileSync(req.file.path));
+    return handleZipUpload(req, res, await fs.promises.readFile(req.file.path));
   }
   let fileType = 'html';
   if (ext === '.md' || ext === '.markdown') fileType = 'markdown';
@@ -724,7 +790,7 @@ app.post('/api/files/upload', requireAuth, uploadLimiter, upload.single('file'),
       // 同名文件：校验文件类型
       if (existing.file_type !== fileType) {
         // 类型不匹配，清理已上传的文件，拒绝覆盖
-        try { fs.unlinkSync(path.join(UPLOAD_DIR, req.file.filename)); } catch {}
+        await unlinkQuiet(path.join(UPLOAD_DIR, req.file.filename));
         return res.status(400).json({ error: '文件类型不匹配' });
       }
 
@@ -743,8 +809,8 @@ app.post('/api/files/upload', requireAuth, uploadLimiter, upload.single('file'),
 
       // 更新 files 主记录（新文件已由 multer 写入磁盘）
       await dbRun(
-        'UPDATE files SET stored_name = ?, size = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-        [req.file.filename, req.file.size, existing.id]
+        'UPDATE files SET stored_name = ?, size = ?, updated_at = ? WHERE id = ?',
+        [req.file.filename, req.file.size, now(), existing.id]
       );
 
       const shareKey = await dbGet('SELECT share_key FROM files WHERE id = ?', [existing.id]).then(r => r?.share_key);
@@ -763,8 +829,8 @@ app.post('/api/files/upload', requireAuth, uploadLimiter, upload.single('file'),
 
     // 不存在同名文件：新建
     const result = await dbRun(
-      'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
-      [req.file.originalname, req.file.filename, fileType, req.file.size, isPublic ? 1 : 0, currentUserId(req), generateShareKey()]
+      'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [req.file.originalname, req.file.filename, fileType, req.file.size, isPublic ? 1 : 0, currentUserId(req), generateShareKey(), now()]
     );
     const shareKey = await dbGet('SELECT share_key FROM files WHERE id = ?', [result.lastID]).then(r => r?.share_key);
     logger.audit('file.upload', { fileId: result.lastID, fileName: req.file.originalname, fileType, size: req.file.size, ip: clientIp(req) });
@@ -796,7 +862,7 @@ app.post('/api/files/upload-json', requireAuth, uploadLimiter, async (req, res) 
   const storedName = unique + ext;
   const filePath = path.join(UPLOAD_DIR, storedName);
   try {
-    fs.writeFileSync(filePath, content, 'utf-8');
+    await fs.promises.writeFile(filePath, content, 'utf-8');
   } catch (e) {
     logger.error({ type: 'app', message: '写入文件失败', error: e.message });
     return res.status(500).json({ error: '写入文件失败' });
@@ -811,7 +877,7 @@ app.post('/api/files/upload-json', requireAuth, uploadLimiter, async (req, res) 
   if (existing) {
     // 同名文件：校验文件类型
     if (existing.file_type !== fileType) {
-      try { fs.unlinkSync(filePath); } catch {}
+      await unlinkQuiet(filePath);
       return res.status(400).json({ error: '文件类型不匹配' });
     }
 
@@ -831,8 +897,8 @@ app.post('/api/files/upload-json', requireAuth, uploadLimiter, async (req, res) 
 
       // 更新 files 主记录
       await dbRun(
-        'UPDATE files SET stored_name = ?, size = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-        [storedName, size, existing.id]
+        'UPDATE files SET stored_name = ?, size = ?, updated_at = ? WHERE id = ?',
+        [storedName, size, now(), existing.id]
       );
 
       logger.audit('file.overwrite', { fileId: existing.id, fileName: decoded, version: nextVer + 1, fileType, size, ip: clientIp(req) });
@@ -847,7 +913,7 @@ app.post('/api/files/upload-json', requireAuth, uploadLimiter, async (req, res) 
         share_key: existing.share_key
       });
     } catch (e) {
-      try { fs.unlinkSync(filePath); } catch {}
+      await unlinkQuiet(filePath);
       return res.status(500).json({ error: '覆盖上传失败' });
     }
   }
@@ -856,8 +922,8 @@ app.post('/api/files/upload-json', requireAuth, uploadLimiter, async (req, res) 
   const isPublicFlag = isPublic === false ? 0 : 1;
   try {
     const result = await dbRun(
-      'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
-      [decoded, storedName, fileType, size, isPublicFlag, currentUserId(req), generateShareKey()]
+      'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [decoded, storedName, fileType, size, isPublicFlag, currentUserId(req), generateShareKey(), now()]
     );
     const shareKey = await dbGet('SELECT share_key FROM files WHERE id = ?', [result.lastID]).then(r => r?.share_key);
     logger.audit('file.upload', { fileId: result.lastID, fileName: decoded, fileType, size, ip: clientIp(req) });
@@ -870,7 +936,7 @@ app.post('/api/files/upload-json', requireAuth, uploadLimiter, async (req, res) 
       share_key: shareKey
     });
   } catch (e) {
-    try { fs.unlinkSync(filePath); } catch {}
+    await unlinkQuiet(filePath);
     res.status(500).json({ error: '保存文件记录失败' });
   }
 });
@@ -912,13 +978,13 @@ app.delete('/api/files/:id', requireAuth, async (req, res) => {
     const versions = await dbAll('SELECT stored_name FROM file_versions WHERE file_id = ?', [req.params.id]);
     for (const v of versions) {
       const p = path.join(UPLOAD_DIR, v.stored_name);
-      if (fs.existsSync(p)) fs.unlinkSync(p);
+      if (fs.existsSync(p)) await unlinkQuiet(p);
     }
     await dbRun('DELETE FROM file_versions WHERE file_id = ?', [req.params.id]);
 
     // 删除主文件
     const filePath = path.join(UPLOAD_DIR, file.stored_name);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    if (fs.existsSync(filePath)) await unlinkQuiet(filePath);
     await dbRun('DELETE FROM files WHERE id = ?', [req.params.id]);
     logger.audit('file.delete', { fileId: req.params.id, fileName: file.original_name, ip: clientIp(req) });
     res.json({ success: true });
@@ -932,7 +998,7 @@ app.get('/api/files/:id/content', loadFileWithPrivacy, async (req, res) => {
   const filePath = path.join(UPLOAD_DIR, file.stored_name);
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: '文件已丢失' });
   try {
-    const content = fs.readFileSync(filePath, 'utf-8');
+    const content = await fs.promises.readFile(filePath, 'utf-8');
     res.json({
       id: file.id,
       original_name: file.original_name,
@@ -955,7 +1021,7 @@ async function renderFile(res, file) {
     if (!resolved.startsWith(resolvedDir)) return res.status(403).json({ error: '非法路径' });
     if (!fs.existsSync(entryPath)) return res.status(404).json({ error: '入口文件已丢失' });
     try {
-      let content = fs.readFileSync(entryPath, 'utf-8');
+      let content = await fs.promises.readFile(entryPath, 'utf-8');
       // 注入 <base> 标签使相对路径指向资源端点
       const baseTag = '<base href="/api/files/' + file.id + '/asset/">';
       if (/<head>/i.test(content)) {
@@ -981,7 +1047,7 @@ async function renderFile(res, file) {
   const filePath = path.join(UPLOAD_DIR, file.stored_name);
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: '文件已丢失' });
   try {
-    const content = fs.readFileSync(filePath, 'utf-8');
+    const content = await fs.promises.readFile(filePath, 'utf-8');
 
     if (file.file_type === 'markdown') {
       const html = marked.parse(content, { gfm: true, breaks: false })
@@ -1067,7 +1133,7 @@ pre.mermaid { background: #ffffff; color: #1f2328; text-align: center; }
 }
 
 // Bundle 资源文件服务
-app.get('/api/files/:id/asset/*', loadFileWithPrivacy, (req, res) => {
+app.get('/api/files/:id/asset/*', loadFileWithPrivacy, async (req, res) => {
   const file = req.fileRecord;
   if (!file.is_bundle) return res.status(400).json({ error: '非网站包' });
   const bundleDir = path.resolve(path.join(UPLOAD_DIR, file.stored_name));
@@ -1076,7 +1142,11 @@ app.get('/api/files/:id/asset/*', loadFileWithPrivacy, (req, res) => {
   if (!assetPath.startsWith(bundleDir + path.sep) && assetPath !== bundleDir) {
     return res.status(403).json({ error: '非法路径' });
   }
-  if (!fs.existsSync(assetPath) || fs.statSync(assetPath).isDirectory()) {
+  if (!fs.existsSync(assetPath)) return res.status(404).json({ error: '资源不存在' });
+  try {
+    const stat = await fs.promises.stat(assetPath);
+    if (stat.isDirectory()) return res.status(404).json({ error: '资源不存在' });
+  } catch {
     return res.status(404).json({ error: '资源不存在' });
   }
   res.sendFile(assetPath);
@@ -1125,7 +1195,7 @@ app.post('/api/files/:id/overwrite', requireAuth, uploadLimiter, upload.single('
 
     // 校验文件类型
     if (file.file_type !== fileType) {
-      try { fs.unlinkSync(path.join(UPLOAD_DIR, req.file.filename)); } catch {}
+      await unlinkQuiet(path.join(UPLOAD_DIR, req.file.filename));
       return res.status(400).json({ error: '文件类型不匹配' });
     }
 
@@ -1144,8 +1214,8 @@ app.post('/api/files/:id/overwrite', requireAuth, uploadLimiter, upload.single('
 
     // 更新 files 主记录
     await dbRun(
-      'UPDATE files SET stored_name = ?, size = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [req.file.filename, req.file.size, file.id]
+      'UPDATE files SET stored_name = ?, size = ?, updated_at = ? WHERE id = ?',
+      [req.file.filename, req.file.size, now(), file.id]
     );
 
     logger.audit('file.overwrite', { fileId: file.id, fileName: file.original_name, version: nextVer + 1, fileType, size: req.file.size, ip: clientIp(req) });
@@ -1202,8 +1272,8 @@ app.post('/api/files/:id/overwrite-json', requireAuth, uploadLimiter, async (req
 
     // 更新 files 主记录
     await dbRun(
-      'UPDATE files SET stored_name = ?, size = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [storedName, size, file.id]
+      'UPDATE files SET stored_name = ?, size = ?, updated_at = ? WHERE id = ?',
+      [storedName, size, now(), file.id]
     );
 
     logger.audit('file.overwrite', { fileId: file.id, fileName: file.original_name, version: nextVer + 1, fileType: file.file_type, size, ip: clientIp(req) });
@@ -1329,8 +1399,8 @@ app.post('/api/files/:id/versions/:ver/restore', requireAuth, async (req, res) =
     // 更新 files 主记录
     const newSize = Buffer.byteLength(targetContent, 'utf-8');
     await dbRun(
-      'UPDATE files SET stored_name = ?, size = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [newStoredName, newSize, file.id]
+      'UPDATE files SET stored_name = ?, size = ?, updated_at = ? WHERE id = ?',
+      [newStoredName, newSize, now(), file.id]
     );
 
     logger.audit('file.restore', { fileId: file.id, fileName: file.original_name, restoredVersion: parseInt(req.params.ver), newVersion: nextVer + 1, ip: clientIp(req) });
