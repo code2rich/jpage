@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{title}}</title>
+<link rel="stylesheet" href="{{katex_css_url}}">
+<link rel="stylesheet" href="{{hljs_css_url}}/{{hljs_theme}}.min.css">
+<style>
+body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif; max-width: 920px; margin: 0 auto; padding: 40px 24px; line-height: 1.75; color: #cdd6f4; background: #1e1e2e; }
+h1 { font-size: 2em; font-weight: 700; color: #cdd6f4; margin-top: 1.5em; margin-bottom: 0.6em; padding-bottom: 0.3em; border-bottom: 1px solid #45475a; }
+h2 { font-size: 1.5em; font-weight: 600; color: #cdd6f4; margin-top: 1.5em; margin-bottom: 0.5em; }
+h3 { font-size: 1.2em; font-weight: 600; color: #bac2de; margin-top: 1.3em; margin-bottom: 0.4em; }
+h4 { font-size: 1em; font-weight: 600; color: #a6adc8; }
+p { margin-top: 0; margin-bottom: 1em; }
+pre { background: #181825; padding: 16px; border-radius: 8px; overflow-x: auto; border: 1px solid #313244; }
+pre code { background: none; padding: 0; }
+code { font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace; font-size: 0.88em; }
+:not(pre) > code { background: #313244; color: #f38ba8; padding: 3px 7px; border-radius: 4px; }
+blockquote { border-left: 3px solid #89b4fa; margin: 1em 0; padding: 0.5em 1em; color: #a6adc8; background: rgba(137, 180, 250, 0.06); }
+table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+th, td { border: 1px solid #45475a; padding: 10px 14px; text-align: left; }
+th { background: #181825; color: #cdd6f4; }
+tr:nth-child(even) { background: rgba(49, 50, 68, 0.5); }
+img { max-width: 100%; height: auto; border-radius: 4px; }
+a { color: #89b4fa; text-decoration: none; }
+a:hover { color: #b4befe; text-decoration: underline; }
+hr { border: none; border-top: 1px solid #45475a; margin: 2em 0; }
+ul, ol { padding-left: 2em; }
+.katex-display { margin: 1em 0; overflow-x: auto; overflow-y: hidden; }
+pre.mermaid { background: #1e1e2e; text-align: center; border: none; }
+.katex-error { color: #f38ba8; background: rgba(243, 139, 168, 0.1); padding: 2px 5px; border-radius: 3px; }
+</style>
+</head>
+<body>{{content}}
+<script src="{{mermaid_js_url}}"></script>
+<script>
+mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'dark' });
+</script>
+</body>
+</html>
