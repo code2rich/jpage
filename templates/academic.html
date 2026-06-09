@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{title}}</title>
+<link rel="stylesheet" href="{{katex_css_url}}">
+<link rel="stylesheet" href="{{hljs_css_url}}/{{hljs_theme}}.min.css">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Noto+Serif+SC:wght@400;600;700&display=swap');
+body { font-family: 'Crimson Pro', 'Noto Serif SC', Georgia, 'Times New Roman', serif; max-width: 800px; margin: 60px auto; padding: 0 40px; line-height: 1.8; color: #2c2c2c; background: #fdfdfd; font-size: 17px; }
+h1 { font-size: 1.8em; font-weight: 700; color: #1a1a1a; text-align: center; margin-top: 2em; margin-bottom: 0.8em; padding-bottom: 0.3em; border-bottom: 2px solid #333; }
+h2 { font-size: 1.4em; font-weight: 600; color: #1a1a1a; margin-top: 1.8em; margin-bottom: 0.6em; }
+h3 { font-size: 1.15em; font-weight: 600; color: #333; margin-top: 1.5em; margin-bottom: 0.5em; }
+h4 { font-size: 1em; font-weight: 600; color: #444; margin-top: 1.2em; margin-bottom: 0.4em; }
+p { margin-top: 0; margin-bottom: 1em; text-align: justify; }
+pre { background: #f5f2eb; padding: 20px; border-radius: 3px; overflow-x: auto; border: 1px solid #e0dbd2; font-size: 0.88em; line-height: 1.5; }
+pre code { background: none; padding: 0; }
+code { font-family: 'Courier New', Courier, monospace; font-size: 0.88em; }
+:not(pre) > code { background: #f0ece3; padding: 2px 5px; border-radius: 2px; border: 1px solid #e0dbd2; }
+blockquote { border-left: 3px solid #8b7355; margin: 1em 0; padding: 0.5em 1.2em; color: #5a5a5a; background: #faf8f3; font-style: italic; }
+table { border-collapse: collapse; width: 100%; margin: 1.5em 0; font-size: 0.95em; }
+th, td { border: 1px solid #c9c2b5; padding: 10px 14px; text-align: left; }
+th { background: #f0ece3; font-weight: 600; }
+img { max-width: 100%; height: auto; display: block; margin: 1.5em auto; }
+a { color: #5b3a1a; text-decoration: underline; text-decoration-color: #c9b99a; text-underline-offset: 2px; }
+a:hover { color: #3d2510; text-decoration-color: #8b7355; }
+hr { border: none; border-top: 1px solid #c9c2b5; margin: 2em 0; }
+ul, ol { padding-left: 1.8em; margin-bottom: 1em; }
+.katex-display { margin: 1.2em 0; overflow-x: auto; overflow-y: hidden; }
+pre.mermaid { background: #ffffff; text-align: center; border: none; }
+.katex-error { color: #a63d40; background: #fdf0ef; padding: 1px 4px; border-radius: 2px; }
+</style>
+</head>
+<body>{{content}}
+<script src="{{mermaid_js_url}}"></script>
+<script>
+mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });
+</script>
+</body>
+</html>
