@@ -1565,8 +1565,7 @@ async function openTemplateSelect(container, fileId, currentTemplateId) {
   modal.setAttribute('aria-hidden', 'false');
 
   try {
-    const res = await authFetch('/api/templates');
-    const data = await res.json();
+    const data = await api('/api/templates');
     allTemplates = data.templates || [];
   } catch (e) {
     list.innerHTML = '<div class="empty-state">加载失败</div>';
@@ -1583,10 +1582,9 @@ async function openTemplateSelect(container, fileId, currentTemplateId) {
     item.addEventListener('click', async () => {
       const tplId = parseInt(item.dataset.tplId);
       try {
-        await authFetch(`/api/files/${fileId}`, {
+        await api(`/api/files/${fileId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ templateId: tplId === allTemplates.find(t => t.name === 'default').id ? null : tplId })
+          body: { templateId: tplId === allTemplates.find(t => t.name === 'default').id ? null : tplId }
         });
       } catch (e) { /* ignore */ }
       closeTemplateSelect();
