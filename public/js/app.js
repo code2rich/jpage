@@ -81,7 +81,7 @@ const dialogModal = {
     }
 
     this.confirmBtn.textContent = opts.confirmText || '确认';
-    this.confirmBtn.className = opts.danger ? 'btn btn-danger' : 'btn btn-primary';
+    this.confirmBtn.className = opts.danger ? 'btn btn-danger btn-small' : 'btn btn-primary btn-small';
     this.confirmBtn.disabled = false;
     this.cancelBtn.hidden = mode === 'alert';
     this.cancelBtn.textContent = opts.cancelText || '取消';
@@ -1281,10 +1281,14 @@ function openMcpConfigModal() {
           <span class="mcp-label">Endpoint</span>
           <code class="mcp-value">${escapeHtml(data.url)}</code>
         </div>
-        <div class="mcp-info-row">
-          <span class="mcp-label">Token</span>
-          <code class="mcp-value">${escapeHtml(data.token)}</code>
-        </div>
+        ${data.globalToken ? `<div class="mcp-info-row">
+          <span class="mcp-label">全局 Token</span>
+          <code class="mcp-value">${escapeHtml(data.globalToken)}</code>
+        </div>` : ''}
+        ${data.tokens && data.tokens.length > 0 ? `<div class="mcp-info-row">
+          <span class="mcp-label">用户 Token</span>
+          <code class="mcp-value">${data.tokens.map(t => esc(t.token_prefix) + '…').join(', ')}</code>
+        </div>` : ''}
       `;
       const configJson = JSON.stringify(data.config, null, 2);
       detailEl.innerHTML = `
