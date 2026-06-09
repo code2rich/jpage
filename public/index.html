@@ -59,6 +59,10 @@
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5z"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
 Skills 管理
 </button>
+<button type="button" class="settings-menu-item" role="menuitem" id="menu-item-content-templates">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+内容模板
+</button>
 <button type="button" class="settings-menu-item" role="menuitem" id="menu-item-mcp">
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
 MCP 配置
@@ -458,6 +462,97 @@ MCP 配置
 </div>
 <div class="modal-footer">
 <button type="button" class="btn btn-small" id="template-select-cancel">取消</button>
+</div>
+</div>
+</div>
+
+<!-- 内容模板市场弹窗 -->
+<div class="modal-backdrop" id="ct-market-modal" hidden aria-hidden="true" role="dialog" aria-modal="true">
+<div class="modal-panel modal-panel-wide">
+<div class="modal-header">
+<h2>内容模板市场</h2>
+<div style="display:flex;gap:6px">
+<button type="button" class="btn btn-small btn-primary" id="ct-market-upload">+ 上传模板</button>
+<button type="button" class="btn btn-small modal-close" id="ct-market-close" aria-label="关闭">×</button>
+</div>
+</div>
+<div class="modal-body">
+<div class="ct-filter-bar">
+<div class="search-input-wrap"><input type="text" id="ct-search" placeholder="搜索模板..."></div>
+<div class="filter-chips" id="ct-scene-chips">
+<button class="filter-chip active" data-scene="">全部</button>
+<button class="filter-chip" data-scene="dashboard">仪表板</button>
+<button class="filter-chip" data-scene="report">报告</button>
+<button class="filter-chip" data-scene="resume">简历</button>
+<button class="filter-chip" data-scene="landing">落地页</button>
+<button class="filter-chip" data-scene="note">笔记</button>
+<button class="filter-chip" data-scene="card">卡片</button>
+<button class="filter-chip" data-scene="other">其他</button>
+</div>
+</div>
+<div class="ct-grid" id="ct-grid"></div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn btn-small" id="ct-market-dismiss">关闭</button>
+</div>
+</div>
+</div>
+
+<!-- 内容模板上传弹窗 -->
+<div class="modal-backdrop" id="ct-upload-modal" hidden aria-hidden="true" role="dialog" aria-modal="true">
+<div class="modal-panel modal-panel-sm">
+<div class="modal-header">
+<h2>上传内容模板</h2>
+<button type="button" class="btn btn-small modal-close" id="ct-upload-close" aria-label="关闭">×</button>
+</div>
+<div class="modal-body">
+<label class="login-field"><span>模板标题 *</span><input type="text" id="ct-upload-title" placeholder="如：暗色数据仪表板"></label>
+<label class="login-field"><span>使用场景</span>
+<select id="ct-upload-scene">
+<option value="">不指定</option>
+<option value="dashboard">数据仪表板</option>
+<option value="report">报告</option>
+<option value="resume">简历/名片</option>
+<option value="landing">落地页</option>
+<option value="note">笔记/文档</option>
+<option value="card">卡片/海报</option>
+<option value="other">其他</option>
+</select>
+</label>
+<label class="login-field"><span>风格描述</span><input type="text" id="ct-upload-desc" placeholder="如：深色主题，使用 CSS Grid 展示数据"></label>
+<label class="login-field"><span>风格标签（逗号分隔）</span><input type="text" id="ct-upload-tags" placeholder="如：dark, minimal, chart"></label>
+<label class="login-field"><span>文件类型</span>
+<select id="ct-upload-filetype">
+<option value="html">HTML</option>
+<option value="markdown">Markdown</option>
+</select>
+</label>
+<label class="login-field"><span>样例内容 *</span><textarea id="ct-upload-content" rows="8" placeholder="粘贴完整的 HTML 或 Markdown 样例内容" style="font-family:monospace;font-size:13px"></textarea></label>
+<label class="login-field" style="flex-direction:row;gap:6px"><input type="checkbox" id="ct-upload-public" checked><span>公开（其他用户可见）</span></label>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn btn-small" id="ct-upload-cancel">取消</button>
+<button type="button" class="btn btn-primary" id="ct-upload-submit">上传</button>
+</div>
+</div>
+</div>
+
+<!-- 内容模板详情弹窗 -->
+<div class="modal-backdrop" id="ct-detail-modal" hidden aria-hidden="true" role="dialog" aria-modal="true">
+<div class="modal-panel modal-panel-wide">
+<div class="modal-header">
+<h2 id="ct-detail-title">模板详情</h2>
+<button type="button" class="btn btn-small modal-close" id="ct-detail-close" aria-label="关闭">×</button>
+</div>
+<div class="modal-body">
+<div class="ct-detail-meta" id="ct-detail-meta"></div>
+<div class="ct-detail-preview"><iframe id="ct-detail-iframe" sandbox="allow-scripts allow-same-origin" style="width:100%;min-height:400px;border:1px solid var(--border);border-radius:8px"></iframe></div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn btn-small" id="ct-detail-copy">复制内容</button>
+<button type="button" class="btn btn-small" id="ct-detail-edit">编辑</button>
+<button type="button" class="btn btn-small btn-danger" id="ct-detail-delete">删除</button>
+<button type="button" class="btn btn-small" id="ct-detail-dismiss">关闭</button>
 </div>
 </div>
 </div>
