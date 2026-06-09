@@ -220,7 +220,7 @@ app.use(helmet({
 
 // CSP 中间件：保护即页主应用，跳过用户内容渲染端点
 app.use((req, res, next) => {
-  if (/^\/api\/files\/\d+\/(render|asset\/)/.test(req.path)) return next();
+  if (/^\/api\/files\/\d+\/(render|asset\/)/.test(req.path) || /^\/s\//.test(req.path)) return next();
   res.setHeader(
     'Content-Security-Policy',
     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-src 'self'; frame-ancestors 'none'"
