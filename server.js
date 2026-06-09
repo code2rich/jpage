@@ -1370,6 +1370,94 @@ app.delete('/api/files/:id/versions/:ver', requireAuth, async (req, res) => {
   }
 });
 
+// --- 分类管理 ---
+
+app.post('/api/files/:id/star', requireAuth, async (req, res) => {
+  try {
+    const file = await dbGet('SELECT id FROM files WHERE id = ?', [req.params.id]);
+    if (!file) return res.status(404).json({ error: '文件不存在' });
+    await dbRun('INSERT OR IGNORE INTO starred_files (user_id, file_id) VALUES (?, ?)', [req.userId, req.params.id]);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: '收藏失败' });
+  }
+});
+
+app.delete('/api/files/:id/star', requireAuth, async (req, res) => {
+  try {
+    await dbRun('DELETE FROM starred_files WHERE user_id = ? AND file_id = ?', [req.userId, req.params.id]);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: '取消收藏失败' });
+  }
+});
+
+app.get('/api/categories', requireAuth, async (req, res) => {
+  try {
+    const categories = await dbAll(`
+      SELECT c.id, c.name, c.created_at, COUNT(f.id) AS file_count
+      FROM categories c LEFT JOIN files f ON f.category_id = c.id
+      GROUP BY c.id ORDER BY c.created_at ASC
+    `);
+    res.json({ categories });
+  } catch (e) {
+    res.status(500).json({ error: '获取分类失败' });
+  }
+});
+
+app.post('/api/categories', requireAuth, async (req, res) => {
+  const { name } = req.body || {};
+  if (!name || !name.trim()) return res.status(400).json({ error: '分类名不能为空' });
+  try {
+    const existing = await dbGet('SELECT id, name, created_at FROM categories WHERE name = ?', [name.trim()]);
+    if (existing) return res.json(existing);
+    const result = await dbRun('INSERT INTO categories (name, user_id) VALUES (?, ?)', [name.trim(), req.userId]);
+    logger.audit('category.create', { categoryId: result.lastID, name: name.trim(), ip: clientIp(req) });
+    res.json({ id: result.lastID, name: name.trim() });
+  } catch (e) {
+    res.status(500).json({ error: '创建分类失败' });
+  }
+});
+
+app.put('/api/categories/:id', requireAuth, requireAdmin, async (req, res) => {
+  const { name } = req.body || {};
+  if (!name || !name.trim()) return res.status(400).json({ error: '分类名不能为空' });
+  try {
+    await dbRun('UPDATE categories SET name = ? WHERE id = ?', [name.trim(), req.params.id]);
+    logger.audit('category.rename', { categoryId: req.params.id, name: name.trim(), ip: clientIp(req) });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: '重命名分类失败' });
+  }
+});
+
+app.delete('/api/categories/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    await dbRun('UPDATE files SET category_id = NULL WHERE category_id = ?', [req.params.id]);
+    await dbRun('DELETE FROM categories WHERE id = ?', [req.params.id]);
+    logger.audit('category.delete', { categoryId: req.params.id, ip: clientIp(req) });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: '删除分类失败' });
+  }
+});
+
+app.put('/api/files/:id/category', requireAuth, async (req, res) => {
+  const { categoryId } = req.body || {};
+  try {
+    const file = await dbGet('SELECT id, uploaded_by FROM files WHERE id = ?', [req.params.id]);
+    if (!file) return res.status(404).json({ error: '文件不存在' });
+    if (req.userRole !== 'admin' && file.uploaded_by !== req.userId) {
+      return res.status(403).json({ error: '无权操作' });
+    }
+    await dbRun('UPDATE files SET category_id = ? WHERE id = ?', [categoryId || null, req.params.id]);
+    logger.audit('file.setCategory', { fileId: parseInt(req.params.id), categoryId: categoryId || null, ip: clientIp(req) });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: '设置分类失败' });
+  }
+});
+
 app.get('/api/skills', requireAuth, async (req, res) => {
   try {
     res.json({ skills: listSkills() });
