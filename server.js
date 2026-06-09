@@ -1370,7 +1370,67 @@ app.delete('/api/files/:id/versions/:ver', requireAuth, async (req, res) => {
   }
 });
 
-// --- 分类管理 ---
+// --- 标签管理 ---
+
+app.get('/api/tags', requireAuth, async (req, res) => {
+  try {
+    const tags = await dbAll(`
+      SELECT t.id, t.name, t.created_at, COUNT(ft.file_id) AS file_count
+      FROM tags t LEFT JOIN file_tags ft ON t.id = ft.tag_id
+      GROUP BY t.id ORDER BY t.name ASC
+    `);
+    res.json({ tags });
+  } catch (e) {
+    res.status(500).json({ error: '获取标签失败' });
+  }
+});
+
+app.post('/api/tags', requireAuth, async (req, res) => {
+  const { name } = req.body || {};
+  if (!name || !name.trim()) return res.status(400).json({ error: '标签名不能为空' });
+  try {
+    const existing = await dbGet('SELECT id, name, created_at FROM tags WHERE name = ?', [name.trim()]);
+    if (existing) return res.json(existing);
+    const result = await dbRun('INSERT INTO tags (name) VALUES (?)', [name.trim()]);
+    res.json({ id: result.lastID, name: name.trim() });
+    logger.audit('tag.create', { tagId: result.lastID, tagName: name.trim(), ip: clientIp(req) });
+  } catch (e) {
+    res.status(500).json({ error: '创建标签失败' });
+  }
+});
+
+app.delete('/api/tags/:id', requireAuth, async (req, res) => {
+  try {
+    const tag = await dbGet('SELECT id FROM tags WHERE id = ?', [req.params.id]);
+    if (!tag) return res.status(404).json({ error: '标签不存在' });
+    await dbRun('DELETE FROM file_tags WHERE tag_id = ?', [req.params.id]);
+    await dbRun('DELETE FROM tags WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+    logger.audit('tag.delete', { tagId: req.params.id, ip: clientIp(req) });
+  } catch (e) {
+    res.status(500).json({ error: '删除标签失败' });
+  }
+});
+
+app.put('/api/files/:id/tags', requireAuth, async (req, res) => {
+  try {
+    const file = await dbGet('SELECT id FROM files WHERE id = ?', [req.params.id]);
+    if (!file) return res.status(404).json({ error: '文件不存在' });
+    if (!checkFileOwnership(req, file)) return res.status(403).json({ error: '无权操作此文件' });
+    const { tagIds } = req.body || {};
+    if (!Array.isArray(tagIds)) return res.status(400).json({ error: 'tagIds 必须是数组' });
+    await dbRun('DELETE FROM file_tags WHERE file_id = ?', [req.params.id]);
+    for (const tid of tagIds) {
+      await dbRun('INSERT OR IGNORE INTO file_tags (file_id, tag_id) VALUES (?, ?)', [req.params.id, tid]);
+    }
+    res.json({ success: true });
+    logger.audit('file.updateTags', { fileId: req.params.id, tagIds, ip: clientIp(req) });
+  } catch (e) {
+    res.status(500).json({ error: '更新标签失败' });
+  }
+});
+
+// --- 收藏管理 ---
 
 app.post('/api/files/:id/star', requireAuth, async (req, res) => {
   try {
