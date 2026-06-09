@@ -1559,6 +1559,7 @@ body {
   background: var(--bg);
 }
 .modal-footer .btn-primary { width: auto; }
+.modal-footer .btn { flex-shrink: 0; }
 
 /* Modal wide variant */
 .modal-panel-wide {
