@@ -35,18 +35,6 @@ function renderHome(container) {
   const adminEls = container.querySelectorAll('.admin-only');
   adminEls.forEach(el => { el.style.display = state.currentUser.role === 'admin' ? 'block' : 'none'; });
 
-  // 邮箱验证提示条
-  const verifyBanner = container.querySelector('#email-verify-banner');
-  if (state.currentUser.email && !state.currentUser.emailVerified) {
-    verifyBanner.hidden = false;
-    container.querySelector('#btn-resend-verify').addEventListener('click', async () => {
-      try {
-        const data = await api('/api/auth/resend-verification', { method: 'POST' });
-        toast(data.sent ? '验证邮件已发送，请查收' : 'SMTP 未配置，无法发送验证邮件');
-      } catch (e) { toast(e.message, 'error'); }
-    });
-  }
-
   const logoutBtn = container.querySelector('#btn-logout');
   logoutBtn.addEventListener('click', async () => {
     try {
@@ -168,6 +156,10 @@ function renderHome(container) {
       const btn = dd.querySelector('#btn-settings');
       if (btn) btn.setAttribute('aria-expanded', 'false');
     }
+    // 关闭文件项更多菜单
+    document.querySelectorAll('.file-more-dropdown.open').forEach(d => {
+      if (!d.contains(e.target)) d.classList.remove('open');
+    });
   });
 }
 
@@ -473,12 +465,18 @@ function renderFileList(container, list, files) {
       <div class="file-actions">
         <button type="button" class="btn btn-small btn-star ${f.starred ? 'starred' : ''}" data-id="${f.id}">${f.starred ? '★' : '☆'}</button>
         <button type="button" class="btn btn-small btn-copy-link" data-id="${f.id}">复制链接</button>
-        <button type="button" class="btn btn-small btn-privacy" data-id="${f.id}" data-public="${isPublic}">${isPublic ? '设为私有' : '设为公开'}</button>
-        <button type="button" class="btn btn-small btn-tags" data-id="${f.id}">标签</button>
-        <button type="button" class="btn btn-small btn-category" data-id="${f.id}">分类</button>
-        ${f.file_type === 'markdown' ? `<button type="button" class="btn btn-small btn-template" data-id="${f.id}">模板</button>` : ''}
-        <button type="button" class="btn btn-small btn-rename" data-id="${f.id}">重命名</button>
-        <button type="button" class="btn btn-small btn-danger btn-delete" data-id="${f.id}">删除</button>
+        <div class="file-more-dropdown">
+          <button type="button" class="btn btn-small file-more-trigger" title="更多操作">⋯</button>
+          <div class="file-more-menu">
+            <button type="button" class="file-more-item btn-privacy" data-id="${f.id}" data-public="${isPublic}">${isPublic ? '设为私有' : '设为公开'}</button>
+            <button type="button" class="file-more-item btn-tags" data-id="${f.id}">编辑标签</button>
+            <button type="button" class="file-more-item btn-category" data-id="${f.id}">移动分类</button>
+            ${f.file_type === 'markdown' ? `<button type="button" class="file-more-item btn-template" data-id="${f.id}">切换模板</button>` : ''}
+            <button type="button" class="file-more-item btn-rename" data-id="${f.id}">重命名</button>
+            <hr class="file-more-divider">
+            <button type="button" class="file-more-item file-more-danger btn-delete" data-id="${f.id}">删除</button>
+          </div>
+        </div>
       </div>
     `;
 
@@ -516,16 +514,29 @@ function renderFileList(container, list, files) {
       e.stopPropagation();
       doCopyLink(f.share_key);
     });
+    // 更多菜单展开/收起
+    const moreDropdown = el.querySelector('.file-more-dropdown');
+    const moreTrigger = el.querySelector('.file-more-trigger');
+    moreTrigger.addEventListener('click', e => {
+      e.stopPropagation();
+      // 关闭其他已打开的菜单
+      document.querySelectorAll('.file-more-dropdown.open').forEach(d => { if (d !== moreDropdown) d.classList.remove('open'); });
+      moreDropdown.classList.toggle('open');
+    });
+
     el.querySelector('.btn-privacy').addEventListener('click', e => {
       e.stopPropagation();
+      moreDropdown.classList.remove('open');
       doSetPrivacy(container, f.id, isPublic);
     });
     el.querySelector('.btn-rename').addEventListener('click', e => {
       e.stopPropagation();
+      moreDropdown.classList.remove('open');
       doRename(container, f.id, f.original_name);
     });
     el.querySelector('.btn-delete').addEventListener('click', e => {
       e.stopPropagation();
+      moreDropdown.classList.remove('open');
       doDelete(container, f.id, f.original_name);
     });
     el.querySelector('.btn-star').addEventListener('click', async e => {
@@ -543,16 +554,19 @@ function renderFileList(container, list, files) {
     });
     el.querySelector('.btn-tags').addEventListener('click', e => {
       e.stopPropagation();
+      moreDropdown.classList.remove('open');
       openTagEditor(container, f.id, f.tags);
     });
     el.querySelector('.btn-category').addEventListener('click', e => {
       e.stopPropagation();
+      moreDropdown.classList.remove('open');
       openCategorySelect(container, f.id, f.category_id);
     });
     const btnTpl = el.querySelector('.btn-template');
     if (btnTpl) {
       btnTpl.addEventListener('click', e => {
         e.stopPropagation();
+        moreDropdown.classList.remove('open');
         openTemplateSelect(container, f.id, f.template_id);
       });
     }
