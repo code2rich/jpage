@@ -48,8 +48,10 @@ function renderLanding(container, openModal) {
       const sceneLabels = { dashboard: '仪表板', report: '报告', resume: '简历', landing: '落地页', note: '笔记', presentation: '演示', card: '卡片', email: '邮件', other: '其他' };
       const sceneLabel = sceneLabels[t.scene] || t.scene;
       return `
-        <div class="landing-template-card" data-id="${t.id}">
+        <div class="landing-template-card" data-id="${t.id}" data-file-type="${t.file_type}">
           <div class="landing-template-thumb">
+            <div class="ct-card-thumb-wrap"><iframe class="ct-thumb-iframe" sandbox="allow-scripts"></iframe></div>
+            <div class="ct-card-thumb-loading"></div>
             <div class="landing-template-thumb-placeholder">${t.title.charAt(0)}</div>
           </div>
           <div class="landing-template-info">
@@ -63,9 +65,41 @@ function renderLanding(container, openModal) {
         </div>`;
     }).join('');
 
+    const landingThumbObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const card = entry.target;
+        landingThumbObserver.unobserve(card);
+        loadLandingThumb(card);
+      });
+    }, { rootMargin: '200px' });
+
     grid.querySelectorAll('.landing-template-card').forEach(card => {
       card.addEventListener('click', () => openTemplatePreview(parseInt(card.dataset.id)));
+      landingThumbObserver.observe(card);
     });
+  }
+
+  async function loadLandingThumb(card) {
+    const id = parseInt(card.dataset.id);
+    const loadingEl = card.querySelector('.ct-card-thumb-loading');
+    const placeholder = card.querySelector('.landing-template-thumb-placeholder');
+    const iframe = card.querySelector('.ct-thumb-iframe');
+    if (!iframe) return;
+    try {
+      const data = await api(`/api/content-templates/public/${id}/preview`);
+      if (data.file_type === 'markdown') {
+        iframe.srcdoc = `<pre style="padding:24px;font-size:14px;white-space:pre-wrap;word-break:break-word;margin:0">${escapeHtml(data.content)}</pre>`;
+      } else {
+        iframe.srcdoc = data.content;
+      }
+      iframe.onload = () => {
+        if (loadingEl) loadingEl.remove();
+        if (placeholder) placeholder.style.display = 'none';
+      };
+    } catch {
+      if (loadingEl) loadingEl.remove();
+    }
   }
 
   // 模板预览弹窗

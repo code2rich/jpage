@@ -1079,10 +1079,16 @@ async function loadUsersList() {
         <td><span class="role-badge role-${u.role}">${u.role === 'admin' ? '管理员' : '用户'}</span></td>
         <td>${formatDate(u.created_at)}</td>
         <td class="users-actions">
-          <button class="btn btn-small" onclick="editUserDialog(${u.id},'${esc(u.username)}','${u.role}','${u.email ? esc(u.email) : ''}')">编辑</button>
-          ${u.id !== state.currentUser.id ? `<button class="btn btn-small btn-danger-outline" onclick="deleteUserConfirm(${u.id},'${esc(u.username)}')">删除</button>` : ''}
+          <button class="btn btn-small btn-edit-user" data-id="${u.id}" data-username="${esc(u.username)}" data-role="${u.role}" data-email="${u.email ? esc(u.email) : ''}">编辑</button>
+          ${u.id !== state.currentUser.id ? `<button class="btn btn-small btn-danger-outline btn-delete-user" data-id="${u.id}" data-username="${esc(u.username)}">删除</button>` : ''}
         </td></tr>`).join('') +
       '</tbody></table>';
+    wrap.querySelectorAll('.btn-edit-user').forEach(btn => {
+      btn.addEventListener('click', () => editUserDialog(+btn.dataset.id, btn.dataset.username, btn.dataset.role, btn.dataset.email));
+    });
+    wrap.querySelectorAll('.btn-delete-user').forEach(btn => {
+      btn.addEventListener('click', () => deleteUserConfirm(+btn.dataset.id, btn.dataset.username));
+    });
   } catch (e) {
     wrap.innerHTML = '<p class="login-error">加载失败: ' + esc(e.message) + '</p>';
   }
@@ -1106,7 +1112,7 @@ async function createUserDialog() {
 }
 
 // 需要挂到 window 上因为 users table 用了 inline onclick
-window.editUserDialog = async function(id, username, role, email) {
+async function editUserDialog(id, username, role, email) {
   const ops = ['修改用户名/邮箱', '修改角色', '重置密码'];
   const choice = await dialogModal.confirm({
     title: '编辑用户: ' + username,
@@ -1148,8 +1154,9 @@ window.editUserDialog = async function(id, username, role, email) {
   }
 };
 
-window.deleteUserConfirm = async function(id, username) {
-  if (!confirm('确定删除用户 ' + username + '？其文件将转交给管理员。')) return;
+async function deleteUserConfirm(id, username) {
+  const ok = await dialogModal.confirm({ title: '删除用户', message: `确定删除用户 ${username}？其文件将转交给管理员。`, danger: true });
+  if (!ok) return;
   try {
     await api('/api/users/' + id, { method: 'DELETE' });
     toast('用户已删除');

@@ -345,6 +345,8 @@ function renderPreview(container, hash) {
   const editorCancelBtn = container.querySelector('#btn-editor-cancel');
   const downloadBtn = container.querySelector('#btn-download');
   const uploadVerBtn = container.querySelector('#btn-upload-version');
+  const moreDropdown = container.querySelector('#preview-more-dropdown');
+  const moreBtn = container.querySelector('#btn-preview-more');
   let fileContent = '';
   let editorOriginalContent = '';
 
@@ -381,9 +383,7 @@ function renderPreview(container, hash) {
     editorContainer.hidden = !isEdit;
     editorSaveBtn.hidden = !isEdit;
     editorCancelBtn.hidden = !isEdit;
-    downloadBtn.style.display = isEdit ? 'none' : '';
-    uploadVerBtn.style.display = isEdit ? 'none' : '';
-    versionHistoryBtn.style.display = isEdit ? 'none' : '';
+    if (moreDropdown) moreDropdown.style.display = isEdit ? 'none' : '';
     toggles.forEach(b => {
       b.classList.toggle('active', b.dataset.mode === mode);
     });
@@ -512,6 +512,31 @@ function renderPreview(container, hash) {
     }
   });
 
+  // More dropdown: toggle + menu item delegation
+  function closeMoreDropdown() {
+    if (moreDropdown) {
+      moreDropdown.classList.remove('open');
+      moreBtn.setAttribute('aria-expanded', 'false');
+    }
+  }
+  if (moreBtn) {
+    moreBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const isOpen = moreDropdown.classList.toggle('open');
+      moreBtn.setAttribute('aria-expanded', String(isOpen));
+    });
+    // Menu items delegate to hidden buttons
+    container.querySelector('#menu-download')?.addEventListener('click', () => { closeMoreDropdown(); downloadBtn.click(); });
+    container.querySelector('#menu-upload-version')?.addEventListener('click', () => { closeMoreDropdown(); uploadVerBtn.click(); });
+    container.querySelector('#menu-version-history')?.addEventListener('click', () => { closeMoreDropdown(); versionHistoryBtn.click(); });
+    container.querySelector('#menu-template')?.addEventListener('click', () => { closeMoreDropdown(); container.querySelector('#btn-template')?.click(); });
+    container.querySelector('#menu-stats')?.addEventListener('click', () => { closeMoreDropdown(); container.querySelector('#btn-stats')?.click(); });
+    // Close on outside click
+    document.addEventListener('click', function moreOutsideHandler(e) {
+      if (moreDropdown && !moreDropdown.contains(e.target)) closeMoreDropdown();
+    });
+  }
+
   api(`/api/files/${id}/content`).then(data => {
     fileName = data.original_name;
     fileContent = data.content;
@@ -526,8 +551,10 @@ function renderPreview(container, hash) {
     iframe.src = API_BASE + `/api/files/${id}/render`;
     // 模板按钮：仅 Markdown 文件且为所有者/admin 可见
     const templateBtn = container.querySelector('#btn-template');
+    const menuTemplate = container.querySelector('#menu-template');
     if (templateBtn && data.file_type === 'markdown' && state.currentUser && (state.currentUser.id == data.uploaded_by || state.currentUser.role === 'admin')) {
       templateBtn.hidden = false;
+      if (menuTemplate) menuTemplate.hidden = false;
       templateBtn.addEventListener('click', () => {
         openTemplateSelectForPreview(container, id, data.template_id);
       });
@@ -538,8 +565,10 @@ function renderPreview(container, hash) {
     }
     // 统计按钮：仅文件所有者或 admin 可见
     const statsBtn = container.querySelector('#btn-stats');
+    const menuStats = container.querySelector('#menu-stats');
     if (statsBtn && state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.id == data.uploaded_by)) {
       statsBtn.hidden = false;
+      if (menuStats) menuStats.hidden = false;
       statsBtn.addEventListener('click', () => openStatsDialog(id, container));
     }
   }).catch(e => {

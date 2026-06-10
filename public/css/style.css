@@ -2521,6 +2521,8 @@ html:not(.light) {
 .landing-template-info h4 { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .landing-template-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .landing-template-uses { font-size: 11px; color: var(--text-secondary); }
+.landing-template-thumb .ct-card-thumb-wrap { position: relative; z-index: 2; }
+.landing-template-thumb .ct-card-thumb-loading { position: absolute; inset: 0; z-index: 1; background: linear-gradient(135deg, var(--bg-secondary, #f1f5f9), var(--border)); animation: ct-thumb-pulse 1.5s ease-in-out infinite; }
 .landing-template-empty { text-align: center; padding: 48px; color: var(--text-secondary); font-size: 14px; }
 .ct-badge-type { background: #e0f2fe; color: #0369a1; }
 

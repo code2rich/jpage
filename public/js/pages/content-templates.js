@@ -10,6 +10,53 @@ const SCENE_LABELS = { dashboard: '仪表板', report: '报告', resume: '简历
 
 let ctState = { scene: '', keyword: '', page: 1, templates: [], pagination: { page: 1, limit: 12, total: 0, totalPages: 1 }, currentId: null, editing: false };
 
+const loadedThumbs = new Set();
+let activeThumbLoads = 0;
+const MAX_CONCURRENT_THUMBS = 3;
+const pendingThumbQueue = [];
+const thumbObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    const card = entry.target;
+    thumbObserver.unobserve(card);
+    enqueueThumbLoad(card);
+  });
+}, { rootMargin: '200px' });
+
+function enqueueThumbLoad(card) {
+  if (activeThumbLoads < MAX_CONCURRENT_THUMBS) {
+    activeThumbLoads++;
+    loadThumb(card).finally(() => {
+      activeThumbLoads--;
+      if (pendingThumbQueue.length > 0) {
+        enqueueThumbLoad(pendingThumbQueue.shift());
+      }
+    });
+  } else {
+    pendingThumbQueue.push(card);
+  }
+}
+
+async function loadThumb(card) {
+  const id = parseInt(card.dataset.id);
+  if (loadedThumbs.has(id)) return;
+  loadedThumbs.add(id);
+  const loadingEl = card.querySelector('.ct-card-thumb-loading');
+  const iframe = card.querySelector('.ct-thumb-iframe');
+  if (!iframe) return;
+  try {
+    const data = await api(`/api/content-templates/${id}/content`);
+    if (data.file_type === 'markdown') {
+      iframe.srcdoc = `<pre style="padding:24px;font-size:14px;white-space:pre-wrap;word-break:break-word;margin:0">${escapeHtml(data.content)}</pre>`;
+    } else {
+      iframe.srcdoc = data.content;
+    }
+    iframe.onload = () => { if (loadingEl) loadingEl.remove(); };
+  } catch {
+    if (loadingEl) loadingEl.remove();
+  }
+}
+
 export function openContentTemplateMarket() {
   const modal = document.getElementById('ct-market-modal');
   if (!modal) return;
@@ -89,7 +136,11 @@ function renderGrid(grid) {
     const typeClass = t.file_type === 'markdown' ? 'ct-badge-md' : 'ct-badge-html';
     const typeLabel = t.file_type === 'markdown' ? 'MD' : 'HTML';
     const isOwner = state.currentUser && (state.currentUser.id === t.uploaded_by || state.currentUser.role === 'admin');
-    return `<div class="ct-card" data-id="${t.id}">
+    return `<div class="ct-card" data-id="${t.id}" data-file-type="${t.file_type}">
+      <div class="ct-card-thumb">
+        <div class="ct-card-thumb-wrap"><iframe class="ct-thumb-iframe" sandbox="allow-scripts"></iframe></div>
+        <div class="ct-card-thumb-loading"></div>
+      </div>
       <div class="ct-card-header">
         <span class="ct-card-title">${escapeHtml(t.title)}</span>
         <span class="ct-badge ${typeClass}">${typeLabel}</span>
@@ -119,6 +170,7 @@ function renderGrid(grid) {
   // 卡片点击
   grid.querySelectorAll('.ct-card').forEach(card => {
     card.onclick = () => openDetailModal(parseInt(card.dataset.id));
+    thumbObserver.observe(card);
   });
 }
 
