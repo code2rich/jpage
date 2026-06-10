@@ -243,11 +243,12 @@ function setupVersionUpload(container, fileId) {
 }
 
 // ---------- Stats Dialog ----------
-async function openStatsDialog(fileId) {
+async function openStatsDialog(fileId, container) {
+  closeVersionPanel(container);
   try {
     const stats = await api(`/api/files/${fileId}/stats`);
     const html = buildStatsHtml(stats);
-    dialogModal.alert({ title: '访问统计', message: html });
+    dialogModal.alert({ title: '访问统计', message: html, confirmText: '关闭' });
   } catch (e) {
     toast(e.message || '获取统计失败', 'error');
   }
@@ -539,7 +540,7 @@ function renderPreview(container, hash) {
     const statsBtn = container.querySelector('#btn-stats');
     if (statsBtn && state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.id == data.uploaded_by)) {
       statsBtn.hidden = false;
-      statsBtn.addEventListener('click', () => openStatsDialog(id));
+      statsBtn.addEventListener('click', () => openStatsDialog(id, container));
     }
   }).catch(e => {
     toast(e.message, 'error');

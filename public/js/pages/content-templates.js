@@ -3,7 +3,7 @@
 import { api, API_BASE } from '../api.js';
 import { toast } from '../components/toast.js';
 import { dialogModal } from '../components/dialog.js';
-import { escapeHtml, relativeTime } from '../utils.js';
+import { escapeHtml, relativeTime, openModal, closeModal } from '../utils.js';
 import { state } from '../app.js';
 
 const SCENE_LABELS = { dashboard: '仪表板', report: '报告', resume: '简历', landing: '落地页', note: '笔记', presentation: '演示', card: '卡片', email: '邮件', other: '其他' };
@@ -13,7 +13,7 @@ let ctState = { scene: '', keyword: '', page: 1, templates: [], pagination: { pa
 export function openContentTemplateMarket() {
   const modal = document.getElementById('ct-market-modal');
   if (!modal) return;
-  modal.hidden = false;
+  openModal(modal);
   ctState.scene = '';
   ctState.keyword = '';
   ctState.page = 1;
@@ -23,7 +23,7 @@ export function openContentTemplateMarket() {
 
 function bindMarketEvents(modal) {
   // 关闭
-  const close = () => { modal.hidden = true; };
+  const close = () => { closeModal(modal); };
   modal.querySelector('#ct-market-close').onclick = close;
   modal.querySelector('#ct-market-dismiss').onclick = close;
   modal.addEventListener('click', e => { if (e.target === modal) close(); });
@@ -125,7 +125,7 @@ function renderGrid(grid) {
 function openUploadModal(prefill) {
   const modal = document.getElementById('ct-upload-modal');
   if (!modal) return;
-  modal.hidden = false;
+  openModal(modal);
 
   const titleEl = modal.querySelector('#ct-upload-title');
   const sceneEl = modal.querySelector('#ct-upload-scene');
@@ -150,7 +150,7 @@ function openUploadModal(prefill) {
     filetypeEl.value = 'html';
   }
 
-  const close = () => { modal.hidden = true; };
+  const close = () => { closeModal(modal); };
   modal.querySelector('#ct-upload-close').onclick = close;
   modal.querySelector('#ct-upload-cancel').onclick = close;
   modal.addEventListener('click', e => { if (e.target === modal) close(); });
@@ -193,11 +193,11 @@ function Buffer_byteLength(str) {
 async function openDetailModal(id) {
   const modal = document.getElementById('ct-detail-modal');
   if (!modal) return;
-  modal.hidden = false;
+  openModal(modal);
   ctState.currentId = id;
   ctState.editing = false;
 
-  const close = () => { modal.hidden = true; };
+  const close = () => { closeModal(modal); };
   modal.querySelector('#ct-detail-close').onclick = close;
   modal.querySelector('#ct-detail-dismiss').onclick = close;
   modal.addEventListener('click', e => { if (e.target === modal) close(); });
@@ -245,7 +245,7 @@ async function openDetailModal(id) {
 
     // 编辑
     editBtn.onclick = () => {
-      modal.hidden = true;
+      closeModal(modal);
       openUploadModal({ ...meta, content: contentData.content });
     };
 

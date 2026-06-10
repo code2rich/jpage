@@ -3,7 +3,7 @@
 import { api, API_BASE } from '../api.js';
 import { toast } from '../components/toast.js';
 import { dialogModal } from '../components/dialog.js';
-import { escapeHtml, formatSize, relativeTime, esc, buildSkeletonCards, formatDate } from '../utils.js';
+import { escapeHtml, formatSize, relativeTime, esc, buildSkeletonCards, formatDate, openModal, closeModal } from '../utils.js';
 import { state, navigate } from '../app.js';
 import { openContentTemplateMarket } from './content-templates.js';
 
@@ -648,6 +648,10 @@ function setupFileFilter(container) {
       chips.forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
       filterState.filter = chip.dataset.filter;
+      if (chip.dataset.filter === 'all') {
+        filterState.tagId = null;
+        filterState.categoryId = null;
+      }
       applyFilters(container);
     });
   });
@@ -1037,12 +1041,12 @@ function loadSkillsForModal() {
 // ---------- 用户管理弹窗 ----------
 function openUsersModal() {
   const modal = document.getElementById('users-modal');
-  modal.hidden = false;
+  openModal(modal);
   loadUsersList();
-  modal.querySelector('#users-modal-close').onclick = () => { modal.hidden = true; };
-  modal.querySelector('#users-modal-dismiss').onclick = () => { modal.hidden = true; };
+  modal.querySelector('#users-modal-close').onclick = () => { closeModal(modal); };
+  modal.querySelector('#users-modal-dismiss').onclick = () => { closeModal(modal); };
   modal.querySelector('#btn-create-user').onclick = () => createUserDialog();
-  modal.addEventListener('click', e => { if (e.target === modal) modal.hidden = true; });
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(modal); });
 }
 
 async function loadUsersList() {
@@ -1114,12 +1118,12 @@ window.deleteUserConfirm = async function(id, username) {
 // ---------- API 令牌弹窗 ----------
 function openTokensModal() {
   const modal = document.getElementById('tokens-modal');
-  modal.hidden = false;
+  openModal(modal);
   loadTokensList();
-  modal.querySelector('#tokens-modal-close').onclick = () => { modal.hidden = true; };
-  modal.querySelector('#tokens-modal-dismiss').onclick = () => { modal.hidden = true; };
+  modal.querySelector('#tokens-modal-close').onclick = () => { closeModal(modal); };
+  modal.querySelector('#tokens-modal-dismiss').onclick = () => { closeModal(modal); };
   modal.querySelector('#btn-create-token').onclick = () => createTokenDialog();
-  modal.addEventListener('click', e => { if (e.target === modal) modal.hidden = true; });
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(modal); });
 }
 
 async function loadTokensList() {
@@ -1166,15 +1170,15 @@ window.deleteTokenConfirm = async function(id, name) {
 // ---------- 修改密码弹窗 ----------
 function openPasswordModal() {
   const modal = document.getElementById('password-modal');
-  modal.hidden = false;
+  openModal(modal);
   modal.querySelector('#current-password').value = '';
   modal.querySelector('#new-password').value = '';
   modal.querySelector('#confirm-password').value = '';
   const errorEl = modal.querySelector('#password-error');
   errorEl.hidden = true;
 
-  modal.querySelector('#password-modal-close').onclick = () => { modal.hidden = true; };
-  modal.querySelector('#password-modal-cancel').onclick = () => { modal.hidden = true; };
+  modal.querySelector('#password-modal-close').onclick = () => { closeModal(modal); };
+  modal.querySelector('#password-modal-cancel').onclick = () => { closeModal(modal); };
   modal.querySelector('#password-modal-submit').onclick = async () => {
     const currentPwd = modal.querySelector('#current-password').value;
     const newPwd = modal.querySelector('#new-password').value;
@@ -1185,13 +1189,13 @@ function openPasswordModal() {
     try {
       await api('/api/auth/change-password', { method: 'POST', body: { currentPassword: currentPwd, newPassword: newPwd } });
       toast('密码已修改');
-      modal.hidden = true;
+      closeModal(modal);
     } catch (e) {
       errorEl.textContent = e.message;
       errorEl.hidden = false;
     }
   };
-  modal.addEventListener('click', e => { if (e.target === modal) modal.hidden = true; });
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(modal); });
 }
 
 // ---------- 数据管理弹窗 ----------
@@ -1223,10 +1227,10 @@ async function openBackupModal() {
     statsEl.innerHTML = '<p class="login-error">加载统计失败: ' + esc(e.message) + '</p>';
   }
 
-  const closeModal = () => { modal.hidden = true; modal.setAttribute('aria-hidden', 'true'); };
-  modal.querySelector('#backup-modal-close').onclick = closeModal;
-  modal.querySelector('#backup-modal-dismiss').onclick = closeModal;
-  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+  const hideModal = () => { closeModal(modal); };
+  modal.querySelector('#backup-modal-close').onclick = hideModal;
+  modal.querySelector('#backup-modal-dismiss').onclick = hideModal;
+  modal.addEventListener('click', e => { if (e.target === modal) hideModal(); });
 
   modal.querySelector('#btn-export-backup').onclick = () => {
     window.location.href = '/api/admin/export';

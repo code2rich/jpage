@@ -54,4 +54,14 @@ function buildSkeletonCards(n) {
   return html;
 }
 
-export { escapeHtml, formatSize, relativeTime, formatDate, esc, buildSkeletonCards };
+function openModal(el) {
+  el.hidden = false;
+  el.setAttribute('aria-hidden', 'false');
+}
+
+function closeModal(el) {
+  el.hidden = true;
+  el.setAttribute('aria-hidden', 'true');
+}
+
+export { escapeHtml, formatSize, relativeTime, formatDate, esc, buildSkeletonCards, openModal, closeModal };
