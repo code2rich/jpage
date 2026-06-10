@@ -773,11 +773,75 @@ html:not(.light) {
   display: flex;
   gap: 6px;
   flex-shrink: 0;
+  align-items: center;
 }
 
 .file-actions .btn {
   padding: 5px 10px;
   font-size: 12px;
+}
+
+/* 文件项更多操作下拉 */
+.file-more-dropdown {
+  position: relative;
+  display: inline-flex;
+}
+
+.file-more-trigger {
+  min-width: 32px;
+  text-align: center;
+  font-size: 16px;
+  line-height: 1;
+  letter-spacing: 1px;
+}
+
+.file-more-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 140px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.15);
+  z-index: 100;
+  padding: 4px;
+}
+
+.file-more-dropdown.open .file-more-menu {
+  display: block;
+}
+
+.file-more-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 13px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.file-more-item:hover {
+  background: var(--border);
+}
+
+.file-more-danger {
+  color: var(--danger);
+}
+
+.file-more-danger:hover {
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.file-more-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 4px 0;
 }
 
 .btn-danger {
