@@ -502,41 +502,45 @@ MCP 配置
 
 <!-- 内容模板上传弹窗 -->
 <div class="modal-backdrop" id="ct-upload-modal" hidden aria-hidden="true" role="dialog" aria-modal="true">
-<div class="modal-panel modal-panel-sm">
+<div class="modal-panel modal-panel-wide">
 <div class="modal-header">
 <h2>上传内容模板</h2>
 <button type="button" class="btn btn-small modal-close" id="ct-upload-close" aria-label="关闭">×</button>
 </div>
-<div class="modal-body">
-<label class="login-field"><span>模板标题 *</span><input type="text" id="ct-upload-title" placeholder="如：暗色数据仪表板"></label>
-<label class="login-field"><span>使用场景</span>
-<select id="ct-upload-scene">
-<option value="">不指定</option>
-<option value="dashboard">数据仪表板</option>
-<option value="report">报告</option>
-<option value="resume">简历/名片</option>
-<option value="landing">落地页</option>
-<option value="note">笔记/文档</option>
-<option value="presentation">演示/幻灯片</option>
-<option value="card">卡片/海报</option>
-<option value="email">邮件</option>
-<option value="other">其他</option>
-</select>
-</label>
-<label class="login-field"><span>风格描述</span><input type="text" id="ct-upload-desc" placeholder="如：深色主题，使用 CSS Grid 展示数据"></label>
-<label class="login-field"><span>风格标签（逗号分隔）</span><input type="text" id="ct-upload-tags" placeholder="如：dark, minimal, chart"></label>
-<label class="login-field"><span>文件类型</span>
-<select id="ct-upload-filetype">
-<option value="html">HTML</option>
-<option value="markdown">Markdown</option>
-</select>
-</label>
-<label class="login-field"><span>样例内容 *</span><textarea id="ct-upload-content" rows="8" placeholder="粘贴完整的 HTML 或 Markdown 样例内容" style="font-family:monospace;font-size:13px"></textarea></label>
-<label class="login-field" style="flex-direction:row;gap:6px"><input type="checkbox" id="ct-upload-public" checked><span>公开（其他用户可见）</span></label>
+<div class="modal-body" style="display:flex;flex-direction:column;gap:16px">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px">
+  <label class="login-field"><span>模板标题 *</span><input type="text" id="ct-upload-title" placeholder="如：暗色数据仪表板"></label>
+  <label class="login-field"><span>文件类型</span>
+  <select id="ct-upload-filetype">
+  <option value="html">HTML</option>
+  <option value="markdown">Markdown</option>
+  </select>
+  </label>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px 16px">
+  <label class="login-field"><span>使用场景</span>
+  <select id="ct-upload-scene">
+  <option value="">不指定</option>
+  <option value="dashboard">数据仪表板</option>
+  <option value="report">报告</option>
+  <option value="resume">简历/名片</option>
+  <option value="landing">落地页</option>
+  <option value="note">笔记/文档</option>
+  <option value="presentation">演示/幻灯片</option>
+  <option value="card">卡片/海报</option>
+  <option value="email">邮件</option>
+  <option value="other">其他</option>
+  </select>
+  </label>
+  <label class="login-field"><span>风格描述</span><input type="text" id="ct-upload-desc" placeholder="如：深色主题，CSS Grid 展示"></label>
+  <label class="login-field"><span>风格标签</span><input type="text" id="ct-upload-tags" placeholder="如：dark, minimal"></label>
+</div>
+<label class="login-field" style="flex:1"><span>样例内容 *</span><textarea id="ct-upload-content" rows="12" placeholder="粘贴完整的 HTML 或 Markdown 样例内容" style="font-family:monospace;font-size:13px;min-height:200px;resize:vertical"></textarea></label>
+<label class="login-field" style="flex-direction:row;gap:6px;align-items:center"><input type="checkbox" id="ct-upload-public" checked><span style="font-size:14px;color:var(--text-secondary)">公开（其他用户可见）</span></label>
 </div>
 <div class="modal-footer">
 <button type="button" class="btn btn-small" id="ct-upload-cancel">取消</button>
-<button type="button" class="btn btn-primary" id="ct-upload-submit">上传</button>
+<button type="button" class="btn btn-primary btn-small" id="ct-upload-submit">上传</button>
 </div>
 </div>
 </div>
