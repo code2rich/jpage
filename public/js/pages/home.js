@@ -1079,7 +1079,7 @@ async function loadUsersList() {
         <td><span class="role-badge role-${u.role}">${u.role === 'admin' ? '管理员' : '用户'}</span></td>
         <td>${formatDate(u.created_at)}</td>
         <td class="users-actions">
-          <button class="btn btn-small" onclick="editUserDialog(${u.id},'${esc(u.username)}','${u.role}')">编辑</button>
+          <button class="btn btn-small" onclick="editUserDialog(${u.id},'${esc(u.username)}','${u.role}','${u.email ? esc(u.email) : ''}')">编辑</button>
           ${u.id !== state.currentUser.id ? `<button class="btn btn-small btn-danger-outline" onclick="deleteUserConfirm(${u.id},'${esc(u.username)}')">删除</button>` : ''}
         </td></tr>`).join('') +
       '</tbody></table>';
@@ -1091,36 +1091,60 @@ async function loadUsersList() {
 async function createUserDialog() {
   const username = await dialogModal.prompt({ title: '创建用户', label: '用户名', placeholder: '输入用户名' });
   if (!username) return;
+  const email = await dialogModal.prompt({ title: '创建用户', label: '邮箱（可选）', placeholder: 'user@example.com' });
   const password = await dialogModal.prompt({ title: '创建用户', label: '密码（至少 8 位）', placeholder: '输入密码' });
   if (!password || password.length < 8) { if (password) toast('密码至少 8 位', 'error'); return; }
   const role = await dialogModal.prompt({ title: '创建用户', label: '角色 (admin/user)', value: 'user' });
   if (!role) return;
   try {
-    await api('/api/users', { method: 'POST', body: { username, password, role: role || 'user' } });
+    const body = { username, password, role: role || 'user' };
+    if (email) body.email = email;
+    await api('/api/users', { method: 'POST', body });
     toast('用户已创建');
     loadUsersList();
   } catch (e) { toast(e.message, 'error'); }
 }
 
 // 需要挂到 window 上因为 users table 用了 inline onclick
-window.editUserDialog = async function(id, username, role) {
-  const changeRole = await dialogModal.confirm({ title: '编辑用户: ' + username, message: '选择操作', confirmText: '修改角色', cancelText: '重置密码' });
-  if (changeRole) {
-    const newRole = await dialogModal.prompt({ title: '修改角色', label: '新角色 (admin/user)', value: role });
-    if (!newRole) return;
+window.editUserDialog = async function(id, username, role, email) {
+  const ops = ['修改用户名/邮箱', '修改角色', '重置密码'];
+  const choice = await dialogModal.confirm({
+    title: '编辑用户: ' + username,
+    message: '请选择操作',
+    confirmText: '修改资料',
+    cancelText: '更多操作…'
+  });
+
+  if (choice) {
+    // 修改资料
+    const newUsername = await dialogModal.prompt({ title: '修改用户名', label: '用户名', value: username });
+    if (!newUsername) return;
+    const newEmail = await dialogModal.prompt({ title: '修改邮箱', label: '邮箱（留空清除）', value: email || '' });
     try {
-      await api('/api/users/' + id, { method: 'PUT', body: { role: newRole } });
-      toast('角色已更新');
+      await api('/api/users/' + id, { method: 'PUT', body: { username: newUsername, email: newEmail || '' } });
+      toast('资料已更新');
       loadUsersList();
     } catch (e) { toast(e.message, 'error'); }
   } else {
-    const pwd = await dialogModal.prompt({ title: '重置密码', label: '新密码（至少 8 位）' });
-    if (!pwd) return;
-    if (pwd.length < 8) { toast('密码至少 8 位', 'error'); return; }
-    try {
-      await api('/api/users/' + id, { method: 'PUT', body: { password: pwd } });
-      toast('密码已重置');
-    } catch (e) { toast(e.message, 'error'); }
+    // 更多操作：修改角色或重置密码
+    const changeRole = await dialogModal.confirm({ title: '更多操作', message: '选择操作', confirmText: '修改角色', cancelText: '重置密码' });
+    if (changeRole) {
+      const newRole = await dialogModal.prompt({ title: '修改角色', label: '新角色 (admin/user)', value: role });
+      if (!newRole) return;
+      try {
+        await api('/api/users/' + id, { method: 'PUT', body: { role: newRole } });
+        toast('角色已更新');
+        loadUsersList();
+      } catch (e) { toast(e.message, 'error'); }
+    } else {
+      const pwd = await dialogModal.prompt({ title: '重置密码', label: '新密码（至少 8 位）' });
+      if (!pwd) return;
+      if (pwd.length < 8) { toast('密码至少 8 位', 'error'); return; }
+      try {
+        await api('/api/users/' + id, { method: 'PUT', body: { password: pwd } });
+        toast('密码已重置');
+      } catch (e) { toast(e.message, 'error'); }
+    }
   }
 };
 
