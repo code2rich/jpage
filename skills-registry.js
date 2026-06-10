@@ -97,7 +97,7 @@ function listSkills() {
     const skillMd = path.join(skillRoot, 'SKILL.md');
     if (!fs.existsSync(skillMd)) continue;
     const meta = readSkillMeta(name);
-    if (meta && !meta.hidden) {
+    if (meta) {
       skills.push({
         name: meta.name,
         title: meta.title,

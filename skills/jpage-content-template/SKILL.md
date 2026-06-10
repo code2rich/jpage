@@ -1,7 +1,6 @@
 ---
 name: jpage-content-template
 description: 当用户要生成 HTML/Markdown 内容时，先从模板市场查找风格样例，参照样例的风格生成新内容。适用于用户要求生成页面、报告、仪表板等，且希望有特定风格参考的场景。
-hidden: true
 ---
 
 # 核心规则
