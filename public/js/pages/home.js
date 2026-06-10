@@ -28,7 +28,7 @@ function renderHome(container) {
   const userEl = container.querySelector('#header-user');
   if (state.currentUser) {
     const roleBadge = state.currentUser.role === 'admin' ? '' : ' <small style="color:var(--text-secondary);font-weight:400">(用户)</small>';
-    userEl.innerHTML = state.currentUser.username + roleBadge;
+    userEl.innerHTML = escapeHtml(state.currentUser.username) + roleBadge;
   }
 
   // 根据角色显示/隐藏 admin-only 元素
@@ -1063,7 +1063,7 @@ function openUsersModal() {
   modal.querySelector('#users-modal-close').onclick = () => { closeModal(modal); };
   modal.querySelector('#users-modal-dismiss').onclick = () => { closeModal(modal); };
   modal.querySelector('#btn-create-user').onclick = () => createUserDialog();
-  modal.addEventListener('click', e => { if (e.target === modal) closeModal(modal); });
+  if (!modal.dataset.bound) { modal.dataset.bound = '1'; modal.addEventListener('click', e => { if (e.target === modal) closeModal(modal); }); }
 }
 
 async function loadUsersList() {
@@ -1079,8 +1079,8 @@ async function loadUsersList() {
         <td><span class="role-badge role-${u.role}">${u.role === 'admin' ? '管理员' : '用户'}</span></td>
         <td>${formatDate(u.created_at)}</td>
         <td class="users-actions">
-          <button class="btn btn-small btn-edit-user" data-id="${u.id}" data-username="${esc(u.username)}" data-role="${u.role}" data-email="${u.email ? esc(u.email) : ''}">编辑</button>
-          ${u.id !== state.currentUser.id ? `<button class="btn btn-small btn-danger-outline btn-delete-user" data-id="${u.id}" data-username="${esc(u.username)}">删除</button>` : ''}
+          <button class="btn btn-small btn-edit-user" data-id="${u.id}" data-username="${escapeHtml(u.username)}" data-role="${u.role}" data-email="${u.email ? escapeHtml(u.email) : ''}">编辑</button>
+          ${u.id !== state.currentUser.id ? `<button class="btn btn-small btn-danger-outline btn-delete-user" data-id="${u.id}" data-username="${escapeHtml(u.username)}">删除</button>` : ''}
         </td></tr>`).join('') +
       '</tbody></table>';
     wrap.querySelectorAll('.btn-edit-user').forEach(btn => {
@@ -1155,7 +1155,7 @@ async function editUserDialog(id, username, role, email) {
 };
 
 async function deleteUserConfirm(id, username) {
-  const ok = await dialogModal.confirm({ title: '删除用户', message: `确定删除用户 ${username}？其文件将转交给管理员。`, danger: true });
+  const ok = await dialogModal.confirm({ title: '删除用户', message: `确定删除用户 <strong>${escapeHtml(username)}</strong>？其文件将转交给管理员。`, danger: true });
   if (!ok) return;
   try {
     await api('/api/users/' + id, { method: 'DELETE' });
@@ -1172,7 +1172,7 @@ function openTokensModal() {
   modal.querySelector('#tokens-modal-close').onclick = () => { closeModal(modal); };
   modal.querySelector('#tokens-modal-dismiss').onclick = () => { closeModal(modal); };
   modal.querySelector('#btn-create-token').onclick = () => createTokenDialog();
-  modal.addEventListener('click', e => { if (e.target === modal) closeModal(modal); });
+  if (!modal.dataset.bound) { modal.dataset.bound = '1'; modal.addEventListener('click', e => { if (e.target === modal) closeModal(modal); }); }
 }
 
 async function loadTokensList() {
@@ -1244,7 +1244,7 @@ function openPasswordModal() {
       errorEl.hidden = false;
     }
   };
-  modal.addEventListener('click', e => { if (e.target === modal) closeModal(modal); });
+  if (!modal.dataset.bound) { modal.dataset.bound = '1'; modal.addEventListener('click', e => { if (e.target === modal) closeModal(modal); }); }
 }
 
 // ---------- 个人资料弹窗 ----------
@@ -1282,7 +1282,10 @@ function openProfileModal() {
       errorEl.hidden = false;
     }
   };
-  modal.addEventListener('click', e => { if (e.target === modal) closeModal(modal); });
+  if (!modal.dataset.bound) {
+    modal.dataset.bound = '1';
+    modal.addEventListener('click', e => { if (e.target === modal) closeModal(modal); });
+  }
 }
 
 // ---------- 数据管理弹窗 ----------
@@ -1317,7 +1320,7 @@ async function openBackupModal() {
   const hideModal = () => { closeModal(modal); };
   modal.querySelector('#backup-modal-close').onclick = hideModal;
   modal.querySelector('#backup-modal-dismiss').onclick = hideModal;
-  modal.addEventListener('click', e => { if (e.target === modal) hideModal(); });
+  if (!modal.dataset.bound) { modal.dataset.bound = '1'; modal.addEventListener('click', e => { if (e.target === modal) hideModal(); }); }
 
   modal.querySelector('#btn-export-backup').onclick = () => {
     window.location.href = '/api/admin/export';
