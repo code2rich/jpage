@@ -205,12 +205,16 @@
   </form>
   <form class="login-form auth-panel" id="register-form" autocomplete="on">
     <label class="login-field">
-      <span>邮箱 <small>(可选)</small></span>
-      <input type="email" name="email" id="register-email" autocomplete="email">
+      <span>邮箱</span>
+      <input type="email" name="email" id="register-email" autocomplete="email" required placeholder="用于接收验证码">
     </label>
+    <div class="register-code-row">
+      <input type="text" id="register-code" placeholder="6 位验证码" maxlength="6" inputmode="numeric" pattern="\d{6}" required autocomplete="one-time-code">
+      <button type="button" class="btn btn-small" id="btn-send-code">发送验证码</button>
+    </div>
     <label class="login-field">
-      <span>用户名</span>
-      <input type="text" name="username" id="register-username" autocomplete="username" placeholder="字母、数字、下划线">
+      <span>用户名 <small>(可选)</small></span>
+      <input type="text" name="username" id="register-username" autocomplete="username" placeholder="不填则从邮箱自动生成">
     </label>
     <label class="login-field">
       <span>密码</span>

@@ -530,6 +530,14 @@ const registerLimiter = rateLimit({
   legacyHeaders: false
 });
 
+const sendCodeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 1,
+  message: { error: '发送过于频繁，请 1 分钟后再试' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 function decodeFilename(name) {
   if (!name) return name;
   // 如果字符串已包含非 latin1 字符（如中文），说明 multer 已正确解码，直接返回
@@ -651,35 +659,38 @@ async function generateUsernameFromEmail(email) {
 }
 
 app.post('/api/auth/register', registerLimiter, async (req, res) => {
-  const { email, username, password, confirmPassword } = req.body || {};
+  const { email, username, password, confirmPassword, code } = req.body || {};
+  if (!email) return res.status(400).json({ error: '请填写邮箱' });
+  if (!code) return res.status(400).json({ error: '请填写验证码' });
   if (!password || !confirmPassword) return res.status(400).json({ error: '请填写密码' });
-  if (!email && !username) return res.status(400).json({ error: '请填写用户名或邮箱' });
   if (password.length < 8) return res.status(400).json({ error: '密码至少 8 位' });
   if (password !== confirmPassword) return res.status(400).json({ error: '两次密码不一致' });
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  let finalEmail = null;
+  if (!emailRegex.test(email)) return res.status(400).json({ error: '邮箱格式不正确' });
+
+  // 验证码校验
+  const codeHash = crypto.createHash('sha256').update(code + email).digest('hex');
+  const codeRow = await dbGet(
+    "SELECT * FROM email_verifications WHERE type = 'register_code' AND new_email = ? AND token_hash = ? AND expires_at > datetime('now')",
+    [email, codeHash]
+  );
+  if (!codeRow) return res.status(400).json({ error: '验证码无效或已过期' });
+  await dbRun('DELETE FROM email_verifications WHERE id = ?', [codeRow.id]);
+
   let finalUsername = username;
 
-  if (email) {
-    if (!emailRegex.test(email)) return res.status(400).json({ error: '邮箱格式不正确' });
-    finalEmail = email;
-  }
-
   try {
-    // 唯一性检查：email 不能与已有的 email 或 username 冲突
-    if (finalEmail) {
-      const emailConflict = await dbGet('SELECT id FROM users WHERE email = ? OR username = ?', [finalEmail, finalEmail]);
-      if (emailConflict) return res.status(409).json({ error: '该邮箱已被使用' });
-    }
+    // 邮箱唯一性检查
+    const emailConflict = await dbGet('SELECT id FROM users WHERE email = ? OR username = ?', [email, email]);
+    if (emailConflict) return res.status(409).json({ error: '该邮箱已被使用' });
+
     // 如果没提供 username，从邮箱自动生成
     if (!finalUsername) {
-      if (!finalEmail) return res.status(400).json({ error: '请填写用户名或邮箱' });
-      finalUsername = await generateUsernameFromEmail(finalEmail);
+      finalUsername = await generateUsernameFromEmail(email);
     } else {
-      // username 唯一性检查
-      if (finalUsername.length > 30 || !/^[a-zA-Z0-9_]+$/.test(finalUsername)) {
-        return res.status(400).json({ error: '用户名只能包含字母、数字和下划线，最多 30 位' });
+      if (finalUsername.length < 2 || finalUsername.length > 30 || !/^[a-zA-Z0-9_]+$/.test(finalUsername)) {
+        return res.status(400).json({ error: '用户名只能包含字母、数字和下划线，2-30 位' });
       }
       const nameConflict = await dbGet('SELECT id FROM users WHERE username = ? OR email = ?', [finalUsername, finalUsername]);
       if (nameConflict) return res.status(409).json({ error: '该用户名已被使用' });
@@ -687,15 +698,14 @@ app.post('/api/auth/register', registerLimiter, async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
     const result = await dbRun(
-      'INSERT INTO users (username, email, email_verified, password_hash, role) VALUES (?, ?, 0, ?, ?)',
-      [finalUsername, finalEmail, hash, 'user']
+      'INSERT INTO users (username, email, email_verified, password_hash, role) VALUES (?, ?, 1, ?, ?)',
+      [finalUsername, email, hash, 'user']
     );
     req.session.userId = result.lastID;
     req.session.username = finalUsername;
     req.session.userRole = 'user';
-    logger.audit('register', { username: finalUsername, email: finalEmail, userId: result.lastID, ip: clientIp(req) });
-    if (finalEmail) sendVerificationEmail(result.lastID, finalEmail, 'verify_email').catch(() => {});
-    res.status(201).json({ id: result.lastID, username: finalUsername, email: finalEmail, emailVerified: false, role: 'user' });
+    logger.audit('register', { username: finalUsername, email, userId: result.lastID, ip: clientIp(req) });
+    res.status(201).json({ id: result.lastID, username: finalUsername, email, emailVerified: true, role: 'user' });
   } catch (e) {
     logger.error({ type: 'app', msg: 'register error', error: e.message });
     if (e.message && e.message.includes('UNIQUE')) return res.status(409).json({ error: '用户名或邮箱已存在' });
@@ -855,6 +865,47 @@ app.post('/api/auth/resend-verification', requireAuth, resendLimiter, async (req
     res.json({ success: true, sent: result.sent });
   } catch (e) {
     res.status(500).json({ error: '发送失败' });
+  }
+});
+
+// POST /api/auth/send-register-code
+app.post('/api/auth/send-register-code', sendCodeLimiter, async (req, res) => {
+  const { email } = req.body || {};
+  if (!email) return res.status(400).json({ error: '请填写邮箱' });
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) return res.status(400).json({ error: '邮箱格式不正确' });
+
+  // 邮箱唯一性检查
+  const conflict = await dbGet('SELECT id FROM users WHERE email = ? OR username = ?', [email, email]);
+  if (conflict) return res.status(409).json({ error: '该邮箱已被使用' });
+
+  if (!isMailerConfigured()) return res.status(503).json({ error: '邮件服务未配置，无法注册' });
+
+  // 生成 6 位数字验证码
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  const hash = crypto.createHash('sha256').update(code + email).digest('hex');
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+  // 删除该邮箱之前的注册验证码
+  await dbRun("DELETE FROM email_verifications WHERE type = 'register_code' AND new_email = ?", [email]);
+  await dbRun(
+    'INSERT INTO email_verifications (user_id, token_hash, token_prefix, type, new_email, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [0, hash, code.slice(0, 3) + '***', 'register_code', email, expiresAt]
+  );
+
+  try {
+    await sendMail(email, '注册验证码 — 即页',
+      `<div style="max-width:480px;margin:0 auto;padding:32px 24px;font-family:system-ui,-apple-system,sans-serif;color:#333">
+        <h2 style="margin:0 0 24px;font-size:20px;color:#111">注册验证码</h2>
+        <p style="margin:0 0 16px;font-size:15px">你的注册验证码是：</p>
+        <p style="margin:0 0 24px;font-size:32px;font-weight:700;letter-spacing:6px;color:#4f46e5">${code}</p>
+        <p style="margin:0;font-size:13px;color:#888">验证码 10 分钟内有效。如非本人操作请忽略。</p>
+      </div>`
+    );
+    res.json({ sent: true });
+  } catch (e) {
+    logger.error({ type: 'app', message: '发送注册验证码失败', error: e.message });
+    res.status(500).json({ error: '验证码发送失败，请稍后重试' });
   }
 });
 
