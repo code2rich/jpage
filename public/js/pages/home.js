@@ -35,6 +35,18 @@ function renderHome(container) {
   const adminEls = container.querySelectorAll('.admin-only');
   adminEls.forEach(el => { el.style.display = state.currentUser.role === 'admin' ? 'block' : 'none'; });
 
+  // 邮箱验证提示条
+  const verifyBanner = container.querySelector('#email-verify-banner');
+  if (state.currentUser.email && !state.currentUser.emailVerified) {
+    verifyBanner.hidden = false;
+    container.querySelector('#btn-resend-verify').addEventListener('click', async () => {
+      try {
+        const data = await api('/api/auth/resend-verification', { method: 'POST' });
+        toast(data.sent ? '验证邮件已发送，请查收' : 'SMTP 未配置，无法发送验证邮件');
+      } catch (e) { toast(e.message, 'error'); }
+    });
+  }
+
   const logoutBtn = container.querySelector('#btn-logout');
   logoutBtn.addEventListener('click', async () => {
     try {
@@ -130,6 +142,11 @@ function renderHome(container) {
       settingsDropdown.classList.remove('open');
       settingsBtn.setAttribute('aria-expanded', 'false');
       openPasswordModal();
+    });
+    settingsDropdown.querySelector('#menu-item-profile')?.addEventListener('click', () => {
+      settingsDropdown.classList.remove('open');
+      settingsBtn.setAttribute('aria-expanded', 'false');
+      openProfileModal();
     });
     settingsDropdown.querySelector('#menu-item-users')?.addEventListener('click', () => {
       settingsDropdown.classList.remove('open');
@@ -1054,10 +1071,11 @@ async function loadUsersList() {
   try {
     const data = await api('/api/users');
     const users = data.users || [];
-    wrap.innerHTML = '<table class="users-table"><thead><tr><th>ID</th><th>用户名</th><th>角色</th><th>创建时间</th><th>操作</th></tr></thead><tbody>' +
+    wrap.innerHTML = '<table class="users-table"><thead><tr><th>ID</th><th>用户名</th><th>邮箱</th><th>角色</th><th>创建时间</th><th>操作</th></tr></thead><tbody>' +
       users.map(u => `<tr>
         <td>${u.id}</td>
         <td>${esc(u.username)}</td>
+        <td>${u.email ? esc(u.email) : '<span style="color:var(--text-muted)">-</span>'}</td>
         <td><span class="role-badge role-${u.role}">${u.role === 'admin' ? '管理员' : '用户'}</span></td>
         <td>${formatDate(u.created_at)}</td>
         <td class="users-actions">
@@ -1189,6 +1207,44 @@ function openPasswordModal() {
     try {
       await api('/api/auth/change-password', { method: 'POST', body: { currentPassword: currentPwd, newPassword: newPwd } });
       toast('密码已修改');
+      closeModal(modal);
+    } catch (e) {
+      errorEl.textContent = e.message;
+      errorEl.hidden = false;
+    }
+  };
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(modal); });
+}
+
+// ---------- 个人资料弹窗 ----------
+function openProfileModal() {
+  const modal = document.getElementById('profile-modal');
+  openModal(modal);
+  const u = state.currentUser || {};
+  modal.querySelector('#profile-username').value = u.username || '';
+  modal.querySelector('#profile-email').value = u.email || '';
+  const errorEl = modal.querySelector('#profile-error');
+  errorEl.hidden = true;
+
+  modal.querySelector('#profile-modal-close').onclick = () => { closeModal(modal); };
+  modal.querySelector('#profile-modal-cancel').onclick = () => { closeModal(modal); };
+  modal.querySelector('#profile-modal-submit').onclick = async () => {
+    const username = modal.querySelector('#profile-username').value.trim();
+    const email = modal.querySelector('#profile-email').value.trim();
+    errorEl.hidden = true;
+    if (!username) { errorEl.textContent = '用户名不能为空'; errorEl.hidden = false; return; }
+    try {
+      const body = { username };
+      if (email !== (u.email || '')) body.email = email || '';
+      const data = await api('/api/auth/profile', { method: 'POST', body });
+      // 更新本地状态
+      if (data.username) state.currentUser.username = data.username;
+      state.currentUser.email = data.email || null;
+      state.currentUser.emailVerified = data.emailVerified;
+      // 更新 header 显示
+      const headerUser = document.getElementById('header-user');
+      if (headerUser) headerUser.textContent = data.username || u.username;
+      toast('资料已更新');
       closeModal(modal);
     } catch (e) {
       errorEl.textContent = e.message;

@@ -10,6 +10,7 @@ const bcrypt = require('bcryptjs');
 const helmet = require('helmet');
 const sqlite3 = require('sqlite3').verbose();
 const { runMigrations, dbRun: _dbRun, dbGet: _dbGet, dbAll: _dbAll } = require('./migrations');
+const { initMailer, sendMail, getAppUrl, isMailerConfigured } = require('./mailer');
 const { marked } = require('marked');
 const { markedHighlight } = require('marked-highlight');
 const hljs = require('highlight.js');
@@ -521,6 +522,14 @@ const loginLimiter = rateLimit({
   legacyHeaders: false
 });
 
+const registerLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: '注册请求过于频繁，请稍后再试' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 function decodeFilename(name) {
   if (!name) return name;
   // 如果字符串已包含非 latin1 字符（如中文），说明 multer 已正确解码，直接返回
@@ -588,35 +597,109 @@ app.get('/health', async (req, res) => {
 app.get('/api/auth/me', async (req, res) => {
   if (!req.session || !req.session.userId) return res.status(401).json({ error: '未登录' });
   try {
-    const user = await dbGet('SELECT id, username, role FROM users WHERE id = ?', [req.session.userId]);
+    const user = await dbGet('SELECT id, username, email, email_verified, role FROM users WHERE id = ?', [req.session.userId]);
     if (!user) {
       req.session.destroy(() => {});
       return res.status(401).json({ error: '未登录' });
     }
-    res.json({ id: user.id, username: user.username, role: user.role });
+    res.json({ id: user.id, username: user.username, email: user.email || null, emailVerified: !!user.email_verified, role: user.role });
   } catch (e) {
     res.status(500).json({ error: '查询失败' });
   }
 });
 
 app.post('/api/auth/login', loginLimiter, async (req, res) => {
-  const { username, password } = req.body || {};
-  if (!username || !password) return res.status(400).json({ error: '用户名和密码不能为空' });
+  const { username, account, password } = req.body || {};
+  const input = account || username;
+  if (!input || !password) return res.status(400).json({ error: '用户名和密码不能为空' });
   try {
-    const user = await dbGet('SELECT * FROM users WHERE username = ?', [username]);
+    // 统一入口：自动识别用户名或邮箱
+    const isEmail = input.includes('@');
+    const user = isEmail
+      ? await dbGet('SELECT * FROM users WHERE email = ?', [input])
+      : await dbGet('SELECT * FROM users WHERE username = ?', [input]);
     if (!user) return res.status(401).json({ error: '登录失败' });
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) {
-      logger.audit('login', { username, ip: clientIp(req), success: false });
+      logger.audit('login', { username: input, ip: clientIp(req), success: false });
       return res.status(401).json({ error: '登录失败' });
     }
     req.session.userId = user.id;
     req.session.username = user.username;
     req.session.userRole = user.role;
-    logger.audit('login', { username, ip: clientIp(req), success: true });
-    res.json({ id: user.id, username: user.username, role: user.role });
+    logger.audit('login', { username: user.username, ip: clientIp(req), success: true });
+    res.json({ id: user.id, username: user.username, email: user.email || null, emailVerified: !!user.email_verified, role: user.role });
   } catch (e) {
     res.status(500).json({ error: '登录失败' });
+  }
+});
+
+// --- 注册 ---
+
+// 从邮箱前缀生成唯一用户名
+async function generateUsernameFromEmail(email) {
+  let base = email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '').slice(0, 24);
+  if (!base) base = 'user';
+  let username = base;
+  let suffix = 1;
+  while (await dbGet('SELECT id FROM users WHERE username = ?', [username])) {
+    username = base + suffix;
+    suffix++;
+    if (username.length > 30) username = base.slice(0, 24) + suffix;
+  }
+  return username;
+}
+
+app.post('/api/auth/register', registerLimiter, async (req, res) => {
+  const { email, username, password, confirmPassword } = req.body || {};
+  if (!password || !confirmPassword) return res.status(400).json({ error: '请填写密码' });
+  if (!email && !username) return res.status(400).json({ error: '请填写用户名或邮箱' });
+  if (password.length < 8) return res.status(400).json({ error: '密码至少 8 位' });
+  if (password !== confirmPassword) return res.status(400).json({ error: '两次密码不一致' });
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  let finalEmail = null;
+  let finalUsername = username;
+
+  if (email) {
+    if (!emailRegex.test(email)) return res.status(400).json({ error: '邮箱格式不正确' });
+    finalEmail = email;
+  }
+
+  try {
+    // 唯一性检查：email 不能与已有的 email 或 username 冲突
+    if (finalEmail) {
+      const emailConflict = await dbGet('SELECT id FROM users WHERE email = ? OR username = ?', [finalEmail, finalEmail]);
+      if (emailConflict) return res.status(409).json({ error: '该邮箱已被使用' });
+    }
+    // 如果没提供 username，从邮箱自动生成
+    if (!finalUsername) {
+      if (!finalEmail) return res.status(400).json({ error: '请填写用户名或邮箱' });
+      finalUsername = await generateUsernameFromEmail(finalEmail);
+    } else {
+      // username 唯一性检查
+      if (finalUsername.length > 30 || !/^[a-zA-Z0-9_]+$/.test(finalUsername)) {
+        return res.status(400).json({ error: '用户名只能包含字母、数字和下划线，最多 30 位' });
+      }
+      const nameConflict = await dbGet('SELECT id FROM users WHERE username = ? OR email = ?', [finalUsername, finalUsername]);
+      if (nameConflict) return res.status(409).json({ error: '该用户名已被使用' });
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+    const result = await dbRun(
+      'INSERT INTO users (username, email, email_verified, password_hash, role) VALUES (?, ?, 0, ?, ?)',
+      [finalUsername, finalEmail, hash, 'user']
+    );
+    req.session.userId = result.lastID;
+    req.session.username = finalUsername;
+    req.session.userRole = 'user';
+    logger.audit('register', { username: finalUsername, email: finalEmail, userId: result.lastID, ip: clientIp(req) });
+    if (finalEmail) sendVerificationEmail(result.lastID, finalEmail, 'verify_email').catch(() => {});
+    res.status(201).json({ id: result.lastID, username: finalUsername, email: finalEmail, emailVerified: false, role: 'user' });
+  } catch (e) {
+    logger.error({ type: 'app', msg: 'register error', error: e.message });
+    if (e.message && e.message.includes('UNIQUE')) return res.status(409).json({ error: '用户名或邮箱已存在' });
+    res.status(500).json({ error: '注册失败，请稍后重试' });
   }
 });
 
@@ -649,31 +732,174 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
   }
 });
 
+// --- 个人资料编辑 ---
+app.post('/api/auth/profile', requireAuth, async (req, res) => {
+  const { username, email } = req.body || {};
+  if (!username && email === undefined) return res.status(400).json({ error: '无更新字段' });
+  try {
+    const user = await dbGet('SELECT * FROM users WHERE id = ?', [req.userId]);
+    if (!user) return res.status(401).json({ error: '未登录' });
+    const changes = {};
+    if (username && username !== user.username) {
+      if (username.length > 30 || username.length < 2 || !/^[a-zA-Z0-9_]+$/.test(username)) {
+        return res.status(400).json({ error: '用户名 2-30 位，只能包含字母、数字和下划线' });
+      }
+      const conflict = await dbGet('SELECT id FROM users WHERE username = ? AND id != ?', [username, req.userId]);
+      if (conflict) return res.status(409).json({ error: '该用户名已被使用' });
+      await dbRun('UPDATE users SET username = ? WHERE id = ?', [username, req.userId]);
+      req.session.username = username;
+      changes.username = username;
+    }
+    if (email !== undefined && email !== user.email) {
+      if (email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) return res.status(400).json({ error: '邮箱格式不正确' });
+        const conflict = await dbGet('SELECT id FROM users WHERE (email = ? OR username = ?) AND id != ?', [email, email, req.userId]);
+        if (conflict) return res.status(409).json({ error: '该邮箱已被使用' });
+        await dbRun('UPDATE users SET email = ?, email_verified = 0 WHERE id = ?', [email, req.userId]);
+        changes.email = email;
+        changes.emailVerified = false;
+        await sendVerificationEmail(req.userId, email, 'verify_email');
+      } else {
+        await dbRun('UPDATE users SET email = NULL, email_verified = 0 WHERE id = ?', [req.userId]);
+        changes.email = null;
+        changes.emailVerified = false;
+      }
+    }
+    logger.audit('profile.update', { userId: req.userId, changes, ip: clientIp(req) });
+    const updated = await dbGet('SELECT username, email, email_verified FROM users WHERE id = ?', [req.userId]);
+    res.json({ username: updated.username, email: updated.email || null, emailVerified: !!updated.email_verified });
+  } catch (e) {
+    res.status(500).json({ error: '更新失败' });
+  }
+});
+
+// --- 邮箱验证 ---
+function generateVerifyToken() {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const bytes = crypto.randomBytes(32);
+  let token = 'jv_';
+  for (let i = 0; i < 32; i++) token += chars[bytes[i] % chars.length];
+  return token;
+}
+
+async function sendVerificationEmail(userId, email, type, newEmail) {
+  const token = generateVerifyToken();
+  const hash = crypto.createHash('sha256').update(token).digest('hex');
+  const prefix = token.slice(0, 8);
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+  await dbRun("DELETE FROM email_verifications WHERE user_id = ? AND type = ?", [userId, type]);
+  await dbRun(
+    'INSERT INTO email_verifications (user_id, token_hash, token_prefix, type, new_email, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [userId, hash, prefix, type, newEmail || null, expiresAt]
+  );
+
+  if (!isMailerConfigured()) return { sent: false };
+
+  const targetEmail = newEmail || email;
+  const appUrl = getAppUrl();
+  const link = `${appUrl}/api/auth/verify-email?token=${token}`;
+  try {
+    await sendMail(targetEmail, '验证你的邮箱 — 即页',
+      `<div style="max-width:480px;margin:0 auto;font-family:system-ui,sans-serif;padding:24px">
+        <h2 style="color:#1a1a1a">验证你的邮箱</h2>
+        <p style="color:#555;font-size:15px">请点击以下按钮验证你的邮箱地址：</p>
+        <p style="margin:24px 0"><a href="${link}" style="display:inline-block;padding:12px 28px;background:#4f46e5;color:#fff;border-radius:6px;text-decoration:none;font-size:15px">验证邮箱</a></p>
+        <p style="color:#888;font-size:13px">或复制链接到浏览器：<br><a href="${link}" style="word-break:break-all">${link}</a></p>
+        <p style="color:#888;font-size:13px">链接 24 小时内有效。</p>
+      </div>`
+    );
+    return { sent: true };
+  } catch (e) {
+    logger.error({ type: 'app', message: '发送验证邮件失败', error: e.message, userId });
+    return { sent: false, error: e.message };
+  }
+}
+
+// GET /api/auth/verify-email?token=...
+app.get('/api/auth/verify-email', async (req, res) => {
+  const { token } = req.query;
+  if (!token) return res.redirect('/#/email-verify-failed');
+  try {
+    const hash = crypto.createHash('sha256').update(token).digest('hex');
+    const row = await dbGet('SELECT * FROM email_verifications WHERE token_hash = ?', [hash]);
+    if (!row) return res.redirect('/#/email-verify-failed');
+    if (new Date(row.expires_at) < new Date()) {
+      await dbRun('DELETE FROM email_verifications WHERE id = ?', [row.id]);
+      return res.redirect('/#/email-verify-expired');
+    }
+    if (row.type === 'verify_email') {
+      await dbRun('UPDATE users SET email_verified = 1 WHERE id = ?', [row.user_id]);
+    } else if (row.type === 'change_email' && row.new_email) {
+      await dbRun('UPDATE users SET email = ?, email_verified = 1 WHERE id = ?', [row.new_email, row.user_id]);
+    }
+    await dbRun('DELETE FROM email_verifications WHERE id = ?', [row.id]);
+    logger.audit('email.verify', { userId: row.user_id, type: row.type });
+    res.redirect('/#/email-verified');
+  } catch (e) {
+    logger.error({ type: 'app', message: '邮箱验证失败', error: e.message });
+    res.redirect('/#/email-verify-failed');
+  }
+});
+
+// POST /api/auth/resend-verification
+const resendLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false, message: { error: '请求过于频繁，请稍后再试' } });
+app.post('/api/auth/resend-verification', requireAuth, resendLimiter, async (req, res) => {
+  try {
+    const user = await dbGet('SELECT * FROM users WHERE id = ?', [req.userId]);
+    if (!user) return res.status(401).json({ error: '未登录' });
+    if (!user.email) return res.status(400).json({ error: '未设置邮箱' });
+    if (user.email_verified) return res.status(400).json({ error: '邮箱已验证' });
+    const result = await sendVerificationEmail(user.id, user.email, 'verify_email');
+    res.json({ success: true, sent: result.sent });
+  } catch (e) {
+    res.status(500).json({ error: '发送失败' });
+  }
+});
+
+// GET /api/auth/smtp-status
+app.get('/api/auth/smtp-status', (req, res) => {
+  res.json({ configured: isMailerConfigured() });
+});
+
 // --- 用户管理（仅 admin） ---
 app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const users = await dbAll('SELECT id, username, role, created_at FROM users ORDER BY id ASC');
-    res.json({ users });
+    const users = await dbAll('SELECT id, username, email, email_verified, role, created_at FROM users ORDER BY id ASC');
+    res.json({ users: users.map(u => ({ ...u, emailVerified: !!u.email_verified })) });
   } catch (e) {
     res.status(500).json({ error: '获取用户列表失败' });
   }
 });
 
 app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
-  const { username, password, role } = req.body || {};
+  const { username, password, role, email } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: '用户名和密码不能为空' });
   if (password.length < 8) return res.status(400).json({ error: '密码至少 8 位' });
   if (!['admin', 'user'].includes(role || 'user')) return res.status(400).json({ error: '无效角色' });
+  if (email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return res.status(400).json({ error: '邮箱格式不正确' });
+  }
   try {
+    // 唯一性检查
+    if (email) {
+      const emailConflict = await dbGet('SELECT id FROM users WHERE email = ? OR username = ?', [email, email]);
+      if (emailConflict) return res.status(409).json({ error: '该邮箱已被使用' });
+    }
+    const nameConflict = await dbGet('SELECT id FROM users WHERE username = ?', [username]);
+    if (nameConflict) return res.status(409).json({ error: '用户名已存在' });
+
     const hash = await bcrypt.hash(password, 10);
     const result = await dbRun(
-      'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
-      [username, hash, role || 'user']
+      'INSERT INTO users (username, email, email_verified, password_hash, role) VALUES (?, ?, ?, ?, ?)',
+      [username, email || null, email ? 1 : 0, hash, role || 'user']
     );
-    logger.audit('user.create', { userId: result.lastID, username, role: role || 'user', createdBy: req.userId, ip: clientIp(req) });
-    res.json({ id: result.lastID, username, role: role || 'user' });
+    logger.audit('user.create', { userId: result.lastID, username, email, role: role || 'user', createdBy: req.userId, ip: clientIp(req) });
+    res.json({ id: result.lastID, username, email: email || null, role: role || 'user' });
   } catch (e) {
-    if (e.message && e.message.includes('UNIQUE')) return res.status(400).json({ error: '用户名已存在' });
+    if (e.message && e.message.includes('UNIQUE')) return res.status(400).json({ error: '用户名或邮箱已存在' });
     res.status(500).json({ error: '创建用户失败' });
   }
 });
@@ -681,11 +907,30 @@ app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
 app.put('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
   const targetId = parseInt(req.params.id);
   if (isNaN(targetId)) return res.status(400).json({ error: '无效用户 ID' });
-  const { role, password } = req.body || {};
-  if (!role && !password) return res.status(400).json({ error: '无更新字段' });
+  const { role, password, username, email } = req.body || {};
+  if (!role && !password && !username && email === undefined) return res.status(400).json({ error: '无更新字段' });
   try {
     const user = await dbGet('SELECT * FROM users WHERE id = ?', [targetId]);
     if (!user) return res.status(404).json({ error: '用户不存在' });
+    if (username) {
+      if (username.length > 30 || !/^[a-zA-Z0-9_]+$/.test(username)) {
+        return res.status(400).json({ error: '用户名只能包含字母、数字和下划线，最多 30 位' });
+      }
+      const conflict = await dbGet('SELECT id FROM users WHERE username = ? AND id != ?', [username, targetId]);
+      if (conflict) return res.status(409).json({ error: '用户名已存在' });
+      await dbRun('UPDATE users SET username = ? WHERE id = ?', [username, targetId]);
+    }
+    if (email !== undefined) {
+      if (email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) return res.status(400).json({ error: '邮箱格式不正确' });
+        const conflict = await dbGet('SELECT id FROM users WHERE (email = ? OR username = ?) AND id != ?', [email, email, targetId]);
+        if (conflict) return res.status(409).json({ error: '该邮箱已被使用' });
+        await dbRun('UPDATE users SET email = ?, email_verified = ? WHERE id = ?', [email, 1, targetId]);
+      } else {
+        await dbRun('UPDATE users SET email = NULL, email_verified = 0 WHERE id = ?', [targetId]);
+      }
+    }
     if (role) {
       if (!['admin', 'user'].includes(role)) return res.status(400).json({ error: '无效角色' });
       await dbRun('UPDATE users SET role = ? WHERE id = ?', [role, targetId]);
@@ -695,7 +940,7 @@ app.put('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
       const hash = await bcrypt.hash(password, 10);
       await dbRun('UPDATE users SET password_hash = ? WHERE id = ?', [hash, targetId]);
     }
-    logger.audit('user.update', { targetUserId: targetId, changes: { role, password: !!password }, updatedBy: req.userId, ip: clientIp(req) });
+    logger.audit('user.update', { targetUserId: targetId, changes: { role, username, email, password: !!password }, updatedBy: req.userId, ip: clientIp(req) });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: '更新用户失败' });
@@ -1879,6 +2124,50 @@ app.put('/api/files/:id/category', requireAuth, async (req, res) => {
 const CONTENT_TEMPLATE_MAX_SIZE = 512000; // 500KB
 const CONTENT_TEMPLATE_SCENES = ['dashboard', 'report', 'resume', 'landing', 'note', 'presentation', 'card', 'email', 'other'];
 
+// 公开模板列表（无需登录）
+app.get('/api/content-templates/public', async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(20, Math.max(1, parseInt(req.query.limit) || 8));
+    const offset = (page - 1) * limit;
+    const { scene } = req.query;
+
+    const conditions = ['ct.is_public = 1'];
+    const params = [];
+    if (scene) { conditions.push('ct.scene = ?'); params.push(scene); }
+    const where = 'WHERE ' + conditions.join(' AND ');
+
+    const total = await dbGet(`SELECT COUNT(*) as count FROM content_templates ct ${where}`, params);
+    const templates = await dbAll(
+      `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.scene, ct.style_tags, ct.use_count
+       FROM content_templates ct
+       ${where} ORDER BY ct.use_count DESC LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+    res.json({
+      templates,
+      pagination: { page, limit, total: total.count, totalPages: Math.ceil(total.count / limit) }
+    });
+  } catch (e) {
+    logger.error({ type: 'app', msg: '获取公开模板列表失败', error: e.message });
+    res.status(500).json({ error: '获取模板列表失败' });
+  }
+});
+
+// 公开模板预览（无需登录）
+app.get('/api/content-templates/public/:id/preview', async (req, res) => {
+  try {
+    const t = await dbGet(
+      'SELECT id, title, file_type, content FROM content_templates WHERE id = ? AND is_public = 1',
+      [req.params.id]
+    );
+    if (!t) return res.status(404).json({ error: '模板不存在' });
+    res.json({ id: t.id, title: t.title, file_type: t.file_type, content: t.content });
+  } catch (e) {
+    res.status(500).json({ error: '获取模板预览失败' });
+  }
+});
+
 app.get('/api/content-templates', requireAuth, async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -2330,6 +2619,7 @@ async function bootstrapAdmin() {
 app.listen(PORT, async () => {
   const mcpIp = process.env.MCP_IP || 'localhost';
   await runMigrations(db);
+  initMailer();
   loadTemplates();
   await loadTemplateNameMap();
   await backfillFtsIndex();

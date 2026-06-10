@@ -10,27 +10,344 @@
 <body>
 <div id="app"></div>
 
-<!-- 登录模板 -->
+<!-- 落地页模板 -->
+<template id="landing-template">
+<div class="landing-page">
+  <!-- 导航栏 -->
+  <nav class="landing-nav">
+    <div class="landing-nav-inner">
+      <div class="landing-nav-brand">
+        <div class="brand-mark" aria-hidden="true">即</div>
+        <span class="landing-nav-title">即页</span>
+        <span class="landing-nav-tagline">AI 原生 · 模板风格化 · 即时预览分享</span>
+      </div>
+      <div class="landing-nav-actions">
+        <button class="theme-toggle" aria-label="切换主题">
+          <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24"><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41M12 6a6 6 0 100 12 6 6 0 000-12z"/></svg>
+        </button>
+        <a class="btn btn-primary" href="#/login">登录 / 注册</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero 区域 -->
+  <section class="landing-hero">
+    <div class="landing-hero-inner">
+      <div class="landing-hero-text">
+        <div class="landing-hero-badge">
+          <span class="badge-dot"></span>
+          <span>AI 生成内容的最佳消费层</span>
+        </div>
+        <h1 class="landing-hero-title">拖入文件<br>即刻成页</h1>
+        <p class="landing-hero-desc">HTML、Markdown 零配置在线预览。8 位短链一键分享，AI 工具直连上传。让静态内容的分享回归简单。</p>
+        <div class="landing-hero-actions">
+          <a class="btn btn-primary btn-lg" href="#/login">免费开始使用</a>
+          <a class="btn btn-ghost btn-lg" href="#how-it-works">看看怎么用</a>
+        </div>
+        <div class="landing-hero-trust">
+          <div class="trust-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>无需部署</span>
+          </div>
+          <div class="trust-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>50MB 单文件</span>
+          </div>
+          <div class="trust-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>深色模式自适应</span>
+          </div>
+        </div>
+      </div>
+      <div class="landing-hero-visual">
+        <div class="browser-mockup">
+          <div class="browser-header">
+            <div class="browser-dots">
+              <span></span><span></span><span></span>
+            </div>
+            <div class="browser-address">jpage.cn</div>
+          </div>
+          <div class="browser-body">
+            <div class="mockup-upload-area">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <p>点击或拖拽上传</p>
+              <span>.html  .md  .zip</span>
+            </div>
+            <div class="mockup-file-list">
+              <div class="mockup-file-item">
+                <div class="mockup-file-icon html">HTML</div>
+                <div class="mockup-file-name">季度报告.html</div>
+                <div class="mockup-file-link">/s/a3f9k2m1</div>
+              </div>
+              <div class="mockup-file-item">
+                <div class="mockup-file-icon md">MD</div>
+                <div class="mockup-file-name">API 文档.md</div>
+                <div class="mockup-file-link">/s/x7p2n5q8</div>
+              </div>
+              <div class="mockup-file-item">
+                <div class="mockup-file-icon html">HTML</div>
+                <div class="mockup-file-name">数据仪表板.html</div>
+                <div class="mockup-file-link">/s/b8v1j4r6</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 使用流程 -->
+  <section class="landing-how" id="how-it-works">
+    <div class="landing-section-inner">
+      <h2 class="landing-section-title">三步上手</h2>
+      <p class="landing-section-desc">从文件到分享链接，只需几十秒</p>
+      <div class="landing-how-grid">
+        <div class="how-card">
+          <div class="how-number">01</div>
+          <div class="how-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </div>
+          <h3>拖入文件</h3>
+          <p>支持 HTML、Markdown、ZIP 格式。拖拽或点击上传，单文件最大 50MB。</p>
+        </div>
+        <div class="how-arrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </div>
+        <div class="how-card">
+          <div class="how-number">02</div>
+          <div class="how-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+          </div>
+          <h3>即时预览</h3>
+          <p>代码高亮、KaTeX 公式、Mermaid 图表自动渲染。深色/浅色主题跟随系统。</p>
+        </div>
+        <div class="how-arrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </div>
+        <div class="how-card">
+          <div class="how-number">03</div>
+          <div class="how-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          </div>
+          <h3>一键分享</h3>
+          <p>自动生成 8 位短链接。公开或私有可控，随时复制分享给任何人。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 使用场景 -->
+  <section class="landing-scenes">
+    <div class="landing-section-inner">
+      <h2 class="landing-section-title">谁在用即页</h2>
+      <p class="landing-section-desc">从 AI 工作流到技术协作，覆盖多种场景</p>
+      <div class="landing-scene-grid">
+        <div class="scene-card">
+          <div class="scene-icon scene-ai">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <h3>AI 生成内容分享</h3>
+          <p>Claude、Cursor 生成的 HTML 报告、可视化页面，一键上传获得可分享链接</p>
+        </div>
+        <div class="scene-card">
+          <div class="scene-icon scene-doc">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <h3>技术文档协作</h3>
+          <p>Markdown 笔记、会议纪要、项目报告，上传后自动渲染代码高亮与流程图</p>
+        </div>
+        <div class="scene-card">
+          <div class="scene-icon scene-demo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+          </div>
+          <h3>静态页面托管</h3>
+          <p>单页 HTML Demo、原型、落地页，无需配置服务器，拖入即得在线链接</p>
+        </div>
+        <div class="scene-card">
+          <div class="scene-icon scene-share">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          </div>
+          <h3>临时文件分享</h3>
+          <p>任何 HTML/Markdown 文件，拖入即得链接。版本历史自动保留，随时回滚</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 模板展示区 -->
+  <section class="landing-templates" id="landing-templates-section">
+    <div class="landing-section-inner">
+      <h2 class="landing-section-title">精选模板</h2>
+      <p class="landing-section-desc">开箱即用的内容模板，快速生成专业页面</p>
+      <div class="landing-template-filters" id="template-scene-filters">
+        <button class="scene-filter active" data-scene="">全部</button>
+        <button class="scene-filter" data-scene="dashboard">仪表板</button>
+        <button class="scene-filter" data-scene="report">报告</button>
+        <button class="scene-filter" data-scene="resume">简历</button>
+        <button class="scene-filter" data-scene="landing">落地页</button>
+        <button class="scene-filter" data-scene="presentation">演示</button>
+        <button class="scene-filter" data-scene="card">卡片</button>
+      </div>
+      <div class="landing-template-grid" id="landing-template-grid"></div>
+      <div class="landing-template-empty" id="landing-template-empty" hidden>暂无公开模板</div>
+    </div>
+  </section>
+
+  <!-- 功能特性 -->
+  <section class="landing-features" id="features">
+    <div class="landing-section-inner">
+      <h2 class="landing-section-title">核心特性</h2>
+      <p class="landing-section-desc">简单高效的在线预览与分享工具</p>
+      <div class="landing-feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <h3>零配置预览</h3>
+          <p>拖拽上传 HTML 或 Markdown 文件，即时获得在线预览页面</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          </div>
+          <h3>短链接分享</h3>
+          <p>8 位随机短链接，一键分享预览页面给任何人</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
+          </div>
+          <h3>AI 集成</h3>
+          <p>MCP Server 支持，连接 Claude 等 AI 工具，智能生成页面内容</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          </div>
+          <h3>Markdown 增强</h3>
+          <p>代码高亮、KaTeX 数学公式、Mermaid 图表，一站式渲染</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <h3>版本历史</h3>
+          <p>自动备份每次修改，随时查看和回退到历史版本</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+          </div>
+          <h3>标签分类</h3>
+          <p>标签、分类、收藏多维度管理，快速定位你的文件</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- 页脚 -->
+  <footer class="landing-footer">
+    <div class="landing-footer-inner">
+      <div class="landing-footer-brand">
+        <div class="brand-mark" aria-hidden="true">即</div>
+        <div>
+          <div class="landing-footer-title">即页</div>
+          <div class="landing-footer-desc">AI 原生 · 模板风格化 · 即时预览分享</div>
+        </div>
+      </div>
+      <div class="landing-footer-links">
+        <div class="footer-link-group">
+          <h4>产品</h4>
+          <a href="#features">核心特性</a>
+          <a href="#how-it-works">使用流程</a>
+          <a href="#landing-templates-section">内容模板</a>
+        </div>
+        <div class="footer-link-group">
+          <h4>资源</h4>
+          <a href="/api/files/4/render" target="_blank">产品介绍</a>
+          <a href="https://github.com/code2rich/jpage" target="_blank">GitHub</a>
+          <a href="/docs/api.md" target="_blank">API 文档</a>
+        </div>
+        <div class="footer-link-group">
+          <h4>联系</h4>
+          <a href="mailto:code2rich@qq.com">code2rich@qq.com</a>
+          <a href="https://jpage.cn" target="_blank">jpage.cn</a>
+          <a href="https://github.com/code2rich/jpage" target="_blank">GitHub</a>
+        </div>
+      </div>
+    </div>
+    <div class="landing-footer-bottom">
+      <p>&copy; 2025 即页 · MIT 协议开源</p>
+    </div>
+  </footer>
+
+  <!-- 模板预览弹窗 -->
+  <div class="modal-backdrop" id="template-preview-modal" hidden>
+    <div class="modal-panel modal-panel-lg" onclick="event.stopPropagation()">
+      <button class="modal-close" id="template-preview-close">&times;</button>
+      <div class="template-preview-header">
+        <h3 id="template-preview-title"></h3>
+        <div class="template-preview-meta" id="template-preview-meta"></div>
+      </div>
+      <div class="template-preview-body">
+        <iframe id="template-preview-iframe" sandbox="allow-scripts"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+</template>
+
+<!-- 登录/注册模板 -->
 <template id="login-template">
 <div class="layout login-layout">
+<button class="theme-toggle" aria-label="切换主题" style="position:fixed;top:20px;right:20px;z-index:200">
+  <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+  <svg class="icon-sun" viewBox="0 0 24 24"><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41M12 6a6 6 0 100 12 6 6 0 000-12z"/></svg>
+</button>
 <main class="login-main">
-<form class="login-form" id="login-form" autocomplete="on">
-<div class="login-brand">
-<div class="brand-mark" aria-hidden="true">即</div>
-<h1 class="login-title">即页</h1>
-<p class="login-subtitle">拖入文件，即刻成页</p>
-</div>
-<label class="login-field">
-<span>用户名</span>
-<input type="text" name="username" id="login-username" required autocomplete="username" autofocus>
-</label>
-<label class="login-field">
-<span>密码</span>
-<input type="password" name="password" id="login-password" required autocomplete="current-password">
-</label>
-<div class="login-error" id="login-error" role="alert" hidden></div>
-<button type="submit" class="btn btn-primary login-submit" id="login-submit">登录</button>
-</form>
+  <div class="login-brand">
+    <div class="brand-mark" aria-hidden="true">即</div>
+    <h1 class="login-title">即页</h1>
+    <p class="login-subtitle">拖入文件，即刻成页</p>
+  </div>
+  <div class="auth-tabs">
+    <button class="auth-tab active" data-tab="login">登录</button>
+    <button class="auth-tab" data-tab="register">注册</button>
+  </div>
+  <form class="login-form auth-panel active" id="login-form" autocomplete="on">
+    <label class="login-field">
+      <span>用户名或邮箱</span>
+      <input type="text" name="username" id="login-username" required autocomplete="username" autofocus>
+    </label>
+    <label class="login-field">
+      <span>密码</span>
+      <input type="password" name="password" id="login-password" required autocomplete="current-password">
+    </label>
+    <div class="login-error" id="login-error" role="alert" hidden></div>
+    <button type="submit" class="btn btn-primary login-submit" id="login-submit">登录</button>
+  </form>
+  <form class="login-form auth-panel" id="register-form" autocomplete="on">
+    <label class="login-field">
+      <span>邮箱 <small>(可选)</small></span>
+      <input type="email" name="email" id="register-email" autocomplete="email">
+    </label>
+    <label class="login-field">
+      <span>用户名</span>
+      <input type="text" name="username" id="register-username" autocomplete="username" placeholder="字母、数字、下划线">
+    </label>
+    <label class="login-field">
+      <span>密码</span>
+      <input type="password" name="password" id="register-password" required minlength="8" autocomplete="new-password" placeholder="至少 8 位">
+    </label>
+    <label class="login-field">
+      <span>确认密码</span>
+      <input type="password" name="confirmPassword" id="register-confirm" required minlength="8" autocomplete="new-password">
+    </label>
+    <div class="login-error" id="register-error" role="alert" hidden></div>
+    <button type="submit" class="btn btn-primary login-submit" id="register-submit">注册</button>
+  </form>
 </main>
 </div>
 </template>
@@ -47,6 +364,10 @@
 </div>
 </div>
 <div class="header-right">
+<button class="theme-toggle" aria-label="切换主题">
+  <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+  <svg class="icon-sun" viewBox="0 0 24 24"><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41M12 6a6 6 0 100 12 6 6 0 000-12z"/></svg>
+</button>
 <span class="header-user" id="header-user"></span>
 <div class="settings-dropdown" id="settings-dropdown">
 <button type="button" class="btn btn-small btn-settings" id="btn-settings" aria-label="设置" aria-haspopup="true" aria-expanded="false">
@@ -76,6 +397,10 @@ MCP 配置
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
 	修改密码
 	</button>
+	<button type="button" class="settings-menu-item" role="menuitem" id="menu-item-profile">
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+	个人资料
+	</button>
 	<div class="settings-menu-divider admin-only" role="separator"></div>
 	<button type="button" class="settings-menu-item admin-only" role="menuitem" id="menu-item-users">
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -90,6 +415,10 @@ MCP 配置
 <button type="button" class="btn btn-small" id="btn-logout" aria-label="退出登录">退出</button>
 </div>
 </header>
+<div class="email-verify-banner" id="email-verify-banner" hidden>
+  <span>请验证你的邮箱地址</span>
+  <button type="button" class="btn btn-small" id="btn-resend-verify">重新发送验证邮件</button>
+</div>
 <main class="main">
 <div class="toolbar">
 <div class="upload-area" id="upload-area" role="button" tabindex="0" aria-label="选择或拖入 HTML、Markdown 文件上传">
@@ -182,6 +511,10 @@ MCP 配置
 <h2 id="preview-heading" class="preview-heading-truncate"></h2>
 </div>
 <div class="preview-expanded-right">
+<button class="theme-toggle" aria-label="切换主题">
+  <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+  <svg class="icon-sun" viewBox="0 0 24 24"><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41M12 6a6 6 0 100 12 6 6 0 000-12z"/></svg>
+</button>
 <div class="view-toggle" role="group" aria-label="预览模式">
 <button type="button" class="btn btn-small active" data-mode="render">渲染</button>
 <button type="button" class="btn btn-small" data-mode="source">源码</button>
@@ -364,6 +697,31 @@ MCP 配置
 <div class="modal-footer">
 <button type="button" class="btn btn-small" id="password-modal-cancel">取消</button>
 <button type="button" class="btn btn-primary" id="password-modal-submit">修改密码</button>
+</div>
+</div>
+</div>
+
+<!-- 个人资料弹窗 -->
+<div class="modal-backdrop" id="profile-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title">
+<div class="modal-panel modal-panel-sm">
+<div class="modal-header">
+<h2 id="profile-modal-title">个人资料</h2>
+<button type="button" class="btn btn-small modal-close" id="profile-modal-close" aria-label="关闭">×</button>
+</div>
+<div class="modal-body">
+<label class="login-field">
+<span>用户名</span>
+<input type="text" id="profile-username" autocomplete="username" placeholder="字母、数字、下划线，2-30 位">
+</label>
+<label class="login-field">
+<span>邮箱</span>
+<input type="email" id="profile-email" autocomplete="email" placeholder="可选">
+</label>
+<div class="login-error" id="profile-error" role="alert" hidden></div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn btn-small" id="profile-modal-cancel">取消</button>
+<button type="button" class="btn btn-primary" id="profile-modal-submit">保存</button>
 </div>
 </div>
 </div>

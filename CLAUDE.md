@@ -42,22 +42,28 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 **Database schema**:
 - `_migrations(id, name UNIQUE, applied_at)` — 记录已执行的 migration
 - `files(id, original_name, stored_name, file_type, size, created_at, is_public, uploaded_by, share_key, updated_at, category_id, is_bundle, entry_path)` — `is_public=1` means anonymous can read; `uploaded_by` references `users.id`; `share_key` is 8-char URL-safe random string for short links
-- `users(id, username UNIQUE, password_hash, role, created_at)`
+- `users(id, username UNIQUE, email UNIQUE, email_verified, password_hash, role, created_at)` — `email` 可为 NULL；`email_verified` 0/1
 - `file_versions(id, file_id, version, stored_name, size, created_at, uploaded_by)` — 文件版本历史
 - `tokens(id, user_id, name, token_hash, token_prefix, last_used_at, created_at)` — API token
 - `tags(id, name UNIQUE, created_at)` — 标签词典
 - `file_tags(file_id, tag_id)` — 文件-标签多对多
 - `starred_files(user_id, file_id, created_at)` — 收藏
 - `categories(id, name, user_id, created_at)` — 分类
+- `email_verifications(id, user_id, token_hash, token_prefix, type, new_email, expires_at, created_at)` — 邮箱验证 token
 
 **REST API**:
-- `GET /api/auth/me` — 当前用户（返回 `{id, username, role}`）
-- `POST /api/auth/login` — `{username, password}`，设置 `jpage.sid` cookie，限流 10/15min
+- `GET /api/auth/me` — 当前用户（返回 `{id, username, email, emailVerified, role}`）
+- `POST /api/auth/login` — `{account, password}` 或 `{username, password}`（统一入口，自动识别用户名或邮箱），设置 `jpage.sid` cookie，限流 10/15min
+- `POST /api/auth/register` — `{email?, username?, password, confirmPassword}`（至少提供 email 或 username，邮箱注册自动生成用户名）
 - `POST /api/auth/logout` — 销毁 session
 - `POST /api/auth/change-password` — `{currentPassword, newPassword}`，所有用户可用
-- `GET /api/users` — 列出用户（仅 admin）
-- `POST /api/users` — 创建用户 `{username, password, role}`（仅 admin）
-- `PUT /api/users/:id` — 更新角色或重置密码（仅 admin）
+- `POST /api/auth/profile` — `{username?, email?}` 编辑个人资料（需登录）
+- `GET /api/auth/verify-email?token=...` — 验证邮箱 token，重定向前端页面
+- `POST /api/auth/resend-verification` — 重发验证邮件（需登录），限流 5/h
+- `GET /api/auth/smtp-status` — 返回 `{configured: bool}` SMTP 是否配置
+- `GET /api/users` — 列出用户含 email（仅 admin）
+- `POST /api/users` — 创建用户 `{username, password, role, email?}`（仅 admin）
+- `PUT /api/users/:id` — 更新用户名、邮箱、角色或重置密码（仅 admin）
 - `DELETE /api/users/:id` — 删除用户，文件转交 admin（仅 admin，不可删自己）
 - `GET /api/tokens` — 列出自己的 API Token
 - `POST /api/tokens` — 创建 Token `{name}`，返回明文（仅一次）
@@ -190,6 +196,7 @@ module.exports = {
 ```
 server.js                # Express + REST API + auth + Markdown 渲染增强
 logger.js                # 结构化 JSON Lines 日志工具（info/warn/error/audit）
+mailer.js                # SMTP 邮件发送模块（nodemailer，用于邮箱验证）
 mcp-server.js            # MCP Streamable HTTP server (POST/GET/DELETE /mcp)
 migrations.js            # Migration runner，启动时自动执行
 migrations/              # Migration 文件目录（按文件名排序执行）
@@ -199,6 +206,12 @@ migrations/              # Migration 文件目录（按文件名排序执行）
   004_add_version_history.js
   005_tags_starred_categories.js
   006_zip_bundle.js
+  007_add_file_type_uploaded_by_indexes.js
+  008_add_fts5.js
+  008_add_link_visits.js
+  008_add_templates_system.js
+  009_content_templates.js
+  010_add_email_and_verification.js
 skills-registry.js       # 扫描 skills/ 目录，解析 SKILL.md，提供列表/详情/ZIP 打包
 package.json             # 依赖: @modelcontextprotocol/sdk, zod, archiver, marked, highlight.js, katex, mermaid 等
 Dockerfile               # node:20-alpine, EXPOSE 8858
