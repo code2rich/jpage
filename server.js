@@ -876,6 +876,9 @@ app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
 app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
   const { username, password, role, email } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: '用户名和密码不能为空' });
+  if (username.length > 30 || username.length < 2 || !/^[a-zA-Z0-9_]+$/.test(username)) {
+    return res.status(400).json({ error: '用户名 2-30 位，只能包含字母、数字和下划线' });
+  }
   if (password.length < 8) return res.status(400).json({ error: '密码至少 8 位' });
   if (!['admin', 'user'].includes(role || 'user')) return res.status(400).json({ error: '无效角色' });
   if (email) {
@@ -913,8 +916,8 @@ app.put('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
     const user = await dbGet('SELECT * FROM users WHERE id = ?', [targetId]);
     if (!user) return res.status(404).json({ error: '用户不存在' });
     if (username) {
-      if (username.length > 30 || !/^[a-zA-Z0-9_]+$/.test(username)) {
-        return res.status(400).json({ error: '用户名只能包含字母、数字和下划线，最多 30 位' });
+      if (username.length > 30 || username.length < 2 || !/^[a-zA-Z0-9_]+$/.test(username)) {
+        return res.status(400).json({ error: '用户名 2-30 位，只能包含字母、数字和下划线' });
       }
       const conflict = await dbGet('SELECT id FROM users WHERE username = ? AND id != ?', [username, targetId]);
       if (conflict) return res.status(409).json({ error: '用户名已存在' });
