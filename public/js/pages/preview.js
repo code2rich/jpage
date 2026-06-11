@@ -54,8 +54,8 @@ function loadVersions(container, fileId) {
     _versionPanelState.currentVer = (data.versions ? data.versions.length : 0) + 1;
     renderVersionList(container, data);
 
-    const btn = container.querySelector('#btn-version-history');
-    if (btn) btn.textContent = `历史 v${_versionPanelState.currentVer}`;
+    const menu = container.querySelector('#menu-version-history');
+    if (menu) menu.textContent = `历史 v${_versionPanelState.currentVer}`;
   }).catch(e => {
     body.innerHTML = `<div class="version-empty">加载失败: ${escapeHtml(e.message)}</div>`;
   });
@@ -192,11 +192,8 @@ function closeVersionPanel(container) {
 }
 
 function setupVersionUpload(container, fileId) {
-  const btn = container.querySelector('#btn-upload-version');
   const input = container.querySelector('#version-file-input');
-  if (!btn || !input) return;
-
-  btn.addEventListener('click', () => input.click());
+  if (!input) return;
 
   input.addEventListener('change', () => {
     if (!input.files.length) return;
@@ -343,8 +340,9 @@ function renderPreview(container, hash) {
   const editorStatusbar = container.querySelector('#editor-statusbar');
   const editorSaveBtn = container.querySelector('#btn-editor-save');
   const editorCancelBtn = container.querySelector('#btn-editor-cancel');
-  const downloadBtn = container.querySelector('#btn-download');
-  const uploadVerBtn = container.querySelector('#btn-upload-version');
+  const menuDownload = container.querySelector('#menu-download');
+  const menuUploadVersion = container.querySelector('#menu-upload-version');
+  const menuVersionHistory = container.querySelector('#menu-version-history');
   const moreDropdown = container.querySelector('#preview-more-dropdown');
   const moreBtn = container.querySelector('#btn-preview-more');
   let fileContent = '';
@@ -480,26 +478,33 @@ function renderPreview(container, hash) {
   editorSaveBtn.addEventListener('click', doEditorSave);
   editorCancelBtn.addEventListener('click', () => setViewMode('render'));
 
-  container.querySelector('#btn-download').addEventListener('click', () => {
-    const w = window.open(API_BASE + `/api/files/${id}/download`, '_blank');
-    if (w) w.opener = null;
-  });
+  // Download via menu
+  if (menuDownload) {
+    menuDownload.addEventListener('click', () => {
+      closeMoreDropdown();
+      const w = window.open(API_BASE + `/api/files/${id}/download`, '_blank');
+      if (w) w.opener = null;
+    });
+  }
 
   // Version history panel
-  const versionHistoryBtn = container.querySelector('#btn-version-history');
   const closeVersionBtn = container.querySelector('#btn-close-version-panel');
   const versionPanel = container.querySelector('#version-panel');
 
   setupVersionUpload(container, id);
 
-  versionHistoryBtn.addEventListener('click', () => {
+  function toggleVersionPanel() {
     if (versionPanel && !versionPanel.hidden && versionPanel.classList.contains('open')) {
       closeVersionPanel(container);
     } else {
       loadVersions(container, id);
       openVersionPanel(container);
     }
-  });
+  }
+
+  if (menuVersionHistory) {
+    menuVersionHistory.addEventListener('click', () => { closeMoreDropdown(); toggleVersionPanel(); });
+  }
 
   if (closeVersionBtn) {
     closeVersionBtn.addEventListener('click', () => closeVersionPanel(container));
@@ -525,12 +530,8 @@ function renderPreview(container, hash) {
       const isOpen = moreDropdown.classList.toggle('open');
       moreBtn.setAttribute('aria-expanded', String(isOpen));
     });
-    // Menu items delegate to hidden buttons
-    container.querySelector('#menu-download')?.addEventListener('click', () => { closeMoreDropdown(); downloadBtn.click(); });
-    container.querySelector('#menu-upload-version')?.addEventListener('click', () => { closeMoreDropdown(); uploadVerBtn.click(); });
-    container.querySelector('#menu-version-history')?.addEventListener('click', () => { closeMoreDropdown(); versionHistoryBtn.click(); });
-    container.querySelector('#menu-template')?.addEventListener('click', () => { closeMoreDropdown(); container.querySelector('#btn-template')?.click(); });
-    container.querySelector('#menu-stats')?.addEventListener('click', () => { closeMoreDropdown(); container.querySelector('#btn-stats')?.click(); });
+    if (menuUploadVersion) menuUploadVersion.addEventListener('click', () => { closeMoreDropdown(); container.querySelector('#version-file-input')?.click(); });
+    if (menuVersionHistory && !menuVersionHistory._bound) { menuVersionHistory._bound = true; } // already bound above
     // Close on outside click
     document.addEventListener('click', function moreOutsideHandler(e) {
       if (moreDropdown && !moreDropdown.contains(e.target)) closeMoreDropdown();
@@ -549,13 +550,12 @@ function renderPreview(container, hash) {
     code.textContent = data.content;
     if (spinner) spinner.style.display = 'flex';
     iframe.src = API_BASE + `/api/files/${id}/render`;
-    // 模板按钮：仅 Markdown 文件且为所有者/admin 可见
-    const templateBtn = container.querySelector('#btn-template');
+    // 模板菜单项：仅 Markdown 文件且为所有者/admin 可见
     const menuTemplate = container.querySelector('#menu-template');
-    if (templateBtn && data.file_type === 'markdown' && state.currentUser && (state.currentUser.id == data.uploaded_by || state.currentUser.role === 'admin')) {
-      templateBtn.hidden = false;
-      if (menuTemplate) menuTemplate.hidden = false;
-      templateBtn.addEventListener('click', () => {
+    if (menuTemplate && data.file_type === 'markdown' && state.currentUser && (state.currentUser.id == data.uploaded_by || state.currentUser.role === 'admin')) {
+      menuTemplate.hidden = false;
+      menuTemplate.addEventListener('click', () => {
+        closeMoreDropdown();
         openTemplateSelectForPreview(container, id, data.template_id);
       });
     }
@@ -563,13 +563,11 @@ function renderPreview(container, hash) {
     if (state.currentUser && !data.is_bundle && (state.currentUser.id == data.uploaded_by || state.currentUser.role === 'admin')) {
       editBtn.hidden = false;
     }
-    // 统计按钮：仅文件所有者或 admin 可见
-    const statsBtn = container.querySelector('#btn-stats');
+    // 统计菜单项：仅文件所有者或 admin 可见
     const menuStats = container.querySelector('#menu-stats');
-    if (statsBtn && state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.id == data.uploaded_by)) {
-      statsBtn.hidden = false;
-      if (menuStats) menuStats.hidden = false;
-      statsBtn.addEventListener('click', () => openStatsDialog(id, container));
+    if (menuStats && state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.id == data.uploaded_by)) {
+      menuStats.hidden = false;
+      menuStats.addEventListener('click', () => { closeMoreDropdown(); openStatsDialog(id, container); });
     }
   }).catch(e => {
     toast(e.message, 'error');
