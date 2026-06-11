@@ -42,7 +42,8 @@ function renderHome(container) {
     } catch (_) {}
     state.currentUser = null;
     toast('已退出');
-    navigate('/');
+    location.hash = '#/';
+    location.reload();
   });
 
   // 邮箱验证提示条
@@ -1700,6 +1701,7 @@ function closeCategorySelect() {
 }
 
 // --- 模板选择（首页） ---
+let templateSelectBound = false;
 async function openTemplateSelect(container, fileId, currentTemplateId) {
   const modal = document.getElementById('template-select-modal');
   if (!modal) return;
@@ -1725,19 +1727,23 @@ async function openTemplateSelect(container, fileId, currentTemplateId) {
   list.querySelectorAll('.category-item').forEach(item => {
     item.addEventListener('click', async () => {
       const tplId = parseInt(item.dataset.tplId);
+      const defaultTpl = allTemplates.find(t => t.name === 'default');
       try {
         await api(`/api/files/${fileId}`, {
           method: 'PUT',
-          body: { templateId: tplId === allTemplates.find(t => t.name === 'default').id ? null : tplId }
+          body: { templateId: tplId === defaultTpl?.id ? null : tplId }
         });
-      } catch (e) { /* ignore */ }
+      } catch (e) { toast(e.message || '切换模板失败', 'error'); }
       closeTemplateSelect();
       renderHome(container);
     });
   });
 
-  document.getElementById('template-select-close').onclick = closeTemplateSelect;
-  document.getElementById('template-select-cancel').onclick = closeTemplateSelect;
+  if (!templateSelectBound) {
+    document.getElementById('template-select-close').addEventListener('click', closeTemplateSelect);
+    document.getElementById('template-select-cancel').addEventListener('click', closeTemplateSelect);
+    templateSelectBound = true;
+  }
 }
 
 function closeTemplateSelect() {

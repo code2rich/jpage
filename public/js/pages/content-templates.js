@@ -57,6 +57,8 @@ async function loadThumb(card) {
   }
 }
 
+let marketEventsBound = false;
+
 export function openContentTemplateMarket() {
   const modal = document.getElementById('ct-market-modal');
   if (!modal) return;
@@ -65,7 +67,13 @@ export function openContentTemplateMarket() {
   ctState.keyword = '';
   ctState.page = 1;
   loadedThumbs.clear();
-  bindMarketEvents(modal);
+  if (!marketEventsBound) {
+    bindMarketEvents(modal);
+    marketEventsBound = true;
+  }
+  // 重置场景筛选 UI
+  const chips = modal.querySelectorAll('#ct-scene-chips .filter-chip');
+  chips.forEach(c => c.classList.toggle('active', !c.dataset.scene));
   loadTemplates();
 }
 
