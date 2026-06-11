@@ -1232,8 +1232,11 @@ async function loadTokensList() {
         <code class="token-prefix">${esc(t.token_prefix)}…</code>
         <span class="token-time">创建于 ${formatDate(t.created_at)}${t.last_used_at ? ' · 最后使用 ' + formatDate(t.last_used_at) : ''}</span>
       </div>
-      <button class="btn btn-small btn-danger-outline" onclick="deleteTokenConfirm(${t.id},'${esc(t.name)}')">删除</button>
+      <button class="btn btn-small btn-danger-outline" data-token-id="${t.id}" data-token-name="${esc(t.name)}">删除</button>
     </div>`).join('');
+    listEl.querySelectorAll('[data-token-id]').forEach(btn => {
+      btn.addEventListener('click', () => deleteTokenConfirm(parseInt(btn.dataset.tokenId), btn.dataset.tokenName));
+    });
   } catch (e) {
     listEl.innerHTML = '<p class="login-error">加载失败: ' + esc(e.message) + '</p>';
   }
@@ -1249,8 +1252,13 @@ async function createTokenDialog() {
   } catch (e) { toast(e.message, 'error'); }
 }
 
-window.deleteTokenConfirm = async function(id, name) {
-  if (!confirm('确定删除令牌 "' + name + '"？使用此令牌的应用将失去访问权限。')) return;
+async function deleteTokenConfirm(id, name) {
+  const ok = await dialogModal.confirm({
+    title: '删除令牌',
+    message: `确定删除令牌「${name}」？使用此令牌的应用将失去访问权限。`,
+    confirmText: '删除',
+  });
+  if (!ok) return;
   try {
     await api('/api/tokens/' + id, { method: 'DELETE' });
     toast('令牌已删除');
