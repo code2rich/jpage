@@ -242,6 +242,7 @@ marked.use({
 const app = express();
 const PORT = process.env.PORT || 8858;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+const ALLOW_REGISTRATION = process.env.ALLOW_REGISTRATION === 'true';
 const DATA_DIR = path.join(__dirname, 'data');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 
@@ -659,6 +660,7 @@ async function generateUsernameFromEmail(email) {
 }
 
 app.post('/api/auth/register', registerLimiter, async (req, res) => {
+  if (!ALLOW_REGISTRATION) return res.status(403).json({ error: '注册功能未开放' });
   const { email, username, password, confirmPassword, code } = req.body || {};
   if (!email) return res.status(400).json({ error: '请填写邮箱' });
   if (!code) return res.status(400).json({ error: '请填写验证码' });
@@ -870,6 +872,7 @@ app.post('/api/auth/resend-verification', requireAuth, resendLimiter, async (req
 
 // POST /api/auth/send-register-code
 app.post('/api/auth/send-register-code', sendCodeLimiter, async (req, res) => {
+  if (!ALLOW_REGISTRATION) return res.status(403).json({ error: '注册功能未开放' });
   const { email } = req.body || {};
   if (!email) return res.status(400).json({ error: '请填写邮箱' });
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -912,6 +915,11 @@ app.post('/api/auth/send-register-code', sendCodeLimiter, async (req, res) => {
 // GET /api/auth/smtp-status
 app.get('/api/auth/smtp-status', (req, res) => {
   res.json({ configured: isMailerConfigured() });
+});
+
+// GET /api/auth/registration-status
+app.get('/api/auth/registration-status', (req, res) => {
+  res.json({ enabled: ALLOW_REGISTRATION });
 });
 
 // --- 用户管理（仅 admin） ---
@@ -2700,7 +2708,7 @@ app.listen(PORT, async () => {
   loadTemplates();
   await loadTemplateNameMap();
   await backfillFtsIndex();
-  logger.info({ type: 'app', message: '服务已启动', url: `http://${mcpIp}:${PORT}` });
+  logger.info({ type: 'app', message: '服务已启动', url: `http://${mcpIp}:${PORT}`, registration: ALLOW_REGISTRATION ? 'open' : 'closed' });
   if (sessionSecretWarning) logger.warn({ type: 'app', message: 'SESSION_SECRET 未设置，已生成临时密钥（重启后会话会失效）' });
   await bootstrapAdmin();
   try {

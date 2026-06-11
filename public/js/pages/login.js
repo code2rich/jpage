@@ -10,9 +10,16 @@ function renderLogin(container, openTab) {
   container.innerHTML = '';
   container.appendChild(tmpl.content.cloneNode(true));
 
+  // 检查注册是否开放，动态隐藏注册 tab 和表单
+  const registerTab = container.querySelector('.auth-tab[data-tab="register"]');
+  const registerForm = container.querySelector('#register-form');
+
+  api('/api/auth/registration-status').then(data => {
+    if (!data.enabled && registerTab) registerTab.hidden = true;
+  }).catch(() => {});
+
   const tabs = container.querySelectorAll('.auth-tab');
   const loginForm = container.querySelector('#login-form');
-  const registerForm = container.querySelector('#register-form');
 
   function switchTab(tab) {
     tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
