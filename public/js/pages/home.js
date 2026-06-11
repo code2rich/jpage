@@ -1701,6 +1701,12 @@ function closeCategorySelect() {
 }
 
 // --- 模板选择（首页） ---
+const TEMPLATE_VISUALS = {
+  'default':   { bg: '#ffffff', text: '#57606a', heading: '#1f2328', code: '#f6f8fa', border: '#d0d7de' },
+  'github':    { bg: '#ffffff', text: '#57606a', heading: '#1f2328', code: '#f6f8fa', border: '#d0d7de' },
+  'academic':  { bg: '#fefcf3', text: '#3b3b3b', heading: '#1a1a1a', code: '#f5f1e8', border: '#d4c9a8' },
+  'dark-pro':  { bg: '#1e1e2e', text: '#a6adc8', heading: '#f0f6fc', code: '#313244', border: '#45475a' },
+};
 let templateSelectBound = false;
 async function openTemplateSelect(container, fileId, currentTemplateId) {
   const modal = document.getElementById('template-select-modal');
@@ -1710,6 +1716,7 @@ async function openTemplateSelect(container, fileId, currentTemplateId) {
   modal.hidden = false;
   modal.setAttribute('aria-hidden', 'false');
 
+  let allTemplates;
   try {
     const data = await api('/api/templates');
     allTemplates = data.templates || [];
@@ -1718,16 +1725,29 @@ async function openTemplateSelect(container, fileId, currentTemplateId) {
     return;
   }
 
-  list.innerHTML = allTemplates.map(t => `
-    <div class="category-item ${t.id === currentTemplateId || (!currentTemplateId && t.name === 'default') ? 'selected' : ''}" data-tpl-id="${t.id}">
-      <span class="category-name">${t.description || t.name}</span>
-    </div>
-  `).join('');
+  const defaultTpl = allTemplates.find(t => t.name === 'default');
+  const isSelected = (t) => t.id === currentTemplateId || (!currentTemplateId && t.name === 'default');
 
-  list.querySelectorAll('.category-item').forEach(item => {
+  list.innerHTML = allTemplates.map(t => {
+    const v = TEMPLATE_VISUALS[t.name] || TEMPLATE_VISUALS['default'];
+    const sel = isSelected(t);
+    return `<div class="tpl-card ${sel ? 'selected' : ''}" data-tpl-id="${t.id}">
+      <div class="tpl-preview" style="background:${v.bg};border-bottom:1px solid ${v.border}">
+        <div class="tpl-preview-heading" style="background:${v.heading}"></div>
+        <div class="tpl-preview-line" style="background:${v.text};opacity:.45"></div>
+        <div class="tpl-preview-line" style="background:${v.text};opacity:.3"></div>
+        <div class="tpl-preview-code" style="background:${v.code};border:1px solid ${v.border}"></div>
+      </div>
+      <div class="tpl-card-label">
+        <span>${t.description || t.name}</span>
+        <span class="tpl-card-check">✓</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.tpl-card').forEach(item => {
     item.addEventListener('click', async () => {
       const tplId = parseInt(item.dataset.tplId);
-      const defaultTpl = allTemplates.find(t => t.name === 'default');
       try {
         await api(`/api/files/${fileId}`, {
           method: 'PUT',

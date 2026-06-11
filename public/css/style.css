@@ -2489,6 +2489,35 @@ html:not(.light) {
 .category-item-actions { display: flex; gap: 4px; }
 .category-item-actions .btn { font-size: 11px; padding: 2px 8px; }
 
+/* Template preview card */
+.tpl-card {
+  display: flex; flex-direction: column; border: 2px solid var(--border);
+  border-radius: var(--radius-md); overflow: hidden; cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+}
+.tpl-card:hover { border-color: var(--text-secondary); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.tpl-card.selected { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.tpl-preview {
+  height: 72px; padding: 10px 12px 8px; display: flex; flex-direction: column; gap: 5px;
+  font-size: 0; line-height: 1;
+}
+.tpl-preview-heading { height: 7px; width: 55%; border-radius: 2px; }
+.tpl-preview-line { height: 4px; border-radius: 1px; }
+.tpl-preview-line:nth-child(2) { width: 80%; }
+.tpl-preview-line:nth-child(3) { width: 60%; }
+.tpl-preview-code { height: 14px; width: 40%; border-radius: 2px; margin-top: 2px; }
+.tpl-card-label {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 12px; font-size: 13px; color: var(--text);
+  border-top: 1px solid var(--border); background: var(--surface);
+}
+.tpl-card.selected .tpl-card-label { font-weight: 600; color: var(--primary); }
+.tpl-card-check { font-size: 15px; color: var(--primary); display: none; }
+.tpl-card.selected .tpl-card-check { display: inline; }
+#template-select-list {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 4px 0;
+}
+
 /* View badge */
 .file-badge-views { color: var(--text-secondary); background: transparent; font-size: 11px; padding: 0 4px; }
 
