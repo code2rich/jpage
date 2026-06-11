@@ -1489,6 +1489,16 @@ html:not(.light) {
   white-space: nowrap;
   min-width: 100px;
 }
+.register-code-tip {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 4px;
+  animation: tipFadeIn .3s ease;
+}
+@keyframes tipFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 .login-submit {
   margin-top: 4px;

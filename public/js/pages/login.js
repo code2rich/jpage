@@ -66,7 +66,9 @@ function renderLogin(container, openTab) {
   const usernameInput = container.querySelector('#register-username');
   const codeInput = container.querySelector('#register-code');
   const sendCodeBtn = container.querySelector('#btn-send-code');
+  const codeTip = container.querySelector('#register-code-tip');
   let codeTimer = null;
+  let tipTimer = null;
 
   // 发送验证码
   sendCodeBtn.addEventListener('click', async () => {
@@ -81,9 +83,29 @@ function renderLogin(container, openTab) {
       sendCodeBtn.textContent = remain + 's';
       codeTimer = setInterval(() => {
         remain--;
-        if (remain <= 0) { clearInterval(codeTimer); sendCodeBtn.disabled = false; sendCodeBtn.textContent = '发送验证码'; }
-        else sendCodeBtn.textContent = remain + 's';
+        if (remain <= 0) {
+          clearInterval(codeTimer);
+          clearInterval(tipTimer);
+          sendCodeBtn.disabled = false;
+          sendCodeBtn.textContent = '发送验证码';
+          codeTip.hidden = true;
+        } else {
+          sendCodeBtn.textContent = remain + 's';
+        }
       }, 1000);
+      // 剩余 30s 时开始轮转提示
+      setTimeout(() => {
+        if (remain <= 0) return;
+        const tips = ['还没收到？检查一下垃圾邮件', '邮件可能在垃圾箱里，去看看吧', '仍未收到？稍等片刻再查看'];
+        let tipIdx = 0;
+        function showTip() {
+          codeTip.textContent = tips[tipIdx % tips.length];
+          codeTip.hidden = false;
+          tipIdx++;
+        }
+        showTip();
+        tipTimer = setInterval(showTip, 5000);
+      }, 30000);
     } catch (e) {
       registerError.textContent = e.message || '发送失败';
       registerError.hidden = false;
