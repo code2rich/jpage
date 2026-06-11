@@ -2719,7 +2719,8 @@ html:not(.light) {
 }
 
 /* 邮箱验证提示条 */
-.email-verify-banner {
+.email-verify-banner[hidden] { display: none; }
+.email-verify-banner:not([hidden]) {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2731,5 +2732,5 @@ html:not(.light) {
 }
 .email-verify-banner .btn { font-size: 12px; }
 @media (prefers-color-scheme: dark) {
-  .email-verify-banner { background: #422006; color: #fbbf24; }
+  .email-verify-banner:not([hidden]) { background: #422006; color: #fbbf24; }
 }

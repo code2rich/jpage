@@ -45,6 +45,34 @@ function renderHome(container) {
     navigate('/');
   });
 
+  // 邮箱验证提示条
+  const verifyBanner = container.querySelector('#email-verify-banner');
+  const resendBtn = container.querySelector('#btn-resend-verify');
+  if (verifyBanner && state.currentUser && !state.currentUser.emailVerified) {
+    api('/api/auth/smtp-status').then(data => {
+      if (data.configured) verifyBanner.hidden = false;
+    }).catch(() => {});
+    if (resendBtn) {
+      resendBtn.addEventListener('click', async () => {
+        resendBtn.disabled = true;
+        try {
+          await api('/api/auth/resend-verification', { method: 'POST' });
+          toast('验证邮件已发送');
+          let remain = 60;
+          resendBtn.textContent = remain + 's';
+          const t = setInterval(() => {
+            remain--;
+            if (remain <= 0) { clearInterval(t); resendBtn.disabled = false; resendBtn.textContent = '重新发送验证邮件'; }
+            else resendBtn.textContent = remain + 's';
+          }, 1000);
+        } catch (e) {
+          toast(e.message || '发送失败');
+          resendBtn.disabled = false;
+        }
+      });
+    }
+  }
+
   setupUpload(container);
   setupFileFilter(container);
   loadTagsAndCategories(container);
