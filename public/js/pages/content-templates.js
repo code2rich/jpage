@@ -115,6 +115,7 @@ function bindMarketEvents(modal) {
 async function loadTemplates() {
   const grid = document.getElementById('ct-grid');
   if (!grid) return;
+  loadedThumbs.clear();
   grid.innerHTML = '<div class="ct-loading">加载中...</div>';
 
   const params = new URLSearchParams();

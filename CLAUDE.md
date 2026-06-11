@@ -126,6 +126,7 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 - **数据库共享** — 单个 `db` 连接复用于所有请求。Promise 封装 `dbRun`/`dbGet`/`dbAll` 保持调用简洁。
 - **上传限流** — `express-rate-limit` 应用于 `POST /api/files/upload`、`POST /api/files/upload-json`、`POST /api/files/:id/overwrite`、`POST /api/files/:id/overwrite-json`，按 IP 限流。
 - **HTML 渲染端点** — 故意不清理 HTML，因为在用户自己的 iframe 沙箱中（`sandbox="allow-scripts allow-same-origin"`）。修改此 CSP 需谨慎。
+- **容器环境变量必须与 `.env` 保持一体** — 任何在 `server.js` 中通过 `process.env` 读取的环境变量，必须同时出现在 `.env`（或 `.env.example`）和 `docker-compose.yml` 的 `environment` 中。新增或修改环境变量时，三者同步更新，否则容器内读不到该变量。
 - **容器端口映射** — `docker-compose.yml` 映射 host 8858 → container 8858。反向代理后可不发布端口。
 - **`.dockerignore` 排除 `data/`** — 上传文件不烘焙进镜像；compose 中的 `data/` volume 持久化状态。
 - **鉴权模型** — `requireAuth` 是异步中间件，接受三种认证方式：(1) session cookie，(2) 旧 `MCP_TOKEN` 环境变量（向后兼容），(3) 用户级 API Token（`tokens` 表）。中间件设置 `req.userId` 和 `req.userRole` 供下游使用。`requireAdmin` 检查 `req.userRole === 'admin'`。`loadFileWithPrivacy` 强制文件所有权：admin 可访问一切，普通用户仅可访问自己的文件和公开文件。

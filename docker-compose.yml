@@ -21,4 +21,5 @@ services:
       - SMTP_PASS=${SMTP_PASS:-}
       - SMTP_FROM=${SMTP_FROM:-}
       - APP_URL=${APP_URL:-}
+      - ALLOW_REGISTRATION=${ALLOW_REGISTRATION:-false}
     restart: unless-stopped
