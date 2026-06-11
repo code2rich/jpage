@@ -1116,7 +1116,7 @@ app.get('/api/files', requireAuth, async (req, res) => {
     const params = [];
 
     if (role !== 'admin') {
-      conditions.push(`(f.uploaded_by = ? OR f.is_public = 1)`);
+      conditions.push(`f.uploaded_by = ?`);
       params.push(userId);
     }
     if (keyword) {
@@ -1209,7 +1209,7 @@ app.get('/api/files/search', requireAuth, async (req, res) => {
     let permClause = '';
     const permParams = [];
     if (role !== 'admin') {
-      permClause = 'AND (f.uploaded_by = ? OR f.is_public = 1)';
+      permClause = 'AND f.uploaded_by = ?';
       permParams.push(userId);
     }
 
@@ -1237,7 +1237,7 @@ app.get('/api/files/search', requireAuth, async (req, res) => {
       nameFiles = await dbAll(
         `SELECT f.id, f.original_name, f.file_type, f.size, f.is_public, f.created_at, f.updated_at, f.share_key, f.category_id, f.uploaded_by, f.is_bundle, f.entry_path, f.view_count,
           (SELECT COUNT(*) FROM file_versions WHERE file_id = f.id) AS version_count
-        FROM files f WHERE f.original_name LIKE ? AND (f.uploaded_by = ? OR f.is_public = 1)
+        FROM files f WHERE f.original_name LIKE ? AND f.uploaded_by = ?
         ORDER BY f.updated_at DESC`,
         [likeQ, userId]
       );
@@ -2020,11 +2020,23 @@ app.delete('/api/files/:id/versions/:ver', requireAuth, async (req, res) => {
 
 app.get('/api/tags', requireAuth, async (req, res) => {
   try {
-    const tags = await dbAll(`
-      SELECT t.id, t.name, t.created_at, COUNT(ft.file_id) AS file_count
-      FROM tags t LEFT JOIN file_tags ft ON t.id = ft.tag_id
-      GROUP BY t.id ORDER BY t.name ASC
-    `);
+    const role = req.userRole;
+    const userId = req.userId;
+    let tags;
+    if (role === 'admin') {
+      tags = await dbAll(`
+        SELECT t.id, t.name, t.created_at, COUNT(ft.file_id) AS file_count
+        FROM tags t LEFT JOIN file_tags ft ON t.id = ft.tag_id
+        GROUP BY t.id ORDER BY t.name ASC
+      `);
+    } else {
+      tags = await dbAll(`
+        SELECT t.id, t.name, t.created_at, COUNT(ft.file_id) AS file_count
+        FROM tags t LEFT JOIN file_tags ft ON t.id = ft.tag_id
+          LEFT JOIN files f ON ft.file_id = f.id AND f.uploaded_by = ?
+        GROUP BY t.id ORDER BY t.name ASC
+      `, [userId]);
+    }
     res.json({ tags });
   } catch (e) {
     res.status(500).json({ error: '获取标签失败' });
@@ -2109,11 +2121,22 @@ app.get('/api/templates', requireAuth, async (req, res) => {
 
 app.get('/api/categories', requireAuth, async (req, res) => {
   try {
-    const categories = await dbAll(`
-      SELECT c.id, c.name, c.created_at, COUNT(f.id) AS file_count
-      FROM categories c LEFT JOIN files f ON f.category_id = c.id
-      GROUP BY c.id ORDER BY c.created_at ASC
-    `);
+    const role = req.userRole;
+    const userId = req.userId;
+    let categories;
+    if (role === 'admin') {
+      categories = await dbAll(`
+        SELECT c.id, c.name, c.created_at, COUNT(f.id) AS file_count
+        FROM categories c LEFT JOIN files f ON f.category_id = c.id
+        GROUP BY c.id ORDER BY c.created_at ASC
+      `);
+    } else {
+      categories = await dbAll(`
+        SELECT c.id, c.name, c.created_at, COUNT(f.id) AS file_count
+        FROM categories c LEFT JOIN files f ON f.category_id = c.id AND f.uploaded_by = ?
+        GROUP BY c.id ORDER BY c.created_at ASC
+      `, [userId]);
+    }
     res.json({ categories });
   } catch (e) {
     res.status(500).json({ error: '获取分类失败' });

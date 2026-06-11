@@ -362,6 +362,17 @@ function renderPreview(container, hash) {
     editorStatusbar.textContent = `${lines} 行 · ${editorTextarea.value.length} 字符`;
   }
 
+  function exitEditMode(mode) {
+    if (editorTextarea.value !== editorOriginalContent) {
+      return dialogModal.confirm({
+        title: '放弃编辑',
+        message: '内容已修改但未保存，确定要放弃吗？',
+        confirmText: '放弃',
+      }).then(ok => ok ? setViewMode(mode) : undefined);
+    }
+    setViewMode(mode);
+  }
+
   function setViewMode(mode) {
     const isEdit = mode === 'edit';
     if (mode === 'render') {
@@ -388,12 +399,7 @@ function renderPreview(container, hash) {
   }
 
   try {
-    if (sessionStorage.getItem(PREVIEW_HEADER_COLLAPSED_KEY) === '1') {
-      layout.classList.add('preview-header-collapsed');
-    }
-    if (sessionStorage.getItem(PREVIEW_TOOLBAR_COMPACT_KEY) === '1') {
-      layout.classList.add('preview-toolbar-compact');
-    }
+    layout.classList.add('preview-header-collapsed', 'preview-toolbar-compact');
   } catch (_) {}
 
   syncPreviewHeaderState(layout, expandFloatingBtn, toggleHeaderBtn);
@@ -424,7 +430,14 @@ function renderPreview(container, hash) {
   container.querySelector('#btn-back').addEventListener('click', () => navigate('/'));
 
   toggles.forEach(btn => {
-    btn.addEventListener('click', () => setViewMode(btn.dataset.mode));
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.mode;
+      if (!editorContainer.hidden && target !== 'edit') {
+        exitEditMode(target);
+      } else {
+        setViewMode(target);
+      }
+    });
   });
 
   // Editor: Tab key, Ctrl+S, Escape, scroll sync, line numbers
@@ -443,7 +456,7 @@ function renderPreview(container, hash) {
     }
     if (e.key === 'Escape') {
       e.preventDefault();
-      setViewMode('render');
+      exitEditMode('render');
     }
   });
   editorTextarea.addEventListener('input', updateEditorLines);
@@ -476,7 +489,7 @@ function renderPreview(container, hash) {
   }
 
   editorSaveBtn.addEventListener('click', doEditorSave);
-  editorCancelBtn.addEventListener('click', () => setViewMode('render'));
+  editorCancelBtn.addEventListener('click', () => exitEditMode('render'));
 
   // Download via menu
   if (menuDownload) {
