@@ -64,6 +64,7 @@ export function openContentTemplateMarket() {
   ctState.scene = '';
   ctState.keyword = '';
   ctState.page = 1;
+  loadedThumbs.clear();
   bindMarketEvents(modal);
   loadTemplates();
 }
