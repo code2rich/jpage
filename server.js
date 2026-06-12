@@ -109,6 +109,10 @@ function classifyZip(entries) {
   const assetFiles = entries.filter(e => assetExts.some(ext => e.name.toLowerCase().endsWith(ext)));
   const hasSubDirs = entries.some(e => e.name.includes('/'));
   if (htmlFiles.length === 0 && mdFiles.length === 0) return { type: 'reject', reason: 'ZIP 中无 HTML 或 Markdown 文件' };
+  // 纯 Markdown + 资源文件：作为 bundle 处理，第一个 MD 文件作为入口
+  if (htmlFiles.length === 0 && mdFiles.length >= 1 && assetFiles.length > 0) {
+    return { type: 'bundle', entryFile: mdFiles[0].name };
+  }
   const hasRootIndex = entries.some(e => e.name.toLowerCase() === 'index.html' || e.name.toLowerCase() === 'index.htm');
   if (htmlFiles.length >= 1 && hasRootIndex && (hasSubDirs || assetFiles.length > 0)) return { type: 'bundle', entryFile: findEntryHtml(entries) };
   if (htmlFiles.length >= 1 && (hasSubDirs || assetFiles.length > 0) && mdFiles.length === 0) {
@@ -118,6 +122,83 @@ function classifyZip(entries) {
   if (!hasSubDirs && assetFiles.length === 0) return { type: 'batch', files: [...htmlFiles, ...mdFiles] };
   if (htmlFiles.length === 1) return { type: 'bundle', entryFile: findEntryHtml(entries) };
   return { type: 'batch', files: [...htmlFiles, ...mdFiles] };
+}
+
+async function handleZipUpload(req, res, zipBuffer) {
+  try {
+    const zip = await JSZip.loadAsync(zipBuffer);
+    const entries = await validateZipEntries(zip);
+    const classification = classifyZip(entries);
+
+    if (classification.type === 'reject') {
+      return res.status(400).json({ error: classification.reason });
+    }
+
+    const isPublic = req.body.isPublic === 'true' || req.body.isPublic === true;
+    const userId = currentUserId(req);
+
+    if (classification.type === 'bundle') {
+      const dirName = Date.now() + '-' + Math.round(Math.random() * 1e9);
+      const bundleDir = path.join(UPLOAD_DIR, dirName);
+      await extractEntries(zip, entries, bundleDir);
+
+      const totalSize = await fs.promises.readdir(bundleDir).then(files =>
+        Promise.all(files.map(f => fs.promises.stat(path.join(bundleDir, f)).then(s => s.size)))
+      ).then(sizes => sizes.reduce((a, b) => a + b, 0));
+
+      const originalName = req.file ? req.file.originalname : (req.body && req.body.name) || 'upload.zip';
+      const entryExt = path.extname(classification.entryFile).toLowerCase();
+      const fileType = (entryExt === '.md' || entryExt === '.markdown') ? 'markdown' : 'html';
+
+      const result = await dbRun(
+        'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key, updated_at, is_bundle, entry_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)',
+        [originalName, dirName, fileType, totalSize, isPublic ? 1 : 0, userId, generateShareKey(), now(), classification.entryFile]
+      );
+
+      const shareKey = await dbGet('SELECT share_key FROM files WHERE id = ?', [result.lastID]).then(r => r?.share_key);
+      logger.audit('file.upload', { fileId: result.lastID, fileName: originalName, fileType: 'bundle', size: totalSize, ip: clientIp(req) });
+      return res.json({
+        id: result.lastID,
+        original_name: originalName,
+        file_type: fileType,
+        size: totalSize,
+        is_public: isPublic ? 1 : 0,
+        is_bundle: 1,
+        entry_path: classification.entryFile,
+        share_key: shareKey
+      });
+    }
+
+    // batch 模式
+    const results = [];
+    for (const entry of classification.files) {
+      const zipFile = zip.file(entry.name);
+      if (!zipFile) continue;
+      const buf = await zipFile.async('nodebuffer');
+      const ext = path.extname(entry.name).toLowerCase();
+      const fileType = (ext === '.md' || ext === '.markdown') ? 'markdown' : 'html';
+      const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
+      const storedName = unique + ext;
+      const filePath = path.join(UPLOAD_DIR, storedName);
+      await fs.promises.writeFile(filePath, buf);
+
+      const baseName = path.basename(entry.name);
+      const dbResult = await dbRun(
+        'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [baseName, storedName, fileType, buf.length, isPublic ? 1 : 0, userId, generateShareKey(), now()]
+      );
+      if (isFtsIndexable(fileType, storedName)) {
+        indexFileContent(dbResult.lastID, storedName);
+      }
+      results.push({ id: dbResult.lastID, original_name: baseName, file_type: fileType, size: buf.length });
+    }
+
+    logger.audit('file.upload', { fileType: 'batch', count: results.length, ip: clientIp(req) });
+    return res.json({ type: 'batch', count: results.length, files: results });
+  } catch (e) {
+    logger.error({ type: 'app', action: 'zip.upload', error: e.message });
+    return res.status(500).json({ error: 'ZIP 处理失败: ' + e.message });
+  }
 }
 
 
@@ -1497,6 +1578,24 @@ app.post('/api/files/upload-json', requireAuth, uploadLimiter, async (req, res) 
   }
 });
 
+app.post('/api/files/upload-zip-base64', requireAuth, uploadLimiter, async (req, res) => {
+  const { name, content, isPublic } = req.body || {};
+  if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: '文件名不能为空' });
+  if (typeof content !== 'string') return res.status(400).json({ error: 'content 必须是字符串' });
+  const ext = path.extname(name).toLowerCase();
+  if (ext !== '.zip') return res.status(400).json({ error: '仅支持 ZIP 文件' });
+  try {
+    const zipBuffer = Buffer.from(content, 'base64');
+    if (zipBuffer.length > 50 * 1024 * 1024) return res.status(400).json({ error: 'ZIP 文件超过50MB限制' });
+    req.file = { originalname: decodeFilename(name) };
+    req.body.isPublic = isPublic;
+    return await handleZipUpload(req, res, zipBuffer);
+  } catch (e) {
+    logger.error({ type: 'app', action: 'zip.base64', error: e.message });
+    return res.status(500).json({ error: 'ZIP 处理失败: ' + e.message });
+  }
+});
+
 app.put('/api/files/:id', requireAuth, async (req, res) => {
   const { name, isPublic, templateId } = req.body || {};
   if (name === undefined && isPublic === undefined && templateId === undefined) {
@@ -1648,14 +1747,32 @@ async function renderFile(res, file) {
     if (!fs.existsSync(entryPath)) return res.status(404).json({ error: '入口文件已丢失' });
     try {
       let content = await fs.promises.readFile(entryPath, 'utf-8');
-      // 注入 <base> 标签使相对路径指向资源端点
+      const entryExt = path.extname(file.entry_path || 'index.html').toLowerCase();
       const baseTag = '<base href="/api/files/' + file.id + '/asset/">';
+
+      if (entryExt === '.md' || entryExt === '.markdown') {
+        // Markdown 入口：marked 渲染 + 模板
+        const mdHtml = marked.parse(content, { gfm: true, breaks: false })
+          .replace(/<pre><code class="hljs language-mermaid">([\s\S]*?)<\/code><\/pre>/g,
+            (_, code) => `<pre class="mermaid">${code}</pre>`);
+        const tplName = await getTemplateForFile(file);
+        const tpl = templateCache[tplName] || templateCache['default'];
+        const hljsTheme = BUILTIN_TEMPLATE_THEMES[tplName] || 'github';
+        let fullHtml = applyTemplate(tpl, file.original_name, mdHtml, hljsTheme);
+        // 注入 <base> 标签到模板输出中
+        if (/<head>/i.test(fullHtml)) {
+          fullHtml = fullHtml.replace(/<head>/i, '<head>\n' + baseTag);
+        }
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.send(fullHtml);
+      }
+
+      // HTML 入口：注入 <base> 和 charset
       if (/<head>/i.test(content)) {
         content = content.replace(/<head>/i, '<head>\n' + baseTag);
       } else if (/<html/i.test(content)) {
         content = content.replace(/<html[^>]*>/i, '$&\n<head>' + baseTag + '</head>');
       }
-      // 注入 charset
       if (!/<meta[^>]+charset=/i.test(content)) {
         const charsetTag = '<meta charset="UTF-8">';
         if (/<head>/i.test(content)) {
