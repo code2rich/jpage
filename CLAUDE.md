@@ -131,6 +131,7 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 - **`.dockerignore` 排除 `data/`** — 上传文件不烘焙进镜像；compose 中的 `data/` volume 持久化状态。
 - **鉴权模型** — `requireAuth` 是异步中间件，接受三种认证方式：(1) session cookie，(2) 旧 `MCP_TOKEN` 环境变量（向后兼容），(3) 用户级 API Token（`tokens` 表）。中间件设置 `req.userId` 和 `req.userRole` 供下游使用。`requireAdmin` 检查 `req.userRole === 'admin'`。`loadFileWithPrivacy` 强制文件所有权：admin 可访问一切，普通用户仅可访问自己的文件和公开文件。
 - **角色系统** — `users.role` 列，值为 `admin` 或 `user`。admin 可管理用户、查看所有文件。普通用户只能操作自己的文件。`bootstrapAdmin()` 创建时显式设置 `role='admin'`。
+- **开放注册** — `ALLOW_REGISTRATION=true` 时允许用户自助注册，默认关闭。注册端点 `POST /api/auth/register`，支持邮箱或用户名注册。配合 SMTP 配置实现邮箱验证。环境变量必须在 `.env`、`docker-compose.yml`、`server.js` 三处同步。
 - **API Token** — 每用户最多 10 个，格式 `jp_` + 32 位 base62。DB 存 SHA-256 哈希 + 前 8 位前缀。明文仅创建时返回一次。
 - **`MCP_TOKEN` 是可选的** — 未设置时仍可通过用户级 Token 访问 MCP。`mountMcpServer` 接受 `authenticateRequest` 函数验证 Token。
 - **`uploaded_by` 从 `req.userId` 设置** — 文件归属隔离：admin 看全部文件，普通用户看自己的 + 公开的。`PUT`/`DELETE` 增加所有权检查（`checkFileOwnership`）。

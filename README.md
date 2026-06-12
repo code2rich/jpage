@@ -2,7 +2,9 @@
 
 > 拖入文件，即刻成页。
 
-**[>>> 查看即页产品介绍 <<<](http://jpage.code2rich.com/api/files/4/render)**
+[English](README_EN.md) | 中文
+
+**[>>> 查看即页产品介绍 <<<](https://jpage.cn/)**
 
 **即页**是一个零配置的 HTML / Markdown 即时预览与分享工具。把写好的文档拖进来，立刻获得一个干净的在线页面——无需部署流程，无需服务器知识。特别适合 AI 生成内容的一键分享。
 
@@ -30,6 +32,7 @@
 ### 安全与权限
 
 - **多用户支持** — admin 可创建和管理多个用户，普通用户只能访问自己的文件和公开文件
+- **开放注册** — 通过 `ALLOW_REGISTRATION=true` 开放用户自助注册，配合 SMTP 实现邮箱验证
 - **会话鉴权** — Cookie + bcrypt 密码哈希
 - **API Token** — 每用户可创建多个 API Token，适合脚本和 AI 工具调用
 - **公开/私有文件** — 上传时可选是否公开，私有文件仅文件所有者和 admin 可访问
@@ -104,6 +107,14 @@ API 和 MCP 端点支持三种认证方式：
 | `NODE_ENV` | 否 | `production` 时 Cookie 仅 HTTPS 下发送，SESSION_SECRET 缺失会拒绝启动 |
 | `PORT` | 否 | 默认 8858 |
 | `MCP_TOKEN` | 否 | 启用 `/mcp` 端点的 Bearer token；未设置时 MCP 端点不挂载 |
+| `ALLOW_REGISTRATION` | 否 | 设为 `true` 开放用户自助注册；默认关闭，仅 admin 可创建用户 |
+| `SMTP_HOST` | 否 | SMTP 服务器地址（如 `smtp.qq.com`），配置后支持邮箱验证 |
+| `SMTP_PORT` | 否 | SMTP 端口（如 `465`） |
+| `SMTP_SECURE` | 否 | 是否使用 SSL（`true`/`false`） |
+| `SMTP_USER` | 否 | SMTP 登录用户名 |
+| `SMTP_PASS` | 否 | SMTP 登录密码或授权码 |
+| `SMTP_FROM` | 否 | 发件人地址（如 `"即页 <user@example.com>"`） |
+| `APP_URL` | 否 | 应用外部访问地址，用于拼接验证链接（如 `https://jpage.cn`） |
 
 如果 `ADMIN_USER` 和 `ADMIN_PASSWORD` 都留空启动，启动日志会输出：
 
@@ -172,6 +183,7 @@ jpage/
 |---|---|---|
 | `/api/auth/me` | GET | 当前登录信息 |
 | `/api/auth/login` | POST | 登录（`{username, password}`） |
+| `/api/auth/register` | POST | 注册（需 `ALLOW_REGISTRATION=true`） |
 | `/api/auth/logout` | POST | 登出 |
 | `/api/auth/change-password` | POST | 修改密码（所有用户可用） |
 
