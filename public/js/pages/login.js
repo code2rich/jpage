@@ -71,11 +71,28 @@ function renderLogin(container, openTab) {
   const registerSubmit = container.querySelector('#register-submit');
   const emailInput = container.querySelector('#register-email');
   const usernameInput = container.querySelector('#register-username');
+  const usernameHint = container.querySelector('#register-username-hint');
   const codeInput = container.querySelector('#register-code');
   const sendCodeBtn = container.querySelector('#btn-send-code');
   const codeTip = container.querySelector('#register-code-tip');
   let codeTimer = null;
   let tipTimer = null;
+
+  // 用户名实时校验
+  usernameInput.addEventListener('input', () => {
+    const val = usernameInput.value.trim();
+    if (!val) { usernameHint.hidden = true; usernameHint.textContent = ''; return; }
+    if (/[^a-zA-Z0-9_]/.test(val)) {
+      usernameHint.textContent = '用户名只能包含字母、数字和下划线';
+      usernameHint.hidden = false;
+    } else if (val.length < 2) {
+      usernameHint.textContent = '用户名至少 2 个字符';
+      usernameHint.hidden = false;
+    } else {
+      usernameHint.hidden = true;
+      usernameHint.textContent = '';
+    }
+  });
 
   // 发送验证码
   sendCodeBtn.addEventListener('click', async () => {
@@ -129,6 +146,7 @@ function renderLogin(container, openTab) {
     const confirmPassword = container.querySelector('#register-confirm').value;
     if (!email) { registerError.textContent = '请填写邮箱'; registerError.hidden = false; return; }
     if (!code) { registerError.textContent = '请填写验证码'; registerError.hidden = false; return; }
+    if (username && !/^[a-zA-Z0-9_]{2,30}$/.test(username)) { registerError.textContent = '用户名只能包含字母、数字和下划线，2-30 位'; registerError.hidden = false; return; }
     if (!password || !confirmPassword) return;
     registerError.hidden = true;
     registerSubmit.disabled = true;

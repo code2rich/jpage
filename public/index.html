@@ -215,7 +215,8 @@
     <div class="register-code-tip" id="register-code-tip" hidden></div>
     <label class="login-field">
       <span>用户名 <small>(可选)</small></span>
-      <input type="text" name="username" id="register-username" autocomplete="username" placeholder="不填则从邮箱自动生成">
+      <input type="text" name="username" id="register-username" autocomplete="username" placeholder="字母、数字、下划线，2-30 位" pattern="[a-zA-Z0-9_]{2,30}" minlength="2" maxlength="30" title="只能包含字母、数字和下划线，2-30 位">
+      <div class="register-username-hint" id="register-username-hint" hidden></div>
     </label>
     <label class="login-field">
       <span>密码</span>

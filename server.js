@@ -752,14 +752,13 @@ app.post('/api/auth/register', registerLimiter, async (req, res) => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) return res.status(400).json({ error: '邮箱格式不正确' });
 
-  // 验证码校验
+  // 验证码校验（仅验证，不删除）
   const codeHash = crypto.createHash('sha256').update(code + email).digest('hex');
   const codeRow = await dbGet(
     "SELECT * FROM email_verifications WHERE type = 'register_code' AND new_email = ? AND token_hash = ? AND expires_at > datetime('now')",
     [email, codeHash]
   );
   if (!codeRow) return res.status(400).json({ error: '验证码无效或已过期' });
-  await dbRun('DELETE FROM email_verifications WHERE id = ?', [codeRow.id]);
 
   let finalUsername = username;
 
@@ -778,6 +777,9 @@ app.post('/api/auth/register', registerLimiter, async (req, res) => {
       const nameConflict = await dbGet('SELECT id FROM users WHERE username = ? OR email = ?', [finalUsername, finalUsername]);
       if (nameConflict) return res.status(409).json({ error: '该用户名已被使用' });
     }
+
+    // 所有校验通过，消费验证码
+    await dbRun('DELETE FROM email_verifications WHERE id = ?', [codeRow.id]);
 
     const hash = await bcrypt.hash(password, 10);
     const result = await dbRun(
