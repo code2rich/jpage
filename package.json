@@ -1,6 +1,6 @@
 {
   "name": "html-markdown-viewer",
-  "version": "1.0.0",
+  "version": "1.5.0",
   "description": "即页 — 零配置 HTML/Markdown 即时预览与分享工具",
   "main": "server.js",
   "scripts": {
