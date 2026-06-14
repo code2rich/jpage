@@ -7,10 +7,6 @@ const logger = require('./logger');
 
 const RESOURCE_MAX_BYTES = 256 * 1024;
 
-function decodeFilename(name) {
-  return Buffer.from(name, 'latin1').toString('utf8');
-}
-
 const ALLOWED_EXTS = ['.html', '.htm', '.md', '.markdown', '.zip'];
 
 function buildApiClient({ baseUrl, token }) {
@@ -132,8 +128,7 @@ function createMcpServer({ port, api, mcpIp, protocol }) {
       },
     },
     async ({ name, content, isPublic, overwriteFileId, tags, categoryId }) => {
-      const decoded = decodeFilename(name);
-      const ext = (decoded.match(/\.[^.]+$/) || [''])[0].toLowerCase();
+      const ext = (name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
 
       // ZIP 文件：content 为 base64 编码
       if (ext === '.zip') {
@@ -143,8 +138,8 @@ function createMcpServer({ port, api, mcpIp, protocol }) {
         }
         try {
           const data = await api.post('/api/files/upload-zip-base64', {
-            name: decoded,
-            content: content,
+            name,
+            content,
             isPublic: isPublic ?? true,
           });
           if (data.type === 'batch') {
@@ -177,7 +172,7 @@ function createMcpServer({ port, api, mcpIp, protocol }) {
         ? `/api/files/${overwriteFileId}/overwrite-json`
         : '/api/files/upload-json';
       const data = await api.post(uploadPath, {
-        name: decoded,
+        name,
         content,
         isPublic: isPublic ?? true,
       });
