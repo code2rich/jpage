@@ -1768,6 +1768,9 @@ app.get('/api/files/:id', loadFileWithPrivacy, async (req, res) => {
 
 app.get('/api/files/:id/content', loadFileWithPrivacy, async (req, res) => {
   const file = req.fileRecord;
+  if (req.userRole !== 'admin' && file.uploaded_by !== req.userId) {
+    return res.status(403).json({ error: '无权读取此文件原文' });
+  }
   if (file.is_bundle) {
     return res.status(400).json({ error: '网站包（bundle）不支持读取原始内容，请改用 /api/files/:id/render 预览或 /api/files/:id/download 下载' });
   }
@@ -2083,7 +2086,10 @@ app.get('/api/files/:id/versions/:ver/content', requireAuth, async (req, res) =>
     const filePath = path.join(UPLOAD_DIR, ver.stored_name);
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: '版本文件已丢失' });
 
-    const file = await dbGet('SELECT original_name, file_type FROM files WHERE id = ?', [req.params.id]);
+    const file = await dbGet('SELECT original_name, file_type, uploaded_by FROM files WHERE id = ?', [req.params.id]);
+    if (req.userRole !== 'admin' && file?.uploaded_by !== req.userId) {
+      return res.status(403).json({ error: '无权读取此文件原文' });
+    }
     const content = await fs.promises.readFile(filePath, 'utf-8');
     res.json({
       id: parseInt(req.params.id),
