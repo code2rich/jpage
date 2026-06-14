@@ -1768,6 +1768,9 @@ app.get('/api/files/:id', loadFileWithPrivacy, async (req, res) => {
 
 app.get('/api/files/:id/content', loadFileWithPrivacy, async (req, res) => {
   const file = req.fileRecord;
+  if (file.is_bundle) {
+    return res.status(400).json({ error: '网站包（bundle）不支持读取原始内容，请改用 /api/files/:id/render 预览或 /api/files/:id/download 下载' });
+  }
   const filePath = path.join(UPLOAD_DIR, file.stored_name);
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: '文件已丢失' });
   try {

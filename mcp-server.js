@@ -221,7 +221,7 @@ function createMcpServer({ port, api, mcpIp, protocol }) {
     'get_file_content',
     {
       title: 'Get File Content',
-      description: '读取指定 id 的文件原始内容（UTF-8 文本）。适用于查看或编辑已有文件内容，不限文件大小。',
+      description: '读取指定 id 的文件原始内容（UTF-8 文本）。适用于查看或编辑已有文件内容，不限文件大小。不支持网站包（bundle）类型的 ZIP——list_files 中 is_bundle=1 的文件请改用 get_file_url 获取预览链接。',
       inputSchema: {
         id: z.number().int().positive().describe('文件 id（list_files 返回的 id 字段）'),
       },

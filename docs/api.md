@@ -124,7 +124,7 @@ curl -b jpage.sid -X PUT http://localhost:8858/api/files/1 \
 
 ### `GET /api/files/:id/content`
 
-返回原始文本。公开文件无需登录，私有文件需 session/token。
+返回原始文本。公开文件无需登录，私有文件需 session/token。**网站包（bundle，`is_bundle=1`）不支持此端点**，返回 `400`，请改用 `/api/files/:id/render` 预览或 `/api/files/:id/download` 下载。
 
 ```json
 { "id": 1, "original_name": "r.html", "file_type": "html", "is_public": 1, "content": "..." }
