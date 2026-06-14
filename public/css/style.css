@@ -621,6 +621,9 @@ html:not(.light) {
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
   }
 }
+.batch-toolbar[hidden] {
+  display: none;
+}
 .batch-category-select {
   padding: 5px 8px;
   font-size: 12px;
