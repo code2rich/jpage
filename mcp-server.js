@@ -649,7 +649,7 @@ function mountMcpServer(app, { port, mcpToken, mcpIp, protocol, authenticateRequ
         await transport.handleRequest(req, res, req.body);
         return;
       } else {
-        return res.status(400).json({
+        return res.status(404).json({
           jsonrpc: '2.0',
           error: { code: -32000, message: 'Bad Request: 缺少有效 mcp-session-id 或 initialize 请求' },
           id: null,
@@ -671,7 +671,7 @@ function mountMcpServer(app, { port, mcpToken, mcpIp, protocol, authenticateRequ
   const mcpGetHandler = async (req, res) => {
     const sessionId = req.headers['mcp-session-id'];
     if (!sessionId || !transports[sessionId]) {
-      return res.status(400).send('Invalid or missing mcp-session-id');
+      return res.status(404).send('Invalid or missing mcp-session-id');
     }
     const transport = transports[sessionId];
     await transport.handleRequest(req, res);
@@ -680,7 +680,7 @@ function mountMcpServer(app, { port, mcpToken, mcpIp, protocol, authenticateRequ
   const mcpDeleteHandler = async (req, res) => {
     const sessionId = req.headers['mcp-session-id'];
     if (!sessionId || !transports[sessionId]) {
-      return res.status(400).send('Invalid or missing mcp-session-id');
+      return res.status(404).send('Invalid or missing mcp-session-id');
     }
     try {
       const transport = transports[sessionId];
