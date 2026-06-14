@@ -1717,6 +1717,55 @@ app.post('/api/files/batch', requireAuth, async (req, res) => {
   }
 });
 
+app.get('/api/files/:id', loadFileWithPrivacy, async (req, res) => {
+  try {
+    const f = req.fileRecord;
+    const tags = await dbAll(
+      'SELECT t.id, t.name FROM tags t JOIN file_tags ft ON ft.tag_id = t.id WHERE ft.file_id = ?',
+      [f.id]
+    );
+    let starred = false;
+    if (req.userId) {
+      const row = await dbGet(
+        'SELECT 1 AS hit FROM starred_files WHERE user_id = ? AND file_id = ?',
+        [req.userId, f.id]
+      );
+      starred = !!row;
+    }
+    let category_name = null;
+    if (f.category_id) {
+      const cat = await dbGet('SELECT name FROM categories WHERE id = ?', [f.category_id]);
+      category_name = cat ? cat.name : null;
+    }
+    const versionRow = await dbGet(
+      'SELECT COUNT(*) AS c FROM file_versions WHERE file_id = ?', [f.id]
+    );
+    res.json({
+      id: f.id,
+      original_name: f.original_name,
+      file_type: f.file_type,
+      size: f.size,
+      is_public: f.is_public,
+      created_at: f.created_at,
+      updated_at: f.updated_at,
+      share_key: f.share_key,
+      category_id: f.category_id,
+      uploaded_by: f.uploaded_by,
+      is_bundle: f.is_bundle,
+      entry_path: f.entry_path,
+      view_count: f.view_count,
+      template_id: f.template_id,
+      version_count: versionRow ? versionRow.c : 0,
+      tags,
+      starred,
+      category_name,
+    });
+  } catch (e) {
+    logger.error({ type: 'app', error: e.message });
+    res.status(500).json({ error: '获取文件失败' });
+  }
+});
+
 app.get('/api/files/:id/content', loadFileWithPrivacy, async (req, res) => {
   const file = req.fileRecord;
   const filePath = path.join(UPLOAD_DIR, file.stored_name);

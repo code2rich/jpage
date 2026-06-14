@@ -46,6 +46,33 @@ function textResult(payload, opts = {}) {
   };
 }
 
+async function resolveTagIds(api, tags) {
+  if (!tags || tags.length === 0) return [];
+  const all = await api.get('/api/tags');
+  const existing = new Map(all.tags.map(t => [t.name, t.id]));
+  const tagIds = [];
+  for (const name of tags) {
+    if (existing.has(name)) {
+      tagIds.push(existing.get(name));
+    } else {
+      const created = await api.post('/api/tags', { name });
+      tagIds.push(created.id);
+      existing.set(name, created.id);
+    }
+  }
+  return tagIds;
+}
+
+async function applyTagsAndCategory(api, fileId, tags, categoryId) {
+  if (tags && tags.length > 0) {
+    const tagIds = await resolveTagIds(api, tags);
+    await api.put(`/api/files/${fileId}/tags`, { tagIds });
+  }
+  if (categoryId) {
+    await api.put(`/api/files/${fileId}/category`, { categoryId });
+  }
+}
+
 function formatSize(bytes) {
   if (bytes < 1024) return bytes + ' B';
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -83,7 +110,7 @@ function createMcpServer({ port, api, mcpIp, protocol }) {
     async ({ page, limit, sort, order, keyword, category, tag }) => {
       const params = new URLSearchParams();
       if (page) params.set('page', page);
-      if (limit) params.set('limit', limit);
+      if (limit) params.set('limit', Math.min(limit, 100));
       if (sort) params.set('sort', sort);
       if (order) params.set('order', order);
       if (keyword) params.set('keyword', keyword);
@@ -91,7 +118,7 @@ function createMcpServer({ port, api, mcpIp, protocol }) {
       if (tag) params.set('tag', tag);
       const qs = params.toString();
       const data = await api.get('/api/files' + (qs ? '?' + qs : ''));
-      return textResult(data.files);
+      return textResult({ files: data.files, pagination: data.pagination });
     }
   );
 
@@ -143,12 +170,16 @@ function createMcpServer({ port, api, mcpIp, protocol }) {
             isPublic: isPublic ?? true,
           });
           if (data.type === 'batch') {
+            for (const f of data.files) {
+              await applyTagsAndCategory(api, f.id, tags, categoryId);
+            }
             return textResult({
               type: 'batch',
               count: data.count,
               files: data.files,
             });
           }
+          await applyTagsAndCategory(api, data.id, tags, categoryId);
           return textResult({
             ...data,
             url: data.share_key ? `${protocol}://${mcpIp}:${port}/s/${data.share_key}` : `${protocol}://${mcpIp}:${port}/api/files/${data.id}/render`,
@@ -177,23 +208,7 @@ function createMcpServer({ port, api, mcpIp, protocol }) {
         isPublic: isPublic ?? true,
       });
 
-      // 设置标签
-      if (tags && tags.length > 0) {
-        const tagIds = [];
-        for (const t of tags) {
-          const allTags = await api.get('/api/tags');
-          const existing = allTags.tags.find(x => x.name === t);
-          if (existing) { tagIds.push(existing.id); continue; }
-          const created = await api.post('/api/tags', { name: t });
-          tagIds.push(created.id);
-        }
-        await api.put(`/api/files/${data.id}/tags`, { tagIds });
-      }
-
-      // 设置分类
-      if (categoryId) {
-        await api.put(`/api/files/${data.id}/category`, { categoryId });
-      }
+      await applyTagsAndCategory(api, data.id, tags, categoryId);
 
       return textResult({
         ...data,
@@ -217,7 +232,7 @@ function createMcpServer({ port, api, mcpIp, protocol }) {
         id: data.id,
         original_name: data.original_name,
         file_type: data.file_type,
-        size: data.content.length,
+        size: Buffer.byteLength(data.content, 'utf-8'),
         content: data.content,
       });
     }
@@ -264,9 +279,9 @@ function createMcpServer({ port, api, mcpIp, protocol }) {
       },
     },
     async ({ id }) => {
-      const data = await api.get(`/api/files/${id}/content`);
+      const data = await api.get(`/api/files/${id}`);
       const url = data.share_key ? `${protocol}://${mcpIp}:${port}/s/${data.share_key}` : `${protocol}://${mcpIp}:${port}/api/files/${id}/render`;
-      return textResult({ id, url });
+      return textResult({ id, url, share_key: data.share_key || null });
     }
   );
 
@@ -340,14 +355,7 @@ function createMcpServer({ port, api, mcpIp, protocol }) {
       },
     },
     async ({ fileId, tags }) => {
-      const tagIds = [];
-      for (const name of tags) {
-        const allTags = await api.get('/api/tags');
-        const existing = allTags.tags.find(t => t.name === name);
-        if (existing) { tagIds.push(existing.id); continue; }
-        const created = await api.post('/api/tags', { name });
-        tagIds.push(created.id);
-      }
+      const tagIds = await resolveTagIds(api, tags);
       await api.put(`/api/files/${fileId}/tags`, { tagIds });
       return textResult({ fileId, tags });
     }
@@ -542,6 +550,29 @@ function createMcpServer({ port, api, mcpIp, protocol }) {
 }
 
 const transports = {};
+const sessionActivity = {};
+const SESSION_TTL_MS = 60 * 60 * 1000;
+const SESSION_SWEEP_MS = 10 * 60 * 1000;
+let sessionSweepTimer = null;
+
+function touchSession(sid) {
+  if (sid) sessionActivity[sid] = Date.now();
+}
+
+function sweepSessions() {
+  const now = Date.now();
+  for (const sid of Object.keys(transports)) {
+    const last = sessionActivity[sid] || 0;
+    if (now - last > SESSION_TTL_MS) {
+      logger.info({ type: 'app', message: 'MCP session 超时清理', sessionId: sid, idleMs: now - last });
+      try { transports[sid].close(); } catch (e) {
+        logger.error({ type: 'app', message: '关闭超时 session 失败', sessionId: sid, error: e.message });
+      }
+      delete transports[sid];
+      delete sessionActivity[sid];
+    }
+  }
+}
 
 /**
  * @param {object} opts
@@ -555,6 +586,11 @@ function mountMcpServer(app, { port, mcpToken, mcpIp, protocol, authenticateRequ
   if (!mcpToken && !authenticateRequest) {
     logger.info({ type: 'app', message: 'MCP_TOKEN 未设置且无 Token 验权，MCP 端点 /mcp 已禁用' });
     return;
+  }
+
+  if (!sessionSweepTimer) {
+    sessionSweepTimer = setInterval(sweepSessions, SESSION_SWEEP_MS);
+    if (typeof sessionSweepTimer.unref === 'function') sessionSweepTimer.unref();
   }
 
   function getServer(callerToken) {
@@ -592,11 +628,13 @@ function mountMcpServer(app, { port, mcpToken, mcpIp, protocol, authenticateRequ
       let transport;
       if (sessionId && transports[sessionId]) {
         transport = transports[sessionId];
+        touchSession(sessionId);
       } else if (!sessionId && isInitializeRequest(req.body)) {
         transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (sid) => {
             transports[sid] = transport;
+            touchSession(sid);
           },
         });
         transport.onclose = () => {
@@ -661,6 +699,7 @@ function mountMcpServer(app, { port, mcpToken, mcpIp, protocol, authenticateRequ
 }
 
 async function closeMcpTransports() {
+  if (sessionSweepTimer) { clearInterval(sessionSweepTimer); sessionSweepTimer = null; }
   for (const sid of Object.keys(transports)) {
     try {
       await transports[sid].close();
@@ -668,6 +707,7 @@ async function closeMcpTransports() {
       logger.error({ type: 'app', message: '关闭 MCP transport 失败', sessionId: sid, error: e.message });
     }
     delete transports[sid];
+    delete sessionActivity[sid];
   }
 }
 
