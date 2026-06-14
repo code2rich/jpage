@@ -1766,7 +1766,7 @@ app.get('/api/files/:id', loadFileWithPrivacy, async (req, res) => {
   }
 });
 
-app.get('/api/files/:id/content', loadFileWithPrivacy, async (req, res) => {
+app.get('/api/files/:id/content', requireAuth, loadFileWithPrivacy, async (req, res) => {
   const file = req.fileRecord;
   if (req.userRole !== 'admin' && file.uploaded_by !== req.userId) {
     return res.status(403).json({ error: '无权读取此文件原文' });
