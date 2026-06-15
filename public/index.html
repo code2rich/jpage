@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="即页，拖入 HTML 或 Markdown 文件，即刻获得在线预览页面。">
 <title>即页 — 拖入文件，即刻成页</title>
-<link rel="stylesheet" href="/css/style.css?v=1.4.1">
+<link rel="stylesheet" href="/css/style.css?v=1.5.0">
 </head>
 <body>
 <div id="app"></div>
@@ -161,7 +161,7 @@
   <!-- 模板预览弹窗 -->
   <div class="modal-backdrop" id="template-preview-modal" hidden>
     <div class="modal-panel modal-panel-lg" onclick="event.stopPropagation()">
-      <button class="modal-close" id="template-preview-close">&times;</button>
+      <button class="btn btn-small modal-close" id="template-preview-close" aria-label="关闭">×</button>
       <div class="template-preview-header">
         <h3 id="template-preview-title"></h3>
         <div class="template-preview-meta" id="template-preview-meta"></div>
@@ -330,6 +330,7 @@ MCP 配置
 <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
 <input type="text" id="search-input" placeholder="搜索文件名和内容… (/)" autocomplete="off">
 <button type="button" class="search-clear" id="search-clear" hidden aria-label="清除搜索">×</button>
+<span class="search-kbd" id="search-kbd">/</span>
 </div>
 <div class="filter-chips">
 <button type="button" class="filter-chip active" data-filter="all">全部</button>

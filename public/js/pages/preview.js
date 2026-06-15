@@ -380,6 +380,10 @@ function renderPreview(container, hash) {
     editorStatusbar.textContent = `${lines} 行 · ${editorTextarea.value.length} 字符`;
   }
 
+  editorTextarea.addEventListener('scroll', () => {
+    editorGutter.scrollTop = editorTextarea.scrollTop;
+  });
+
   function exitEditMode(mode) {
     if (editorTextarea.value !== editorOriginalContent) {
       return dialogModal.confirm({

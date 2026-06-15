@@ -104,7 +104,7 @@ function renderHome(container) {
     if (categorySelect) {
       // 填充分类选项
       const updateCategoryOptions = () => {
-        categorySelect.innerHTML = '<option value="">移动到分类…</option><option value="0">未分类</option>';
+        categorySelect.innerHTML = '<option value="" disabled selected>移动到分类…</option><option value="0">未分类</option>';
         allCategories.forEach(c => {
           categorySelect.innerHTML += `<option value="${c.id}">${escapeHtml(c.name)}</option>`;
         });
@@ -132,6 +132,10 @@ function renderHome(container) {
       e.stopPropagation();
       const isOpen = settingsDropdown.classList.toggle('open');
       settingsBtn.setAttribute('aria-expanded', String(isOpen));
+      if (isOpen) {
+        const firstItem = settingsMenu.querySelector('.settings-menu-item');
+        if (firstItem) firstItem.focus();
+      }
     });
 
     // 点击菜单项后关闭
@@ -183,11 +187,18 @@ function renderHome(container) {
     if (dd && dd.classList.contains('open') && !dd.contains(e.target)) {
       dd.classList.remove('open');
       const btn = dd.querySelector('#btn-settings');
-      if (btn) btn.setAttribute('aria-expanded', 'false');
+      if (btn) {
+        btn.setAttribute('aria-expanded', 'false');
+        btn.focus();
+      }
     }
     // 关闭文件项更多菜单
     document.querySelectorAll('.file-more-dropdown.open').forEach(d => {
-      if (!d.contains(e.target)) d.classList.remove('open');
+      if (!d.contains(e.target)) {
+        d.classList.remove('open');
+        const t = d.querySelector('.file-more-trigger');
+        if (t) t.setAttribute('aria-expanded', 'false');
+      }
     });
   });
 }
@@ -549,8 +560,15 @@ function renderFileList(container, list, files) {
     moreTrigger.addEventListener('click', e => {
       e.stopPropagation();
       // 关闭其他已打开的菜单
-      document.querySelectorAll('.file-more-dropdown.open').forEach(d => { if (d !== moreDropdown) d.classList.remove('open'); });
-      moreDropdown.classList.toggle('open');
+      document.querySelectorAll('.file-more-dropdown.open').forEach(d => {
+        if (d !== moreDropdown) {
+          d.classList.remove('open');
+          const t = d.querySelector('.file-more-trigger');
+          if (t) t.setAttribute('aria-expanded', 'false');
+        }
+      });
+      const isOpen = moreDropdown.classList.toggle('open');
+      moreTrigger.setAttribute('aria-expanded', String(isOpen));
     });
 
     el.querySelector('.btn-privacy').addEventListener('click', e => {
@@ -673,14 +691,24 @@ function buildPageNumbers(current, total) {
 function setupFileFilter(container) {
   const searchInput = container.querySelector('#search-input');
   const searchClear = container.querySelector('#search-clear');
+  const searchKbd = container.querySelector('#search-kbd');
   const chips = container.querySelectorAll('.filter-chip');
   let searchTimer;
 
   searchInput.addEventListener('input', () => {
     filterState.query = searchInput.value.trim();
     searchClear.hidden = !filterState.query;
+    if (searchKbd) searchKbd.style.display = filterState.query ? 'none' : '';
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => loadFiles(container, 1), 300);
+  });
+
+  searchInput.addEventListener('focus', () => {
+    if (searchKbd) searchKbd.style.display = 'none';
+  });
+
+  searchInput.addEventListener('blur', () => {
+    if (searchKbd && !filterState.query) searchKbd.style.display = '';
   });
 
   searchInput.addEventListener('keydown', e => {
@@ -688,6 +716,7 @@ function setupFileFilter(container) {
       searchInput.value = '';
       filterState.query = '';
       searchClear.hidden = true;
+      if (searchKbd) searchKbd.style.display = '';
       searchInput.blur();
       clearTimeout(searchTimer);
       loadFiles(container, 1);
@@ -698,6 +727,7 @@ function setupFileFilter(container) {
     searchInput.value = '';
     filterState.query = '';
     searchClear.hidden = true;
+    if (searchKbd) searchKbd.style.display = '';
     searchInput.focus();
     clearTimeout(searchTimer);
     loadFiles(container, 1);

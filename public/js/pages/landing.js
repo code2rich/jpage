@@ -11,6 +11,18 @@ function renderLanding(container, openModal) {
 
   const el = container.querySelector('.landing-page');
 
+  // 导航栏滚动吸顶效果
+  const nav = el.querySelector('.landing-nav');
+  const onScroll = () => {
+    if (window.scrollY > 40) {
+      nav.classList.add('scrolled');
+    } else {
+      nav.classList.remove('scrolled');
+    }
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
   // 模板展示
   const grid = el.querySelector('#landing-template-grid');
   const emptyEl = el.querySelector('#landing-template-empty');
