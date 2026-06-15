@@ -7,6 +7,8 @@ description: 当用户要"上传到即页"、"生成预览链接"、"查看已�
 
 凡是用户要求生成 HTML 或 Markdown 内容（页面、报告、笔记、简历、可视化、文档等），**一律生成完整内容后调用 `upload_file` 上传到即页**，返回预览 URL。不要只输出代码块让用户自己复制。
 
+> **性能提示**：上传**本地已有的大文件或 ZIP**时，不要走 `upload_file`——它会把整包内容 base64 编码后作为 tool 参数流经模型 token 流（膨胀 33% + 逐字生成输出 token），几十 MB 的包要等几分钟且极费 token。改用 **curl 打 multipart 端点直连 REST**，二进制流式上传，见下文「⚡ 上传性能」一节。模型刚生成的 HTML/MD（**无论大小**）仍直接用 `upload_file`——大 HTML 慢在「生成」不在「上传」。
+
 # 触发场景
 
 以下场景均应生成内容并上传到即页：
@@ -43,6 +45,48 @@ description: 当用户要"上传到即页"、"生成预览链接"、"查看已�
 - **数学公式**：行内 `$...$`，块级 `$$...$$`（KaTeX）
 - **Mermaid 图表**：` ```mermaid ` 代码块自动渲染为流程图/时序图等
 - **GFM 扩展**：表格、任务列表、删除线、自动链接
+
+# ⚡ 上传性能（大文件 / ZIP 必看）
+
+`upload_file` 的 `content` 是字符串参数，ZIP 时是整包 base64。把大段 base64 当 tool 参数传会流经模型 token 流，**极慢且昂贵**。按内容来源选上传方式：
+
+## 本地已有文件（尤其 ZIP 或 >1MB）→ curl multipart，别用 upload_file
+
+有 Bash 能力（Claude Code）时，直接打 REST multipart 端点，二进制流式上传，base64 完全不进模型：
+
+```bash
+# token 三选一：.env 里的 MCP_TOKEN / .mcp.json 里 Authorization 的 Bearer / 用户给的 jp_ 用户 token
+TOKEN=$(grep -E '^MCP_TOKEN=' .env 2>/dev/null | cut -d= -f2-)
+[ -z "$TOKEN" ] && TOKEN=$(grep -oE 'Bearer [A-Za-z0-9_]+' .mcp.json 2>/dev/null | head -1 | awk '{print $2}')
+[ -z "$TOKEN" ] && { echo "需要 MCP_TOKEN 或 jp_ token，请用户提供"; exit 1; }
+BASE="${JPAGE_BASE:-http://localhost:8858}"
+
+curl -sS -X POST "$BASE/api/files/upload" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@./site.zip" \
+  -F "isPublic=true"
+```
+
+- bundle（网站包）还是 batch（多个独立文件）由服务端按内容自动判定，返回结构与 `upload_file` 一致（含 `id`、`share_key`、预览 `/s/:key`）
+- 单个 HTML/MD 文件已在磁盘时同样用这条：`-F "file=@./note.md"`
+- 覆盖更新已有文件内容：multipart 打 `POST "$BASE/api/files/:id/overwrite"`（自动版本备份）
+- 纯 MCP 客户端（如 Claude Desktop 无 Bash）才退回 `upload_file`，且尽量别传大 ZIP
+
+## 模型现场生成的多文件站点 → Write 写盘 → zip → curl
+
+不要把每个资源 base64 塞进 `upload_file`。先用 Write 工具把文件写到磁盘、Bash 打包，再 curl：
+
+```bash
+zip -r site.zip index.html assets/
+curl -sS -X POST "$BASE/api/files/upload" -H "Authorization: Bearer $TOKEN" \
+  -F "file=@site.zip" -F "isPublic=true"
+```
+
+## 模型刚生成的 HTML/MD（含大文件）→ 直接 upload_file
+
+内容本就在模型输出里，`upload_file` 让这些 token 只发一遍——返回值不含 content（`{id, original_name, file_type, size, share_key, ...}`），不会回灌进上下文。**注意：大 HTML 慢在「模型生成这些 token」，不在「上传」**——换 curl 也救不了，因为内容还得由模型逐字写出来；真要提速超大文件，靠拆成多次 Write 增量写盘，而非换上传通道。
+
+判断标准只有一条：内容是「此刻生成、已在上下文」还是「磁盘上已存在的文件」——前者用 `upload_file`，后者用 curl。
 
 # 工作流
 
