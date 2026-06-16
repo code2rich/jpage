@@ -23,9 +23,12 @@ const archiver = require('archiver');
 const morgan = require('morgan');
 const logger = require('./logger');
 
-// --- 北京时间工具 ---
+// --- UTC 时间工具 ---
+// 统一存 UTC：与 SQLite 的 CURRENT_TIMESTAMP / datetime('now') 一致，
+// 避免跨时区部署时的时间偏差。展示层（前端）负责转本地时区。
+// 比原 toLocaleString(Asia/Shanghai) 快约一个数量级。
 function now() {
-  return new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' });
+  return new Date().toISOString().slice(0, 19).replace('T', ' ');
 }
 
 // --- 异步文件清理 ---
@@ -220,20 +223,29 @@ function loadTemplates() {
   const files = fs.readdirSync(TEMPLATES_DIR).filter(f => f.endsWith('.html'));
   for (const f of files) {
     const name = path.basename(f, '.html');
-    templateCache[name] = fs.readFileSync(path.join(TEMPLATES_DIR, f), 'utf-8');
+    const raw = fs.readFileSync(path.join(TEMPLATES_DIR, f), 'utf-8');
+    templateCache[name] = compileTemplate(raw);
   }
   logger.info({ type: 'app', msg: 'templates loaded', count: Object.keys(templateCache).length });
 }
 
-function applyTemplate(tpl, title, content, hljsTheme) {
-  let html = tpl;
-  html = html.replace(/\{\{title\}\}/g, title);
-  html = html.replace(/\{\{content\}\}/g, content);
-  html = html.replace(/\{\{hljs_theme\}\}/g, hljsTheme || 'github');
+// 预编译模板：静态占位符（vendor URL）在加载时一次替换；运行时只剩 title/content/hljs_theme 三个动态替换，
+// 避免每次渲染都跑 ~8 次正则（含 new RegExp 构造）。返回函数 (title, content, hljsTheme) => html。
+function compileTemplate(raw) {
+  let src = raw;
   for (const [key, value] of Object.entries(TEMPLATE_PLACEHOLDERS)) {
-    html = html.replace(new RegExp('\\{\\{' + key + '\\}\\}', 'g'), value);
+    src = src.split('{{' + key + '}}').join(value);
   }
-  return html;
+  return function applyCompiled(title, content, hljsTheme) {
+    return src
+      .split('{{title}}').join(title)
+      .split('{{content}}').join(content)
+      .split('{{hljs_theme}}').join(hljsTheme || 'github');
+  };
+}
+
+function applyTemplate(tplFn, title, content, hljsTheme) {
+  return tplFn(title, content, hljsTheme);
 }
 
 const BUILTIN_TEMPLATE_THEMES = {
@@ -249,6 +261,20 @@ async function loadTemplateNameMap() {
   const rows = await dbAll('SELECT id, name FROM templates');
   templateNameToId = {};
   for (const r of rows) templateNameToId[r.name] = r.id;
+}
+
+// --- 分类名称内存缓存 ---
+// 列表/搜索每次都会用 categoryId -> name 做映射，分类表变更频率极低。
+// 启动时加载，写入（增/删/改名/导入）时失效重建。
+let categoryNameCache = {}; // id -> name
+async function reloadCategoryNameCache() {
+  const rows = await dbAll('SELECT id, name FROM categories');
+  const map = {};
+  for (const r of rows) map[r.id] = r.name;
+  categoryNameCache = map;
+}
+function getCategoryName(id) {
+  return categoryNameCache[id] || null;
 }
 
 async function getTemplateForFile(file) {
@@ -324,13 +350,30 @@ const app = express();
 const PORT = process.env.PORT || 8858;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const ALLOW_REGISTRATION = process.env.ALLOW_REGISTRATION === 'true';
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = process.env.JPAGE_DATA_DIR || path.join(__dirname, 'data');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const db = new sqlite3.Database(path.join(DATA_DIR, 'database.sqlite'));
+
+// --- SQLite 性能 PRAGMA ---
+// 在任何查询前应用：WAL 让读写不互斥（并发提升），synchronous=NORMAL 减少每次提交的 fsync，
+// busy_timeout 在写冲突时自动重试，cache_size/temp_store/mmap_size 提升读吞吐。
+function configureDatabase() {
+  return new Promise((resolve, reject) => {
+    db.exec(
+      `PRAGMA journal_mode=WAL;
+       PRAGMA synchronous=NORMAL;
+       PRAGMA busy_timeout=5000;
+       PRAGMA cache_size=-20000;
+       PRAGMA temp_store=MEMORY;
+       PRAGMA mmap_size=268435452;`,
+      (err) => (err ? reject(err) : resolve())
+    );
+  });
+}
 
 function generateShareKey() {
   return crypto.randomBytes(6).toString('base64url').slice(0, 8);
@@ -443,8 +486,11 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true }));
+// 全局 JSON 解析限制为 1MB；大 body（upload-json / upload-zip-base64）由端点级中间件放宽。
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+// 大 body 端点专用解析器（50MB）
+const largeJson = express.json({ limit: '50mb' });
 
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
@@ -1259,18 +1305,12 @@ app.get('/api/files', requireAuth, async (req, res) => {
       starredSet = new Set(starRows.map(r => r.file_id));
     }
 
-    // 批量获取分类名称
-    const catMap = {};
-    if (files.some(f => f.category_id)) {
-      const catRows = await dbAll('SELECT id, name FROM categories');
-      catRows.forEach(c => { catMap[c.id] = c.name; });
-    }
-
+    // 分类名称走内存缓存（避免每次列表全表扫 categories）
     const result = files.map(f => ({
       ...f,
       tags: tagsMap[f.id] || [],
       starred: starredSet.has(f.id),
-      category_name: f.category_id ? (catMap[f.category_id] || null) : null,
+      category_name: f.category_id ? getCategoryName(f.category_id) : null,
     }));
 
     res.json({
@@ -1283,6 +1323,10 @@ app.get('/api/files', requireAuth, async (req, res) => {
 });
 
 // --- 全文搜索 ---
+// FTS5 的 MATCH 不能与普通列在 LEFT JOIN + OR 中混用（SQLite 报 "unable to use function MATCH"）。
+// 因此用 UNION 合并两类命中：FTS 全文命中（带 snippet）+ 文件名 LIKE 命中（snippet 为 NULL）。
+// UNION 自动按整行去重；外层 JOIN files 取详情，COUNT 与 LIMIT 同源，分页准确、无重复。
+// 一次往返替代原来的两次全量查询 + 内存去重。
 app.get('/api/files/search', requireAuth, async (req, res) => {
   const q = (req.query.q || '').trim();
   if (!q) return res.status(400).json({ error: '搜索关键词不能为空' });
@@ -1294,9 +1338,11 @@ app.get('/api/files/search', requireAuth, async (req, res) => {
   const role = req.userRole;
 
   const ftsQuery = escapeFtsQuery(q);
-  if (!ftsQuery) return res.json({ files: [], pagination: { page, limit, total: 0, totalPages: 0 } });
+  const likeQ = '%' + q + '%';
+  const useFts = !!ftsQuery;
 
   try {
+    // 权限子句作用于外层 files 行
     let permClause = '';
     const permParams = [];
     if (role !== 'admin') {
@@ -1304,52 +1350,34 @@ app.get('/api/files/search', requireAuth, async (req, res) => {
       permParams.push(userId);
     }
 
+    // 匹配 id 集合（含 snippet）：FTS 命中 UNION 文件名命中
+    const matchedIdsSql = useFts
+      ? "(SELECT fts.file_id AS id, snippet(file_contents_fts, 0, '<mark>', '</mark>', '...', 32) AS snippet " +
+        'FROM file_contents_fts fts WHERE fts.content MATCH ? ' +
+        'UNION ' +
+        'SELECT f2.id AS id, NULL AS snippet FROM files f2 WHERE f2.original_name LIKE ?)'
+      : '(SELECT f2.id AS id, NULL AS snippet FROM files f2 WHERE f2.original_name LIKE ?)';
+    const matchedParams = useFts ? [ftsQuery, likeQ] : [likeQ];
+
     const countRow = await dbGet(
-      `SELECT COUNT(*) AS total FROM files f JOIN file_contents_fts fts ON f.id = fts.file_id WHERE fts.content MATCH ? ${permClause}`,
-      [ftsQuery, ...permParams]
+      'SELECT COUNT(*) AS total FROM files f JOIN ' + matchedIdsSql + ' m ON m.id = f.id WHERE 1=1 ' + permClause,
+      [...matchedParams, ...permParams]
     );
     const total = countRow.total;
     const totalPages = Math.ceil(total / limit) || 1;
 
     const files = await dbAll(
-      `SELECT f.id, f.original_name, f.file_type, f.size, f.is_public, f.created_at, f.updated_at, f.share_key, f.category_id, f.uploaded_by, f.is_bundle, f.entry_path, f.view_count,
-        (SELECT COUNT(*) FROM file_versions WHERE file_id = f.id) AS version_count,
-        snippet(file_contents_fts, 0, '<mark>', '</mark>', '...', 32) AS snippet
-      FROM files f JOIN file_contents_fts fts ON f.id = fts.file_id
-      WHERE fts.content MATCH ? ${permClause}
-      ORDER BY f.updated_at DESC LIMIT ? OFFSET ?`,
-      [ftsQuery, ...permParams, limit, offset]
+      'SELECT f.id, f.original_name, f.file_type, f.size, f.is_public, f.created_at, f.updated_at, f.share_key, f.category_id, f.uploaded_by, f.is_bundle, f.entry_path, f.view_count, ' +
+      '(SELECT COUNT(*) FROM file_versions WHERE file_id = f.id) AS version_count, m.snippet ' +
+      'FROM files f JOIN ' + matchedIdsSql + ' m ON m.id = f.id WHERE 1=1 ' + permClause + ' ' +
+      'ORDER BY f.updated_at DESC LIMIT ? OFFSET ?',
+      [...matchedParams, ...permParams, limit, offset]
     );
 
-    // 同时按文件名匹配（LIKE），合并去重
-    let nameFiles = [];
-    const likeQ = `%${q}%`;
-    if (role !== 'admin') {
-      nameFiles = await dbAll(
-        `SELECT f.id, f.original_name, f.file_type, f.size, f.is_public, f.created_at, f.updated_at, f.share_key, f.category_id, f.uploaded_by, f.is_bundle, f.entry_path, f.view_count,
-          (SELECT COUNT(*) FROM file_versions WHERE file_id = f.id) AS version_count
-        FROM files f WHERE f.original_name LIKE ? AND f.uploaded_by = ?
-        ORDER BY f.updated_at DESC`,
-        [likeQ, userId]
-      );
-    } else {
-      nameFiles = await dbAll(
-        `SELECT f.id, f.original_name, f.file_type, f.size, f.is_public, f.created_at, f.updated_at, f.share_key, f.category_id, f.uploaded_by, f.is_bundle, f.entry_path, f.view_count,
-          (SELECT COUNT(*) FROM file_versions WHERE file_id = f.id) AS version_count
-        FROM files f WHERE f.original_name LIKE ?
-        ORDER BY f.updated_at DESC`,
-        [likeQ]
-      );
-    }
-
-    const ftsIds = new Set(files.map(f => f.id));
-    const extraNameFiles = nameFiles.filter(f => !ftsIds.has(f.id)).map(f => ({ ...f, snippet: null }));
-    const allFiles = [...files, ...extraNameFiles];
-
-    const fileIdStr = allFiles.length ? allFiles.map(f => f.id).join(',') : '0';
+    const fileIdStr = files.length ? files.map(f => f.id).join(',') : '0';
 
     const tagRows = await dbAll(
-      `SELECT ft.file_id, t.id AS tag_id, t.name AS tag_name FROM file_tags ft JOIN tags t ON ft.tag_id = t.id WHERE ft.file_id IN (${fileIdStr})`
+      'SELECT ft.file_id, t.id AS tag_id, t.name AS tag_name FROM file_tags ft JOIN tags t ON ft.tag_id = t.id WHERE ft.file_id IN (' + fileIdStr + ')'
     );
     const tagsMap = {};
     tagRows.forEach(r => {
@@ -1360,31 +1388,26 @@ app.get('/api/files/search', requireAuth, async (req, res) => {
     let starredSet = new Set();
     if (userId) {
       const starRows = await dbAll(
-        `SELECT file_id FROM starred_files WHERE user_id = ? AND file_id IN (${fileIdStr})`, [userId]
+        'SELECT file_id FROM starred_files WHERE user_id = ? AND file_id IN (' + fileIdStr + ')', [userId]
       );
       starredSet = new Set(starRows.map(r => r.file_id));
     }
 
-    const catMap = {};
-    if (allFiles.some(f => f.category_id)) {
-      const catRows = await dbAll('SELECT id, name FROM categories');
-      catRows.forEach(c => { catMap[c.id] = c.name; });
-    }
-
-    const result = allFiles.map(f => ({
+    // 分类名称走内存缓存
+    const result = files.map(f => ({
       ...f,
       tags: tagsMap[f.id] || [],
       starred: starredSet.has(f.id),
-      category_name: f.category_id ? (catMap[f.category_id] || null) : null,
+      category_name: f.category_id ? getCategoryName(f.category_id) : null,
     }));
 
-    const realTotal = countRow.total + extraNameFiles.length;
     res.json({
       files: result,
       query: q,
-      pagination: { page, limit, total: realTotal, totalPages: Math.ceil(realTotal / limit) || 1 }
+      pagination: { page, limit, total, totalPages }
     });
   } catch (e) {
+    logger.error({ type: 'app', message: '搜索失败', error: e.message });
     res.status(500).json({ error: '搜索失败' });
   }
 });
@@ -1477,7 +1500,7 @@ app.post('/api/files/upload', requireAuth, uploadLimiter, upload.single('file'),
   }
 });
 
-app.post('/api/files/upload-json', requireAuth, uploadLimiter, async (req, res) => {
+app.post('/api/files/upload-json', requireAuth, uploadLimiter, largeJson, async (req, res) => {
   const { name, content, isPublic } = req.body || {};
   if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: '文件名不能为空' });
   if (typeof content !== 'string') return res.status(400).json({ error: 'content 必须是字符串' });
@@ -1580,7 +1603,7 @@ app.post('/api/files/upload-json', requireAuth, uploadLimiter, async (req, res) 
   }
 });
 
-app.post('/api/files/upload-zip-base64', requireAuth, uploadLimiter, async (req, res) => {
+app.post('/api/files/upload-zip-base64', requireAuth, uploadLimiter, largeJson, async (req, res) => {
   const { name, content, isPublic } = req.body || {};
   if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: '文件名不能为空' });
   if (typeof content !== 'string') return res.status(400).json({ error: 'content 必须是字符串' });
@@ -1652,6 +1675,7 @@ app.delete('/api/files/:id', requireAuth, async (req, res) => {
     const filePath = path.join(UPLOAD_DIR, file.stored_name);
     if (fs.existsSync(filePath)) await unlinkQuiet(filePath);
     await dbRun('DELETE FROM files WHERE id = ?', [req.params.id]);
+    invalidateRenderCache(req.params.id);
     logger.audit('file.delete', { fileId: req.params.id, fileName: file.original_name, ip: clientIp(req) });
     res.json({ success: true });
   } catch (e) {
@@ -1720,26 +1744,15 @@ app.post('/api/files/batch', requireAuth, async (req, res) => {
 app.get('/api/files/:id', loadFileWithPrivacy, async (req, res) => {
   try {
     const f = req.fileRecord;
-    const tags = await dbAll(
-      'SELECT t.id, t.name FROM tags t JOIN file_tags ft ON ft.tag_id = t.id WHERE ft.file_id = ?',
-      [f.id]
-    );
-    let starred = false;
-    if (req.userId) {
-      const row = await dbGet(
-        'SELECT 1 AS hit FROM starred_files WHERE user_id = ? AND file_id = ?',
-        [req.userId, f.id]
-      );
-      starred = !!row;
-    }
-    let category_name = null;
-    if (f.category_id) {
-      const cat = await dbGet('SELECT name FROM categories WHERE id = ?', [f.category_id]);
-      category_name = cat ? cat.name : null;
-    }
-    const versionRow = await dbGet(
-      'SELECT COUNT(*) AS c FROM file_versions WHERE file_id = ?', [f.id]
-    );
+    // 并行查询：tags / starred / category / version_count（WAL 下读不互斥）
+    const [tags, starredRow, cat, versionRow] = await Promise.all([
+      dbAll('SELECT t.id, t.name FROM tags t JOIN file_tags ft ON ft.tag_id = t.id WHERE ft.file_id = ?', [f.id]),
+      req.userId ? dbGet('SELECT 1 AS hit FROM starred_files WHERE user_id = ? AND file_id = ?', [req.userId, f.id]) : Promise.resolve(null),
+      f.category_id ? dbGet('SELECT name FROM categories WHERE id = ?', [f.category_id]) : Promise.resolve(null),
+      dbGet('SELECT COUNT(*) AS c FROM file_versions WHERE file_id = ?', [f.id]),
+    ]);
+    const starred = !!(starredRow && starredRow.hit);
+    const category_name = cat ? cat.name : null;
     res.json({
       id: f.id,
       original_name: f.original_name,
@@ -1775,7 +1788,6 @@ app.get('/api/files/:id/content', requireAuth, loadFileWithPrivacy, async (req, 
     return res.status(400).json({ error: '网站包（bundle）不支持读取原始内容，请改用 /api/files/:id/render 预览或 /api/files/:id/download 下载' });
   }
   const filePath = path.join(UPLOAD_DIR, file.stored_name);
-  if (!fs.existsSync(filePath)) return res.status(404).json({ error: '文件已丢失' });
   try {
     const content = await fs.promises.readFile(filePath, 'utf-8');
     res.json({
@@ -1789,9 +1801,41 @@ app.get('/api/files/:id/content', requireAuth, loadFileWithPrivacy, async (req, 
       content
     });
   } catch (e) {
+    if (e && e.code === 'ENOENT') return res.status(404).json({ error: '文件已丢失' });
     res.status(500).json({ error: '读取文件失败' });
   }
 });
+
+// --- 渲染结果 LRU 缓存 ---
+// Markdown 渲染（marked + highlight.js + KaTeX）是 CPU 热点（单篇 50-200ms），
+// 公开短链 /render 热门文档被反复渲染。缓存以 (fileId, updated_at) 为失效键：
+// 覆盖上传会更新 updated_at，旧缓存自动失效。HTML/Bundle 不缓存（主要瓶颈是磁盘读，
+// 且注入逻辑依赖文件内容，缓存收益低、失效复杂）。
+const RENDER_CACHE = new Map(); // key -> { html, ts }
+const RENDER_CACHE_MAX = 256;
+function renderCacheKey(file) {
+  // stored_name 必须进 key：历史版本渲染会用 { ...file, stored_name: ver.stored_name }，
+  // 若不加会错误命中当前版本的缓存。
+  return `${file.id}:${file.stored_name || ''}:${file.updated_at || ''}:${file.is_bundle ? 1 : 0}:${file.entry_path || ''}`;
+}
+function getRenderedHtml(file) {
+  const key = renderCacheKey(file);
+  return RENDER_CACHE.has(key) ? RENDER_CACHE.get(key).html : null;
+}
+function setRenderedHtml(file, html) {
+  const key = renderCacheKey(file);
+  if (RENDER_CACHE.size >= RENDER_CACHE_MAX && !RENDER_CACHE.has(key)) {
+    // 简单 LRU 淘汰：删最早的 key（Map 保持插入顺序）
+    const firstKey = RENDER_CACHE.keys().next().value;
+    RENDER_CACHE.delete(firstKey);
+  }
+  RENDER_CACHE.set(key, { html });
+}
+function invalidateRenderCache(fileId) {
+  for (const k of RENDER_CACHE.keys()) {
+    if (k.startsWith(`${fileId}:`)) RENDER_CACHE.delete(k);
+  }
+}
 
 async function renderFile(res, file) {
   // Bundle 渲染
@@ -1801,15 +1845,19 @@ async function renderFile(res, file) {
     const resolved = path.resolve(entryPath);
     const resolvedDir = path.resolve(bundleDir) + path.sep;
     if (!resolved.startsWith(resolvedDir)) return res.status(403).json({ error: '非法路径' });
-    if (!fs.existsSync(entryPath)) return res.status(404).json({ error: '入口文件已丢失' });
     try {
       let content = await fs.promises.readFile(entryPath, 'utf-8');
       const entryExt = path.extname(file.entry_path || 'index.html').toLowerCase();
       const baseTag = '<base href="/api/files/' + file.id + '/asset/">';
 
       if (entryExt === '.md' || entryExt === '.markdown') {
-        // Markdown 入口：marked 渲染 + 模板
-        const mdHtml = marked.parse(content, { gfm: true, breaks: false })
+        // Markdown 入口：marked 渲染 + 模板（命中缓存则跳过昂贵的渲染）
+        const cached = getRenderedHtml(file);
+        if (cached) {
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          return res.send(cached);
+        }
+        const mdHtml = marked.parse(content, { gfm: true, breaks: false, async: false })
           .replace(/<pre><code class="hljs language-mermaid">([\s\S]*?)<\/code><\/pre>/g,
             (_, code) => `<pre class="mermaid">${code}</pre>`);
         const tplName = await getTemplateForFile(file);
@@ -1820,6 +1868,7 @@ async function renderFile(res, file) {
         if (/<head>/i.test(fullHtml)) {
           fullHtml = fullHtml.replace(/<head>/i, '<head>\n' + baseTag);
         }
+        setRenderedHtml(file, fullHtml);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         return res.send(fullHtml);
       }
@@ -1841,22 +1890,29 @@ async function renderFile(res, file) {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.send(content);
     } catch (e) {
+      if (e && e.code === 'ENOENT') return res.status(404).json({ error: '入口文件已丢失' });
       return res.status(500).json({ error: '渲染失败' });
     }
   }
   const filePath = path.join(UPLOAD_DIR, file.stored_name);
-  if (!fs.existsSync(filePath)) return res.status(404).json({ error: '文件已丢失' });
   try {
     const content = await fs.promises.readFile(filePath, 'utf-8');
 
     if (file.file_type === 'markdown') {
-      const html = marked.parse(content, { gfm: true, breaks: false })
+      // 命中渲染缓存则直接返回（updated_at 失效，覆盖上传会刷新 key）
+      const cached = getRenderedHtml(file);
+      if (cached) {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.send(cached);
+      }
+      const html = marked.parse(content, { gfm: true, breaks: false, async: false })
         .replace(/<pre><code class="hljs language-mermaid">([\s\S]*?)<\/code><\/pre>/g,
           (_, code) => `<pre class="mermaid">${code}</pre>`);
       const tplName = await getTemplateForFile(file);
       const tpl = templateCache[tplName] || templateCache['default'];
       const hljsTheme = BUILTIN_TEMPLATE_THEMES[tplName] || 'github';
       const fullHtml = applyTemplate(tpl, file.original_name, html, hljsTheme);
+      setRenderedHtml(file, fullHtml);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.send(fullHtml);
     }
@@ -1876,6 +1932,7 @@ async function renderFile(res, file) {
       res.send(content);
     }
   } catch (e) {
+    if (e && e.code === 'ENOENT') return res.status(404).json({ error: '文件已丢失' });
     res.status(500).json({ error: '渲染失败' });
   }
 }
@@ -1890,14 +1947,17 @@ app.get('/api/files/:id/asset/*', loadFileWithPrivacy, async (req, res) => {
   if (!assetPath.startsWith(bundleDir + path.sep) && assetPath !== bundleDir) {
     return res.status(403).json({ error: '非法路径' });
   }
-  if (!fs.existsSync(assetPath)) return res.status(404).json({ error: '资源不存在' });
   try {
     const stat = await fs.promises.stat(assetPath);
     if (stat.isDirectory()) return res.status(404).json({ error: '资源不存在' });
   } catch {
     return res.status(404).json({ error: '资源不存在' });
   }
-  res.sendFile(assetPath);
+  res.sendFile(assetPath, (err) => {
+    if (err && !res.headersSent && err.code === 'ENOENT') {
+      res.status(404).json({ error: '资源不存在' });
+    }
+  });
 });
 
 app.get('/api/files/:id/render', loadFileWithPrivacy, async (req, res) => {
@@ -1908,7 +1968,12 @@ app.get('/api/files/:id/download', loadFileWithPrivacy, async (req, res) => {
   const file = req.fileRecord;
   if (file.is_bundle) {
     const bundleDir = path.join(UPLOAD_DIR, file.stored_name);
-    if (!fs.existsSync(bundleDir)) return res.status(404).json({ error: '文件已丢失' });
+    try {
+      const st = await fs.promises.stat(bundleDir);
+      if (!st.isDirectory()) return res.status(404).json({ error: '文件已丢失' });
+    } catch {
+      return res.status(404).json({ error: '文件已丢失' });
+    }
     const encoded = encodeURIComponent(file.original_name);
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename="' + encoded + '"; filename*=UTF-8\'\'' + encoded);
@@ -1922,10 +1987,16 @@ app.get('/api/files/:id/download', loadFileWithPrivacy, async (req, res) => {
     });
   }
   const filePath = path.join(UPLOAD_DIR, file.stored_name);
-  if (!fs.existsSync(filePath)) return res.status(404).json({ error: '文件已丢失' });
   const encoded = encodeURIComponent(file.original_name);
   res.setHeader('Content-Disposition', 'attachment; filename="' + encoded + '"; filename*=UTF-8\'\'' + encoded);
-  res.sendFile(filePath);
+  // 去掉同步 existsSync 预检：sendFile 找不到文件时走 errback 返回 404
+  res.sendFile(filePath, (err) => {
+    if (err && !res.headersSent) {
+      if (err.code === 'ENOENT') return res.status(404).json({ error: '文件已丢失' });
+      logger.error({ type: 'app', message: '下载失败', error: err.message });
+      return res.status(500).json({ error: '下载失败' });
+    }
+  });
 });
 
 // --- 覆盖上传端点（预览页专用） ---
@@ -1987,7 +2058,7 @@ app.post('/api/files/:id/overwrite', requireAuth, uploadLimiter, upload.single('
   }
 });
 
-app.post('/api/files/:id/overwrite-json', requireAuth, uploadLimiter, async (req, res) => {
+app.post('/api/files/:id/overwrite-json', requireAuth, uploadLimiter, largeJson, async (req, res) => {
   const { content } = req.body || {};
   if (typeof content !== 'string') return res.status(400).json({ error: 'content 必须是字符串' });
 
@@ -2084,13 +2155,18 @@ app.get('/api/files/:id/versions/:ver/content', requireAuth, async (req, res) =>
     if (!ver) return res.status(404).json({ error: '版本不存在' });
 
     const filePath = path.join(UPLOAD_DIR, ver.stored_name);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: '版本文件已丢失' });
 
     const file = await dbGet('SELECT original_name, file_type, uploaded_by FROM files WHERE id = ?', [req.params.id]);
     if (req.userRole !== 'admin' && file?.uploaded_by !== req.userId) {
       return res.status(403).json({ error: '无权读取此文件原文' });
     }
-    const content = await fs.promises.readFile(filePath, 'utf-8');
+    let content;
+    try {
+      content = await fs.promises.readFile(filePath, 'utf-8');
+    } catch (e) {
+      if (e && e.code === 'ENOENT') return res.status(404).json({ error: '版本文件已丢失' });
+      throw e;
+    }
     res.json({
       id: parseInt(req.params.id),
       version: ver.version,
@@ -2137,8 +2213,13 @@ app.post('/api/files/:id/versions/:ver/restore', requireAuth, async (req, res) =
 
     // 读取目标版本文件内容
     const targetPath = path.join(UPLOAD_DIR, targetVer.stored_name);
-    if (!fs.existsSync(targetPath)) return res.status(404).json({ error: '版本文件已丢失' });
-    const targetContent = await fs.promises.readFile(targetPath, 'utf-8');
+    let targetContent;
+    try {
+      targetContent = await fs.promises.readFile(targetPath, 'utf-8');
+    } catch (e) {
+      if (e && e.code === 'ENOENT') return res.status(404).json({ error: '版本文件已丢失' });
+      throw e;
+    }
 
     // 复制到新磁盘文件
     const ext = file.file_type === 'markdown' ? '.md' : '.html';
@@ -2335,6 +2416,7 @@ app.post('/api/categories', requireAuth, async (req, res) => {
     const existing = await dbGet('SELECT id, name, created_at FROM categories WHERE name = ?', [name.trim()]);
     if (existing) return res.json(existing);
     const result = await dbRun('INSERT INTO categories (name, user_id) VALUES (?, ?)', [name.trim(), req.userId]);
+    await reloadCategoryNameCache();
     logger.audit('category.create', { categoryId: result.lastID, name: name.trim(), ip: clientIp(req) });
     res.json({ id: result.lastID, name: name.trim() });
   } catch (e) {
@@ -2347,6 +2429,7 @@ app.put('/api/categories/:id', requireAuth, requireAdmin, async (req, res) => {
   if (!name || !name.trim()) return res.status(400).json({ error: '分类名不能为空' });
   try {
     await dbRun('UPDATE categories SET name = ? WHERE id = ?', [name.trim(), req.params.id]);
+    await reloadCategoryNameCache();
     logger.audit('category.rename', { categoryId: req.params.id, name: name.trim(), ip: clientIp(req) });
     res.json({ success: true });
   } catch (e) {
@@ -2358,6 +2441,7 @@ app.delete('/api/categories/:id', requireAuth, requireAdmin, async (req, res) =>
   try {
     await dbRun('UPDATE files SET category_id = NULL WHERE category_id = ?', [req.params.id]);
     await dbRun('DELETE FROM categories WHERE id = ?', [req.params.id]);
+    await reloadCategoryNameCache();
     logger.audit('category.delete', { categoryId: req.params.id, ip: clientIp(req) });
     res.json({ success: true });
   } catch (e) {
@@ -2663,6 +2747,12 @@ app.post('/api/admin/import', requireAuth, requireAdmin, adminUpload.single('fil
     db.get = newDb.get.bind(newDb);
     db.all = newDb.all.bind(newDb);
     db.close = newDb.close.bind(newDb);
+    db.exec = newDb.exec.bind(newDb);
+    // 导入替换了连接：重新应用性能 PRAGMA 与刷新分类缓存
+    await configureDatabase();
+    await loadTemplateNameMap();
+    await reloadCategoryNameCache();
+    RENDER_CACHE.clear();
     logger.audit('backup.import', { ip: clientIp(req), backupDir });
     res.json({ success: true, message: '数据已恢复，建议刷新页面重新加载' });
   } catch (e) {
@@ -2705,7 +2795,7 @@ app.get('/api/skills/:name', requireAuth, async (req, res) => {
   const skill = getSkill(req.params.name);
   if (!skill) return res.status(404).json({ error: 'Skill 不存在' });
   if (skill.installBody) {
-    skill.installHtml = marked.parse(skill.installBody, { gfm: true, breaks: false });
+    skill.installHtml = marked.parse(skill.installBody, { gfm: true, breaks: false, async: false });
   }
   res.json(skill);
 });
@@ -2774,11 +2864,15 @@ mountMcpServer(app, {
 });
 
 const NODE_MODULES = path.join(__dirname, 'node_modules');
-app.use('/vendor/katex', express.static(path.join(NODE_MODULES, 'katex', 'dist')));
-app.use('/vendor/highlight.js', express.static(path.join(NODE_MODULES, 'highlight.js')));
-app.use('/vendor/mermaid', express.static(path.join(NODE_MODULES, 'mermaid', 'dist')));
+// 静态资源长缓存：版本化路径（vendor 内容随包固定，public 资源带 ?v= 查询参数）
+// 30 天 + immutable，命中后浏览器零往返；首次加载仍走 ETag。
+const STATIC_OPTS = { maxAge: '30d', immutable: true, etag: true, lastModified: true };
+app.use('/vendor/katex', express.static(path.join(NODE_MODULES, 'katex', 'dist'), STATIC_OPTS));
+app.use('/vendor/highlight.js', express.static(path.join(NODE_MODULES, 'highlight.js'), STATIC_OPTS));
+app.use('/vendor/mermaid', express.static(path.join(NODE_MODULES, 'mermaid', 'dist'), STATIC_OPTS));
 
-app.use(express.static(path.join(__dirname, 'public')));
+// index:false —— 不让 static 自动把 / 映射到 index.html（由下方 catch-all 注入哈希资源路径后返回）
+app.use(express.static(path.join(__dirname, 'public'), { ...STATIC_OPTS, index: false }));
 
 app.get('/s/:key', async (req, res) => {
   try {
@@ -2791,6 +2885,29 @@ app.get('/s/:key', async (req, res) => {
     res.status(500).json({ error: '渲染失败' });
   }
 });
+
+// --- view_count 内存累加 + 批量 flush ---
+// 短链 /s/:key 是热点写路径。把 UPDATE files SET view_count 累积到内存，
+// 定时（30s）或进程退出时批量回写，减少每访问一次就一次写。
+const VIEW_COUNT_BUFFER = new Map(); // fileId -> pending increments
+const VIEW_COUNT_FLUSH_MS = 30000;
+let viewCountFlushTimer = null;
+async function flushViewCounts() {
+  if (!VIEW_COUNT_BUFFER.size) return;
+  const entries = [...VIEW_COUNT_BUFFER.entries()];
+  VIEW_COUNT_BUFFER.clear();
+  for (const [fileId, n] of entries) {
+    await dbRun('UPDATE files SET view_count = view_count + ? WHERE id = ?', [n, fileId]).catch(() => {});
+  }
+}
+function bufferViewCount(fileId) {
+  VIEW_COUNT_BUFFER.set(fileId, (VIEW_COUNT_BUFFER.get(fileId) || 0) + 1);
+}
+function scheduleViewCountFlush() {
+  if (viewCountFlushTimer) return;
+  viewCountFlushTimer = setInterval(flushViewCounts, VIEW_COUNT_FLUSH_MS);
+  if (typeof viewCountFlushTimer.unref === 'function') viewCountFlushTimer.unref();
+}
 
 async function recordVisit(file, req) {
   const ip = clientIp(req);
@@ -2805,7 +2922,7 @@ async function recordVisit(file, req) {
     'INSERT INTO link_visits (file_id, share_key, ip_hash, user_agent) VALUES (?, ?, ?, ?)',
     [file.id, file.share_key, ipHash, ua]
   );
-  await dbRun( 'UPDATE files SET view_count = view_count + 1 WHERE id = ?', [file.id]);
+  bufferViewCount(file.id);
 }
 
 // --- 访问统计 API ---
@@ -2826,14 +2943,49 @@ app.get('/api/files/:id/stats', requireAuth, async (req, res) => {
         [file.id]
       )
     ]);
-    res.json({ viewCount: file.view_count || 0, daily7, daily30 });
+    res.json({ viewCount: (file.view_count || 0) + (VIEW_COUNT_BUFFER.get(file.id) || 0), daily7, daily30 });
   } catch (e) {
     res.status(500).json({ error: '获取统计失败' });
   }
 });
 
+// --- SPA 兜底：返回 index.html，注入打包后的带哈希资源路径（若已 build）---
+// 读 public/dist/manifest.json（构建产物），把 /css/style.css 与 /js/app.js
+// 替换为 /dist/style-[hash].css 与 /dist/app-[hash].js。未构建时回退源文件路径。
+const INDEX_HTML_PATH = path.join(__dirname, 'public', 'index.html');
+const DIST_MANIFEST_PATH = path.join(__dirname, 'public', 'dist', 'manifest.json');
+let _indexHtmlCache = { html: null, manifestMtime: 0, manifest: null };
+function getIndexHtml() {
+  let manifest = null, manifestMtime = 0;
+  try {
+    const st = fs.statSync(DIST_MANIFEST_PATH);
+    manifestMtime = st.mtimeMs;
+    if (_indexHtmlCache.html && _indexHtmlCache.manifestMtime === manifestMtime) {
+      return _indexHtmlCache.html; // manifest 未变，用缓存
+    }
+    manifest = JSON.parse(fs.readFileSync(DIST_MANIFEST_PATH, 'utf8'));
+  } catch {
+    // 无构建产物 → 返回源 index.html（引用源文件 /css、/js）
+    if (_indexHtmlCache.html && !_indexHtmlCache.manifest) return _indexHtmlCache.html;
+    const html = fs.readFileSync(INDEX_HTML_PATH, 'utf8');
+    _indexHtmlCache = { html, manifestMtime: 0, manifest: null };
+    return html;
+  }
+  // 注入哈希路径
+  let html = fs.readFileSync(INDEX_HTML_PATH, 'utf8');
+  if (manifest['style.css']) {
+    html = html.replace(/\/css\/style\.css\?v=[\d.]+/g, '/dist/' + manifest['style.css']);
+  }
+  if (manifest['app.js']) {
+    html = html.replace(/\/js\/app\.js\?v=[\d.]+/g, '/dist/' + manifest['app.js']);
+  }
+  _indexHtmlCache = { html, manifestMtime, manifest };
+  return html;
+}
+
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(getIndexHtml());
 });
 
 app.use((err, req, res, next) => {
@@ -2880,10 +3032,12 @@ async function bootstrapAdmin() {
 
 app.listen(PORT, async () => {
   const mcpIp = process.env.MCP_IP || 'localhost';
+  await configureDatabase();
   await runMigrations(db);
   initMailer();
   loadTemplates();
   await loadTemplateNameMap();
+  await reloadCategoryNameCache();
   await backfillFtsIndex();
   logger.info({ type: 'app', message: '服务已启动', url: `http://${mcpIp}:${PORT}`, registration: ALLOW_REGISTRATION ? 'open' : 'closed' });
   if (sessionSecretWarning) logger.warn({ type: 'app', message: 'SESSION_SECRET 未设置，已生成临时密钥（重启后会话会失效）' });
@@ -2894,6 +3048,7 @@ app.listen(PORT, async () => {
   } catch (e) {
     logger.error({ type: 'app', message: '解析 admin user id 失败', error: e.message });
   }
+  scheduleViewCountFlush();
 
   // 自动定时备份
   const backupCron = process.env.BACKUP_CRON;
@@ -2938,6 +3093,7 @@ app.listen(PORT, async () => {
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, async () => {
     logger.info({ type: 'app', message: `收到 ${sig}，正在关闭 MCP transport` });
+    await flushViewCounts(); // 关闭前回写缓冲的 view_count，避免丢失
     await closeMcpTransports();
     process.exit(0);
   });

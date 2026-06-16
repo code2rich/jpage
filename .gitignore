@@ -3,6 +3,11 @@ node_modules/
 
 # Database & uploads
 data/
+data-test-*/
+data-bench-tmp/
+
+# 前端构建产物（npm run build 生成）
+public/dist/
 
 # Logs
 *.log
