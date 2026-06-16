@@ -23,20 +23,23 @@ function renderLanding(container, openModal) {
   window.addEventListener('scroll', onScroll, { passive: true });
   onScroll();
 
-  // 模板展示
+  // 模板展示（可选区块：若模板里已移除相关元素，则跳过，不影响落地页主体渲染）
   const grid = el.querySelector('#landing-template-grid');
   const emptyEl = el.querySelector('#landing-template-empty');
   const filters = el.querySelectorAll('.scene-filter');
   let currentScene = '';
 
-  filters.forEach(btn => {
-    btn.addEventListener('click', () => {
-      filters.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentScene = btn.dataset.scene;
-      loadTemplates();
+  // 关键元素缺失时优雅降级：不初始化模板展示功能
+  if (grid && emptyEl) {
+    filters.forEach(btn => {
+      btn.addEventListener('click', () => {
+        filters.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentScene = btn.dataset.scene;
+        loadTemplates();
+      });
     });
-  });
+  }
 
   async function loadTemplates() {
     try {
@@ -142,8 +145,8 @@ function renderLanding(container, openModal) {
     }
   }
 
-  // 初始加载模板
-  loadTemplates();
+  // 初始加载模板（仅在模板展示区块存在时）
+  if (grid && emptyEl) loadTemplates();
 }
 
 function escapeHtml(str) {
