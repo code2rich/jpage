@@ -349,6 +349,10 @@ function renderPreview(container, hash) {
   const iframe = container.querySelector('#preview-iframe');
   const source = container.querySelector('#preview-source');
   const code = container.querySelector('#source-code');
+  const sourceWrap = container.querySelector('#source-wrap');
+  const bundleTree = container.querySelector('#bundle-tree');
+  const bundleTreeBody = container.querySelector('#bundle-tree-body');
+  const bundleTreeCount = container.querySelector('#bundle-tree-count');
   const spinner = container.querySelector('#preview-spinner');
   const toggles = container.querySelectorAll('.view-toggle .btn');
   const editBtn = container.querySelector('#btn-edit');
@@ -365,6 +369,7 @@ function renderPreview(container, hash) {
   const moreBtn = container.querySelector('#btn-preview-more');
   let fileContent = '';
   let editorOriginalContent = '';
+  let isBundleTree = false; // bundle 文件树是否已就绪
 
   iframe.addEventListener('load', () => {
     if (spinner) spinner.style.display = 'none';
@@ -397,6 +402,7 @@ function renderPreview(container, hash) {
 
   function setViewMode(mode) {
     const isEdit = mode === 'edit';
+    const showTree = isBundleTree && mode === 'source';
     if (mode === 'render') {
       iframe.style.display = 'block';
       source.classList.remove('active');
@@ -411,6 +417,9 @@ function renderPreview(container, hash) {
       updateEditorLines();
       setTimeout(() => editorTextarea.focus(), 0);
     }
+    // Bundle 文件树仅 source 模式可见，并让 source-wrap 切换为双栏布局
+    if (bundleTree) bundleTree.hidden = !showTree;
+    if (sourceWrap) sourceWrap.classList.toggle('bundle-layout', showTree);
     editorContainer.hidden = !isEdit;
     editorSaveBtn.hidden = !isEdit;
     editorCancelBtn.hidden = !isEdit;
@@ -573,6 +582,115 @@ function renderPreview(container, hash) {
     });
   }
 
+  // ---------- Bundle 文件树 ----------
+  // 将扁平 entries [{path,size}] 转成嵌套树 {name, path, size?, children?}
+  function buildBundleTree(entries) {
+    const root = { name: '', path: '', children: [] };
+    const dirMap = new Map([[root.path, root]]);
+    // 先按 path 排序，保证目录先于其下文件出现，树稳定
+    const sorted = [...entries].sort((a, b) => a.path.localeCompare(b.path));
+    for (const e of sorted) {
+      const segs = e.path.split('/');
+      let curPath = '';
+      let parent = root;
+      for (let i = 0; i < segs.length; i++) {
+        const seg = segs[i];
+        curPath = curPath ? curPath + '/' + seg : seg;
+        const isLeaf = i === segs.length - 1;
+        if (isLeaf) {
+          parent.children.push({ name: seg, path: curPath, size: e.size });
+        } else {
+          let dir = dirMap.get(curPath);
+          if (!dir) {
+            dir = { name: seg, path: curPath, children: [] };
+            dirMap.set(curPath, dir);
+            parent.children.push(dir);
+          }
+          parent = dir;
+        }
+      }
+    }
+    return root;
+  }
+
+  // 渲染单个树节点 -> 返回 DOM 元素
+  function renderBundleNode(node, onPick) {
+    const li = document.createElement('div');
+    li.className = 'bundle-node';
+    if (node.children) {
+      li.classList.add('bundle-dir', 'expanded');
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'bundle-node-row bundle-dir-row';
+      row.innerHTML = `<svg class="bundle-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg><span class="bundle-name">${escapeHtml(node.name)}</span>`;
+      const childList = document.createElement('div');
+      childList.className = 'bundle-children';
+      node.children.forEach(c => childList.appendChild(renderBundleNode(c, onPick)));
+      row.addEventListener('click', () => {
+        const expanded = li.classList.toggle('expanded');
+        row.setAttribute('aria-expanded', String(expanded));
+      });
+      row.setAttribute('aria-expanded', 'true');
+      li.appendChild(row);
+      li.appendChild(childList);
+    } else {
+      li.classList.add('bundle-file');
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'bundle-node-row bundle-file-row';
+      row.dataset.path = node.path;
+      row.innerHTML = `<span class="bundle-file-ic" aria-hidden="true">📄</span><span class="bundle-name">${escapeHtml(node.name)}</span>`;
+      row.addEventListener('click', () => onPick(node.path, row));
+      li.appendChild(row);
+    }
+    return li;
+  }
+
+  // 初始化 bundle 文件树
+  function setupBundleTree(entries, entryPath, truncated) {
+    if (!bundleTree || !bundleTreeBody) return;
+    isBundleTree = true;
+    const root = buildBundleTree(entries);
+    bundleTreeBody.innerHTML = '';
+    // 当前选中行
+    let activeRow = null;
+    function setActive(row) {
+      if (activeRow) activeRow.classList.remove('active');
+      if (row) { row.classList.add('active'); activeRow = row; }
+    }
+    // 点击文件：拉取内容显示到源码视图
+    async function pickFile(relPath, row) {
+      setActive(row);
+      code.textContent = '加载中…';
+      // 入口文件内容已在 /content 返回，避免重复请求
+      if (relPath === entryPath) {
+        code.textContent = fileContent;
+        return;
+      }
+      try {
+        const resp = await fetch(API_BASE + `/api/files/${id}/asset/${encodeURI(relPath)}`, { credentials: 'include' });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        code.textContent = await resp.text();
+      } catch (err) {
+        code.textContent = '读取失败：' + (err.message || err);
+      }
+    }
+    root.children.forEach(c => bundleTreeBody.appendChild(renderBundleNode(c, pickFile)));
+    // 文件数提示
+    if (bundleTreeCount) {
+      const total = entries.length;
+      bundleTreeCount.textContent = truncated ? `${total}+ 个文件（已截断）` : `${total} 个文件`;
+    }
+    // 默认选中入口文件
+    const entryRow = bundleTreeBody.querySelector(`.bundle-file-row[data-path="${CSS.escape(entryPath || '')}"]`);
+    if (entryRow) {
+      setActive(entryRow);
+      code.textContent = fileContent;
+    } else {
+      code.textContent = fileContent;
+    }
+  }
+
   api(`/api/files/${id}/content`).then(data => {
     fileName = data.original_name;
     fileContent = data.content;
@@ -583,6 +701,10 @@ function renderPreview(container, hash) {
     expandFloatingBtn.setAttribute('aria-label', `展开顶栏 · ${data.original_name}`);
     syncToolbarCompact(layout, titleStrip, fileName);
     code.textContent = data.content;
+    // Bundle：初始化文件树，源码视图展示入口文件，可点击切换查看其它文件
+    if (data.is_bundle && Array.isArray(data.entries) && data.entries.length > 0) {
+      setupBundleTree(data.entries, data.entry_path, data.entries_truncated);
+    }
     if (spinner) spinner.style.display = 'flex';
     iframe.src = API_BASE + `/api/files/${id}/render`;
     // 模板菜单项：仅 Markdown 文件且为所有者/admin 可见

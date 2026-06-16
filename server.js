@@ -1784,9 +1784,42 @@ app.get('/api/files/:id/content', requireAuth, loadFileWithPrivacy, async (req, 
   if (req.userRole !== 'admin' && file.uploaded_by !== req.userId) {
     return res.status(403).json({ error: '无权读取此文件原文' });
   }
+
+  // Bundle 没有单一原文：降级返回入口文件内容（源码视图）+ 目录清单 + 元信息。
+  // 这样前端预览页能正常进入，源码视图展示入口文件，完整包仍走 /download。
   if (file.is_bundle) {
-    return res.status(400).json({ error: '网站包（bundle）不支持读取原始内容，请改用 /api/files/:id/render 预览或 /api/files/:id/download 下载' });
+    const bundleDir = path.join(UPLOAD_DIR, file.stored_name);
+    const entryPath = path.join(bundleDir, file.entry_path || 'index.html');
+    // 入口路径必须落在 bundle 目录内，防穿越（与 renderFile 同款校验）
+    const resolvedEntry = path.resolve(entryPath);
+    const resolvedDir = path.resolve(bundleDir) + path.sep;
+    if (!resolvedEntry.startsWith(resolvedDir)) {
+      return res.status(403).json({ error: '非法路径' });
+    }
+    try {
+      // 入口读不到时降级为空串而非报错：预览页仍可用 iframe /render 与下载
+      const entryContent = await fs.promises.readFile(entryPath, 'utf-8').catch(() => '');
+      const { entries, truncated } = await listBundleEntries(bundleDir);
+      return res.json({
+        id: file.id,
+        original_name: file.original_name,
+        file_type: file.file_type,
+        is_public: file.is_public,
+        uploaded_by: file.uploaded_by,
+        is_bundle: file.is_bundle,
+        entry_path: file.entry_path,
+        template_id: file.template_id,
+        content: entryContent,
+        entries,
+        entries_truncated: truncated,
+      });
+    } catch (e) {
+      if (e && e.code === 'ENOENT') return res.status(404).json({ error: '文件已丢失' });
+      logger.error({ type: 'app', error: e.message });
+      return res.status(500).json({ error: '读取文件失败' });
+    }
   }
+
   const filePath = path.join(UPLOAD_DIR, file.stored_name);
   try {
     const content = await fs.promises.readFile(filePath, 'utf-8');
@@ -1835,6 +1868,47 @@ function invalidateRenderCache(fileId) {
   for (const k of RENDER_CACHE.keys()) {
     if (k.startsWith(`${fileId}:`)) RENDER_CACHE.delete(k);
   }
+}
+
+// 枚举 bundle 目录组成，供 /content 返回清单。
+// 安全与体量约束：条目数上限与上传校验一致（ZIP_MAX_FILE_COUNT），
+// 另设深度上限避免畸形嵌套；只收录 bundle 目录内的相对路径，防穿越。
+const BUNDLE_LIST_MAX_DEPTH = 8;
+const BUNDLE_LIST_MAX_ENTRIES = ZIP_MAX_FILE_COUNT;
+async function listBundleEntries(bundleDir) {
+  const root = path.resolve(bundleDir);
+  const out = [];
+  let truncated = false;
+
+  async function walk(dir, depth) {
+    if (out.length >= BUNDLE_LIST_MAX_ENTRIES || depth > BUNDLE_LIST_MAX_DEPTH) {
+      truncated = true;
+      return;
+    }
+    let names;
+    try { names = await fs.promises.readdir(dir); }
+    catch { return; } // 子目录不可读则跳过，不致整个清单失败
+    for (const name of names) {
+      const full = path.join(dir, name);
+      const resolved = path.resolve(full);
+      const rel = path.relative(root, resolved);
+      // 仅收录 root 内的条目，跳过越界/穿越项
+      if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) continue;
+      let st;
+      try { st = await fs.promises.stat(full); }
+      catch { continue; }
+      const relPosix = rel.split(path.sep).join('/');
+      if (st.isDirectory()) {
+        await walk(full, depth + 1);
+      } else {
+        if (out.length >= BUNDLE_LIST_MAX_ENTRIES) { truncated = true; return; }
+        out.push({ path: relPosix, size: st.size });
+      }
+    }
+  }
+
+  await walk(bundleDir, 0);
+  return { entries: out, truncated };
 }
 
 async function renderFile(res, file) {

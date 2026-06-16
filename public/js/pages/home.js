@@ -513,6 +513,7 @@ function renderFileList(container, list, files) {
             <button type="button" class="file-more-item btn-category" data-id="${f.id}">移动分类</button>
             ${f.file_type === 'markdown' ? `<button type="button" class="file-more-item btn-template" data-id="${f.id}">切换模板</button>` : ''}
             <button type="button" class="file-more-item btn-rename" data-id="${f.id}">重命名</button>
+            <button type="button" class="file-more-item btn-download" data-id="${f.id}">下载</button>
             <hr class="file-more-divider">
             <button type="button" class="file-more-item file-more-danger btn-delete" data-id="${f.id}">删除</button>
           </div>
@@ -580,6 +581,11 @@ function renderFileList(container, list, files) {
       e.stopPropagation();
       moreDropdown.classList.remove('open');
       doRename(container, f.id, f.original_name);
+    });
+    el.querySelector('.btn-download').addEventListener('click', e => {
+      e.stopPropagation();
+      moreDropdown.classList.remove('open');
+      window.open(API_BASE + '/api/files/' + f.id + '/download', '_blank');
     });
     el.querySelector('.btn-delete').addEventListener('click', e => {
       e.stopPropagation();
