@@ -946,10 +946,6 @@ html:not(.light) {
   transition: border-color .15s ease, box-shadow .15s ease;
 }
 
-.preview-layout.preview-toolbar-compact .preview-title-strip {
-  display: flex;
-}
-
 .preview-title-strip:hover {
   border-color: #cbd5e1;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
@@ -986,10 +982,6 @@ html:not(.light) {
 
 .preview-toolbar-expanded {
   display: block;
-}
-
-.preview-layout.preview-toolbar-compact .preview-toolbar-expanded {
-  display: none !important;
 }
 
 .preview-expanded-row {
@@ -1029,19 +1021,6 @@ html:not(.light) {
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.02em;
-}
-
-.btn-preview-to-compact {
-  padding: 4px 10px;
-  font-size: 13px;
-  letter-spacing: 2px;
-  color: var(--text-secondary);
-  border-color: transparent;
-}
-
-.btn-preview-to-compact:hover {
-  color: var(--text);
-  border-color: var(--border);
 }
 
 .btn-header-fold {

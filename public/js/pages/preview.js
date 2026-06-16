@@ -9,7 +9,6 @@ import { closeTemplateSelect } from './home.js';
 
 // ---------- Preview Header State ----------
 const PREVIEW_HEADER_COLLAPSED_KEY = 'htmlwebsite_preview_header_collapsed';
-const PREVIEW_TOOLBAR_COMPACT_KEY = 'htmlwebsite_preview_toolbar_compact';
 
 function syncPreviewHeaderState(layout, expandFloatingBtn, toggleHeaderBtn) {
   const collapsed = layout.classList.contains('preview-header-collapsed');
@@ -24,19 +23,6 @@ function syncPreviewHeaderState(layout, expandFloatingBtn, toggleHeaderBtn) {
   }
   try {
     sessionStorage.setItem(PREVIEW_HEADER_COLLAPSED_KEY, collapsed ? '1' : '0');
-  } catch (_) {}
-}
-
-function syncToolbarCompact(layout, titleStrip, fileName) {
-  const compact = layout.classList.contains('preview-toolbar-compact');
-  const titleSpan = titleStrip.querySelector('#preview-title');
-  const name = (typeof fileName === 'string' && fileName.length > 0)
-    ? fileName
-    : (titleSpan ? titleSpan.textContent.trim() : '');
-  titleStrip.setAttribute('aria-expanded', String(!compact));
-  titleStrip.setAttribute('aria-label', compact ? `展开完整工具栏${name ? '：' + name : ''}` : '仅显示标题');
-  try {
-    sessionStorage.setItem(PREVIEW_TOOLBAR_COMPACT_KEY, compact ? '1' : '0');
   } catch (_) {}
 }
 
@@ -345,7 +331,6 @@ function renderPreview(container, hash) {
   const expandFloatingBtn = container.querySelector('#btn-preview-expand-floating');
   const titleStrip = container.querySelector('#preview-title-expand');
   const toggleHeaderBtn = container.querySelector('#btn-toggle-preview-header');
-  const compactBtn = container.querySelector('#btn-preview-compact-only');
   const iframe = container.querySelector('#preview-iframe');
   const source = container.querySelector('#preview-source');
   const code = container.querySelector('#source-code');
@@ -430,21 +415,15 @@ function renderPreview(container, hash) {
   }
 
   try {
-    layout.classList.add('preview-header-collapsed', 'preview-toolbar-compact');
+    layout.classList.add('preview-header-collapsed');
   } catch (_) {}
 
   syncPreviewHeaderState(layout, expandFloatingBtn, toggleHeaderBtn);
-  syncToolbarCompact(layout, titleStrip, fileName);
 
+  // 点击标题：展开/收起整个顶栏（原「仅显示标题」工具栏折叠已移除）
   titleStrip.addEventListener('click', () => {
-    layout.classList.remove('preview-toolbar-compact');
-    syncToolbarCompact(layout, titleStrip, fileName);
-  });
-
-  compactBtn.addEventListener('click', e => {
-    e.stopPropagation();
-    layout.classList.add('preview-toolbar-compact');
-    syncToolbarCompact(layout, titleStrip, fileName);
+    layout.classList.toggle('preview-header-collapsed');
+    syncPreviewHeaderState(layout, expandFloatingBtn, toggleHeaderBtn);
   });
 
   toggleHeaderBtn.addEventListener('click', e => {
@@ -699,7 +678,6 @@ function renderPreview(container, hash) {
     container.querySelector('#preview-heading').innerHTML = lockPrefix + escapeHtml(data.original_name);
     expandFloatingBtn.title = `展开顶栏 · ${data.original_name}`;
     expandFloatingBtn.setAttribute('aria-label', `展开顶栏 · ${data.original_name}`);
-    syncToolbarCompact(layout, titleStrip, fileName);
     code.textContent = data.content;
     // Bundle：初始化文件树，源码视图展示入口文件，可点击切换查看其它文件
     if (data.is_bundle && Array.isArray(data.entries) && data.entries.length > 0) {

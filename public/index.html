@@ -393,10 +393,6 @@ MCP 配置
 <h2 id="preview-heading" class="preview-heading-truncate"></h2>
 </div>
 <div class="preview-expanded-right">
-<button class="theme-toggle" aria-label="切换主题">
-  <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
-  <svg class="icon-sun" viewBox="0 0 24 24"><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41M12 6a6 6 0 100 12 6 6 0 000-12z"/></svg>
-</button>
 <div class="view-toggle" role="group" aria-label="预览模式">
 <button type="button" class="btn btn-small active" data-mode="render">渲染</button>
 <button type="button" class="btn btn-small" data-mode="source">源码</button>
@@ -427,11 +423,14 @@ MCP 配置
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
 统计
 </button>
+<button type="button" class="settings-menu-item theme-toggle" id="menu-theme-toggle" aria-label="切换主题">
+<svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+切换主题
+</button>
 </div>
 </div>
 <button type="button" class="btn btn-small btn-primary" id="btn-editor-save" hidden>保存</button>
 <button type="button" class="btn btn-small" id="btn-editor-cancel" hidden>取消</button>
-<button type="button" class="btn btn-small btn-preview-to-compact" id="btn-preview-compact-only" aria-label="仅显示标题" title="仅显示标题">···</button>
 <button type="button" class="btn btn-small btn-header-fold" id="btn-toggle-preview-header" aria-expanded="true" aria-controls="preview-header" aria-label="收起顶栏" title="收起顶栏">
 <svg class="icon-fold-chevron icon-fold-chevron--up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="18 15 12 9 6 15"></polyline></svg>
 <svg class="icon-fold-chevron icon-fold-chevron--down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
