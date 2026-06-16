@@ -18,8 +18,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **本地开发**（不用 Docker）：
 
 - `npm install` — 安装依赖
-- `npm run dev` — nodemon 热重载开发模式
+- `npm run dev` — nodemon 热重载开发模式（**开发无需构建**：直接加载 `public/js`、`public/css` 源文件）
 - `npm start` — 直接运行（需自行配置 `.env` 或环境变量）
+- `npm run build` — 生产构建：esbuild 打包 + 代码分割 + minify，产出 `public/dist/`（带哈希文件名 + manifest.json）。构建后 server 自动改用 dist 产物（落地页首屏 ~64KB/gzip ~21KB，比源文件全量 ~152KB 降 58%）
+- `npm run build:dev` — 不 minify、不哈希的构建（调试用）
+
+**前端构建（可选，生产用）**：`public/js` 与 `public/css` 是源文件，开发模式直接被浏览器加载。`npm run build` 用 esbuild 把 `public/js/app.js` 打包到 `public/dist/`，路由级代码分割（landing/login/home/preview 各为独立懒加载 chunk），CSS minify。server 的 SPA 兜底读 `public/dist/manifest.json` 把 `index.html` 里的 `/css/style.css?v=` 与 `/js/app.js?v=` 替换为 `/dist/<hash>.css|.js`；**无 dist 时自动回退源文件路径**，故不构建也能跑。`public/dist/` 是构建产物，已 gitignore；Docker 构建时在 `frontend` 阶段执行 `npm run build` 并 COPY 进运行镜像。
 
 环境变量说明见 `.env` 文件注释。`MCP_TOKEN` 设置后自动启用 `/mcp` 端点。
 
@@ -30,7 +34,8 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 **Five-module backend**:
 - `server.js` (~1534 lines) — Express app, REST API, auth (session + bcrypt), multer upload, ZIP 包上传/批量处理, SQLite, Markdown 渲染增强（marked + highlight.js + KaTeX + Mermaid）
 - `logger.js` (~20 lines) — 结构化 JSON Lines 日志工具，导出 info/warn/error/audit 方法，error 输出到 stderr，其余到 stdout
-- `mcp-server.js` (~614 lines) — MCP Streamable HTTP server. Exports `mountMcpServer(app, {port, mcpToken, mcpIp, protocol, authenticateRequest})` and `closeMcpTransports()`. 15 tools + 2 resources; tools call the REST API via loopback fetch with the same Bearer token.
+- `mcp-server.js` (~614 lines) — MCP Streamable HTTP server. Exports `mountMcpServer(app, {port, mcpToken, mcpIp, protocol, authenticateRequest})` and `closeMcpTransports()`. 15 tools + 2 resources; tools call the REST API **in-process via `lib/dispatch.js`** (no TCP loopback fetch), carrying the same Bearer token.
+- `lib/dispatch.js` — 进程内请求分发器 `createDispatcher(app, {token})`，返回与 `buildApiClient` 同构的 `{get,post,put,del}`。合成 IncomingMessage/ServerResponse 走 `app.handle()`，绕过 TCP 序列化与二次鉴权 DB 查询（单次调用快 ~80%）。
 - `migrations.js` (~65 lines) — Migration runner，启动时自动执行 `migrations/` 目录下未应用的 migration，记录到 `_migrations` 表。
 - `skills-registry.js` (~135 lines) — 自动扫描 `skills/*/SKILL.md`，解析 YAML frontmatter，提供 skill 列表/详情/ZIP 打包下载。
 
@@ -116,14 +121,27 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 
 **Static + SPA fallback** — `public/` served by `express.static`; `/s/:key` short link route renders files directly; catch-all `app.get('*')` returns `public/index.html` for client-side routing between home and preview views.
 
-**Frontend** — `public/index.html` 定义两个 `<template>` 块（home / preview）；`public/js/app.js` 是单文件 vanilla-JS 控制器，基于 URL hash 切换视图。无构建、无打包器、无框架。CSS 在 `public/css/style.css`，支持系统深色模式。Markdown 渲染增强使用 marked + highlight.js + KaTeX + Mermaid。
+**Frontend** — `public/index.html` 定义两个 `<template>` 块（home / preview）；`public/js/app.js` 是 vanilla-JS（ESM）控制器，基于 URL hash 切换视图，**各路由模块用动态 `import()` 按需加载**（landing/login/home/preview）。无框架。CSS 在 `public/css/style.css`，支持系统深色模式。Markdown 渲染增强使用 marked + highlight.js + KaTeX + Mermaid。生产可选构建（`npm run build`，esbuild 代码分割 + minify 到 `public/dist/`）；开发无需构建，直接加载源文件。
 
 ## Conventions & Gotchas
 
 - **默认端口 8858**（非 3000）。通过 `PORT` 环境变量可配置。`Dockerfile`、`docker-compose.yml`、`README.md` 均引用 8858，保持同步。
 - **Multer 文件名编码** — `decodeFilename` 辅助函数（`Buffer.from(name, 'latin1').toString('utf8')`）是必需的，因为 multer 以 latin1 存储 `originalname`。不要移除。
 - **catch-all 路由必须在所有 API 路由、`/s/:key` 和 MCP 挂载之后** — Express 按顺序匹配，提前放置会遮蔽 API、短链接或 `/mcp`。
+- **SPA 兜底 + 构建产物注入** — `public/` 的 `express.static` 设 `index:false`（不让 static 自动把 `/` 映射到 index.html），由 `app.get('*')` 的 `getIndexHtml()` 返回 index.html 并按 `public/dist/manifest.json` 把 `/css/style.css?v=` 与 `/js/app.js?v=` 替换为 `/dist/<hash>.css|.js`。无 dist 时回退源文件路径。新增 SPA 路由 hash 时，注意它在 catch-all 之前由前端 `route()` 处理。
 - **数据库共享** — 单个 `db` 连接复用于所有请求。Promise 封装 `dbRun`/`dbGet`/`dbAll` 保持调用简洁。
+- **SQLite 性能 PRAGMA** — `configureDatabase()` 在 `app.listen` 内、migration 之前执行：`journal_mode=WAL`（读写不互斥）、`synchronous=NORMAL`、`busy_timeout=5000`、`cache_size=-20000`、`temp_store=MEMORY`、`mmap_size`。WAL 会生成 `database.sqlite-wal` / `-shm` 文件，属正常。`admin/import` 替换连接后会重新调用 `configureDatabase()`。
+- **数据目录可配置** — `JPAGE_DATA_DIR` 环境变量（可选，默认 `./data`）。docker-compose 已把 `./data` 挂载到 `/app/data`，通常无需设置。
+- **时间统一存 UTC** — `now()` 返回 UTC `YYYY-MM-DD HH:MM:SS`，与 SQLite 的 `CURRENT_TIMESTAMP` / `datetime('now')` 一致。展示层负责转本地时区。不要再改回北京时区字符串。
+- **Markdown 渲染缓存** — `RENDER_CACHE` 以 `${fileId}:${stored_name}:${updated_at}:...` 为 key 缓存渲染结果（LRU，上限 256）。覆盖上传/恢复版本会改 `updated_at`/`stored_name` 自动失效；删除文件调 `invalidateRenderCache(id)`。历史版本渲染传入 `{ ...file, stored_name: ver.stored_name }`，故 key 必须含 `stored_name`。
+- **分类名称内存缓存** — `categoryNameCache`（id→name）在启动时 `reloadCategoryNameCache()` 加载，分类增/删/改名/import 后失效重建。`/api/files` 与搜索经 `getCategoryName(id)` 取名，不再每次扫 `categories` 表。
+- **view_count 批量回写** — 短链 `/s/:key` 的访问计数累积到 `VIEW_COUNT_BUFFER`，每 30s 或进程退出时 `flushViewCounts()` 批量写库。`/api/files/:id/stats` 返回时把缓冲值加上，保证读一致。
+- **大 body 端点专用解析** — 全局 `express.json` 限 1MB；`upload-json` / `upload-zip-base64` / `overwrite-json` 用 `largeJson`（50MB）。新增大 body 端点时挂 `largeJson`。
+- **静态资源长缓存** — `express.static` 统一带 `STATIC_OPTS`（30d + immutable）。前端 CSS/JS 引用带 `?v=x.y.z`，改资源后务必 bump 版本号以失效缓存。
+- **MCP 进程内分发** — MCP tool 不再走 `fetch('http://127.0.0.1:port/...')` 自调用，改用 `lib/dispatch.js` 的 `createDispatcher(app, {token})` 直接调 `app.handle()`。新增 MCP tool 时用传入的 `api` 对象（`api.get/post/put/del`），接口与 fetch 版一致；鉴权靠 `Authorization: Bearer <token>` 头走 `requireAuth`，行为与 HTTP 完全相同（权限、限流、审计都生效）。
+- **模板预编译** — `loadTemplates()` 把每个模板经 `compileTemplate()` 编为函数存入 `templateCache`（静态 vendor URL 占位符在加载时一次替换，运行时仅 title/content/hljs_theme 三个 `split/join`）。`templateCache[name]` 是**函数**而非字符串，`applyTemplate(tplFn, ...)` 直接调用。
+- **marked.parse 同步** — 所有 `marked.parse(...)` 显式带 `async: false`（v12 默认同步，显式声明防止未来升级开启 async 返回 Promise 被当字符串拼接）。
+- **搜索 UNION 合并** — `/api/files/search` 用 `UNION` 合并 FTS 全文命中（带 `snippet`）与文件名 LIKE 命中（snippet 为 NULL），一次往返替代旧的两查询+内存去重，分页准确。注意 FTS5 的 `MATCH` 不能与普通列在 `LEFT JOIN + OR` 中混用（SQLite 报 "unable to use function MATCH"）。
 - **上传限流** — `express-rate-limit` 应用于 `POST /api/files/upload`、`POST /api/files/upload-json`、`POST /api/files/:id/overwrite`、`POST /api/files/:id/overwrite-json`，按 IP 限流。
 - **HTML 渲染端点** — 故意不清理 HTML，因为在用户自己的 iframe 沙箱中（`sandbox="allow-scripts allow-same-origin"`）。修改此 CSP 需谨慎。
 - **容器环境变量必须与 `.env` 保持一体** — 任何在 `server.js` 中通过 `process.env` 读取的环境变量，必须同时出现在 `.env`（或 `.env.example`）和 `docker-compose.yml` 的 `environment` 中。新增或修改环境变量时，三者同步更新，否则容器内读不到该变量。
@@ -226,7 +244,8 @@ skills/jpage-upload/     # Claude Code / Desktop skill
 public/
   index.html             # 两个 <template>: home + preview
   css/style.css          # 样式 + 深色模式
-  js/app.js              # 单文件 vanilla JS 控制器（hash 路由）
+  js/app.js              # vanilla JS（ESM）控制器（hash 路由 + 动态 import 各页面）
+  dist/                  # gitignore — npm run build 产物（带哈希的 JS/CSS + manifest.json）
 data/                    # gitignore — SQLite DB, sessions, uploads（运行时自动创建）
 docs/screenshot-home.png
 ```

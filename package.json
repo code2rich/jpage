@@ -5,7 +5,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "build": "node build.js",
+    "build:dev": "node build.js --dev"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -31,6 +33,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "esbuild": "^0.28.1",
     "nodemon": "^3.0.3"
   }
 }
