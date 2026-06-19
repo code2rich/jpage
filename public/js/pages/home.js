@@ -26,9 +26,11 @@ function setViewMode(mode) {
   try { localStorage.setItem(FILE_VIEW_KEY, mode); } catch {}
 }
 
-// 卡片缩略图懒加载管线（镜像 content-templates.js 的 thumbObserver：rootMargin 预加载 + 最多 3 并发 + Set 去重）
+// 卡片缩略图懒加载管线（镜像 content-templates.js 的 thumbObserver：rootMargin 预加载 + 最多 3 并发）
+// 注意：不能用 file-id Set 去重——翻页/筛选时 list.innerHTML='' 会销毁并重建卡片 DOM，
+// 新卡片是全新元素，必须重新挂 iframe（会命中浏览器/渲染缓存，开销小）。
+// 去重改为按「该卡片是否已有 iframe」判断，避免切回已访问过的页时缩略图卡在灰色占位。
 let cardThumbObserver = null;
-const cardThumbLoaded = new Set();
 let cardThumbActive = 0;
 const CARD_THUMB_MAX = 3;
 const cardThumbQueue = [];
@@ -58,18 +60,16 @@ function enqueueCardThumb(card) {
 // iframe.src 直接指向已有的 /api/files/:id/render —— HTML / Markdown / ZIP bundle 入口页均可渲染；
 // 同源 iframe 默认携带 session cookie，用户自己的私有文件也能正常加载（loadFileWithPrivacy 放行 uploaded_by === userId）。
 function loadCardThumb(card) {
-  const id = parseInt(card.dataset.fileId);
-  if (cardThumbLoaded.has(id)) return Promise.resolve();
-  cardThumbLoaded.add(id);
   const thumb = card.querySelector('.file-card-thumb');
-  if (!thumb) return Promise.resolve();
+  // 已有 iframe（正在加载或已加载）则跳过，防止同一卡片重复挂载
+  if (!thumb || thumb.querySelector('.file-card-thumb-iframe')) return Promise.resolve();
   thumb.innerHTML = '<div class="file-card-thumb-wrap"><iframe class="file-card-thumb-iframe" loading="lazy" title="预览"></iframe></div>';
   const wrap = thumb.querySelector('.file-card-thumb-wrap');
   const iframe = thumb.querySelector('.file-card-thumb-iframe');
   return new Promise(resolve => {
     iframe.addEventListener('load', () => { wrap.classList.add('loaded'); resolve(); }, { once: true });
     iframe.addEventListener('error', () => resolve(), { once: true });
-    iframe.src = API_BASE + '/api/files/' + id + '/render';
+    iframe.src = API_BASE + '/api/files/' + card.dataset.fileId + '/render';
   });
 }
 
@@ -830,7 +830,6 @@ function setupViewToggle(container) {
       if (viewMode === btn.dataset.view) return;
       // 切换前断开旧 observer，避免卡片 DOM 已销毁仍持有引用造成泄漏
       if (cardThumbObserver) { cardThumbObserver.disconnect(); }
-      cardThumbLoaded.clear();
       cardThumbQueue.length = 0;
       cardThumbActive = 0;
       setViewMode(btn.dataset.view);
