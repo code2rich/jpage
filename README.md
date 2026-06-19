@@ -117,6 +117,14 @@ jpage --help
 
 `jpage` 与 MCP 是对称的两个客户端入口，都架在同一套 REST API 之上。详见 `jpage --help`。
 
+更新到最新版（不需 token）：
+
+```bash
+jpage update                  # 自更新到最新版
+jpage update --check          # 只查有没有新版本
+jpage update --registry https://registry.npmmirror.com   # 国内源
+```
+
 ### 发版
 
 维护者发版指南（含 GitHub Actions 自动发版配置、token 轮换、故障排查）见 [`docs/RELEASING.md`](docs/RELEASING.md)。

@@ -31,7 +31,11 @@ const COMMANDS = {
   tags: () => require('./commands/tags'),
   skills: () => require('./commands/skills'),
   whoami: () => require('./commands/whoami'),
+  update: () => require('./commands/update'),
 };
+
+// 这些命令纯本地执行（不调后端 API），不强制要求 token。
+const NO_TOKEN = new Set(['update']);
 
 const HELP = `jpage —— 即页命令行
 
@@ -51,6 +55,7 @@ const HELP = `jpage —— 即页命令行
   skills ls | get <名> | download <名> [--out 文件]
                                               列出 / 查看 / 下载 Skill
   whoami                                      校验 token 是否有效
+  update [--registry <url>] [--check]         自更新到最新版（不需 token）
 
 通用选项：
   --token <TOKEN>        鉴权 token（jp_ 用户 token 或 MCP_TOKEN）
@@ -108,7 +113,7 @@ async function run(argv, inject = {}) {
   }
 
   const { token, base } = resolveConfig(opts, inject.env, inject.cwd);
-  if (!token) {
+  if (!token && !NO_TOKEN.has(cmd)) {
     stderr.write(
       '未提供 token。用 --token <TOKEN>、JPAGE_TOKEN 环境变量、或 .env 的 MCP_TOKEN 设置。\n'
     );
@@ -117,7 +122,7 @@ async function run(argv, inject = {}) {
   }
 
   const client = createClient({ base, token, fetchImpl: inject.fetchImpl });
-  const ctx = { base, token, exit };
+  const ctx = { base, token, exit, npmExec: inject.npmExec };
   const mod = COMMANDS[cmd]();
 
   try {
