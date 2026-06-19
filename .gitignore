@@ -12,6 +12,9 @@ data-bench-tmp/
 *.sqlite-wal
 *.sqlite-shm
 
+# Token 明文加密密钥文件(lib/crypto.js 写入数据目录)
+token-key.key
+
 # 前端构建产物（npm run build 生成）
 public/dist/
 

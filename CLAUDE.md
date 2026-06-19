@@ -40,9 +40,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `lib/dispatch.js` — 进程内请求分发器 `createDispatcher(app, {token})`，返回 `{get,post,put,del}`。合成 IncomingMessage/ServerResponse 走 `app.handle()`，绕过 TCP 序列化与二次鉴权 DB 查询（单次调用快 ~80%）。**仅 `mcp-server.js` 引用此模块**。
 - `migrations.js` (~65 lines) — Migration runner，启动时自动执行 `migrations/` 目录下未应用的 migration，记录到 `_migrations` 表。同时导出 `dbRun`/`dbGet`/`dbAll` Promise 封装供 `server.js` 使用。
 - `mailer.js` (~34 lines) — SMTP 邮件发送模块（nodemailer），导出 `initMailer`/`sendMail`/`getAppUrl`/`isMailerConfigured`。
+- `lib/crypto.js` — Token 明文可逆加密（AES-256-GCM）。导出 `encryptToken(plain)`/`decryptToken(enc)`/`reloadKey()`。密钥来自 `TOKEN_ENCRYPTION_KEY` 环境变量，未设置时自动生成持久化文件 `data/token-key.key`。仅 `routes/tokens.js` 引用（鉴权链路不依赖此模块）。
 - `skills-registry.js` (~135 lines) — 自动扫描 `skills/*/SKILL.md`，解析 YAML frontmatter，提供 skill 列表/详情/ZIP 打包下载。
 
-> ✅ **模块化已完成**：`server.js` 已 require 全部 `lib/`（`db.js`/`paths.js`/`util.js`/`csp.js`/`auth-state.js`/`templates.js`/`render.js`/`render-cache.js`/`fts.js`/`categories.js`/`view-counts.js`/`zip.js`/`dispatch.js` 及 `lib/middleware/auth.js`、`lib/middleware/files.js`）与 `routes/`（`auth.js`/`users.js`/`tokens.js`/`files.js`/`tags.js`/`categories.js`/`content-templates.js`/`admin.js`/`skills.js`）。**改 bug 或加端点时，改对应 `routes/*.js` 与 `lib/*.js`，`server.js` 只管装配**。
+> ✅ **模块化已完成**：`server.js` 已 require 全部 `lib/`（`db.js`/`paths.js`/`util.js`/`csp.js`/`auth-state.js`/`templates.js`/`render.js`/`render-cache.js`/`fts.js`/`categories.js`/`view-counts.js`/`zip.js`/`dispatch.js`/`crypto.js` 及 `lib/middleware/auth.js`、`lib/middleware/files.js`）与 `routes/`（`auth.js`/`users.js`/`tokens.js`/`files.js`/`tags.js`/`categories.js`/`content-templates.js`/`admin.js`/`skills.js`）。**改 bug 或加端点时，改对应 `routes/*.js` 与 `lib/*.js`，`server.js` 只管装配**。
 
 **Storage**（均自动创建）：
 - `data/database.sqlite` — 业务表（files、users 等）+ `_migrations` 版本追踪表
@@ -54,7 +55,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `files(id, original_name, stored_name, file_type, size, created_at, is_public, uploaded_by, share_key, updated_at, category_id, is_bundle, entry_path, view_count, template_id)` — `is_public=1` means anonymous can read; `uploaded_by` references `users.id`; `share_key` is 8-char URL-safe random string for short links; `is_bundle=1` 为解压后的网站包；`view_count` 由短链访问批量回写；`template_id` 绑定样式模板
 - `users(id, username UNIQUE, email UNIQUE, email_verified, password_hash, role, created_at)` — `email` 可为 NULL；`email_verified` 0/1
 - `file_versions(id, file_id, version, stored_name, size, created_at, uploaded_by)` — 文件版本历史
-- `tokens(id, user_id, name, token_hash, token_prefix, last_used_at, created_at)` — API token
+- `tokens(id, user_id, name, token_hash, token_prefix, token_enc, last_used_at, created_at)` — API token。`token_hash` 为 SHA-256（鉴权用，不可逆）；`token_enc` 为 AES-256-GCM 密文（可选，使明文可在界面后续查看/复制，旧令牌为 NULL）
 - `tags(id, name UNIQUE, created_at)` — 标签词典
 - `file_tags(file_id, tag_id)` — 文件-标签多对多
 - `starred_files(user_id, file_id, created_at)` — 收藏
@@ -81,8 +82,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `POST /api/users` — 创建用户 `{username, password, role, email?}`（仅 admin）
 - `PUT /api/users/:id` — 更新用户名、邮箱、角色或重置密码（仅 admin）
 - `DELETE /api/users/:id` — 删除用户，文件转交 admin（仅 admin，不可删自己）
-- `GET /api/tokens` — 列出自己的 API Token
-- `POST /api/tokens` — 创建 Token `{name}`，返回明文（仅一次）
+- `GET /api/tokens` — 列出自己的 API Token（含 `viewable` 标记，表示是否有可查看的加密明文）
+- `POST /api/tokens` — 创建 Token `{name}`，返回明文（同时存 AES-256-GCM 密文供后续查看）
+- `POST /api/tokens/:id/reveal` — 查看指定 Token 的明文（旧令牌无密文则 409）
 - `DELETE /api/tokens/:id` — 删除 Token（自己的或 admin 删任意）
 - `GET /api/files` — 列出文件（admin 看全部，普通用户看自己的+公开的）
 - `GET /api/files/search` — FTS5 + 文件名 LIKE 合并搜索（带 snippet、分页、过滤）
@@ -177,7 +179,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **鉴权模型** — `requireAuth` 是异步中间件，接受三种认证方式：(1) session cookie，(2) 旧 `MCP_TOKEN` 环境变量（向后兼容），(3) 用户级 API Token（`tokens` 表）。中间件设置 `req.userId` 和 `req.userRole` 供下游使用。`requireAdmin` 检查 `req.userRole === 'admin'`。`loadFileWithPrivacy` 强制文件所有权：admin 可访问一切，普通用户仅可访问自己的文件和公开文件。
 - **角色系统** — `users.role` 列，值为 `admin` 或 `user`。admin 可管理用户、查看所有文件。普通用户只能操作自己的文件。`bootstrapAdmin()` 创建时显式设置 `role='admin'`。
 - **开放注册** — `ALLOW_REGISTRATION=true` 时允许用户自助注册，默认关闭。注册端点 `POST /api/auth/register`，支持邮箱或用户名注册。配合 SMTP 配置实现邮箱验证。环境变量必须在 `.env`、`docker-compose.yml`、`server.js` 三处同步。
-- **API Token** — 每用户最多 10 个，格式 `jp_` + 32 位 base62。DB 存 SHA-256 哈希 + 前 8 位前缀。明文仅创建时返回一次。
+- **API Token** — 每用户最多 10 个，格式 `jp_` + 32 位 base62。DB 存 SHA-256 哈希（鉴权用，不可逆）+ 前 8 位前缀 + AES-256-GCM 密文（`token_enc`，使明文可后续查看/复制，旧令牌为 NULL）。加密密钥来自环境变量 `TOKEN_ENCRYPTION_KEY`，未设置时自动在数据目录生成 `token-key.key` 文件（持久化）。鉴权链路仅用哈希，与密文相互独立。
 - **`MCP_TOKEN` 是可选的** — 未设置时仍可通过用户级 Token 访问 MCP。`mountMcpServer` 接受 `authenticateRequest` 函数验证 Token。
 - **`uploaded_by` 从 `req.userId` 设置** — 文件归属隔离：admin 看全部文件，普通用户看自己的 + 公开的。`PUT`/`DELETE` 增加所有权检查（`checkFileOwnership`）。
 - **Markdown 渲染增强** — marked + highlight.js（代码高亮）+ KaTeX（数学公式 `$...$` / `$$...$$`）+ Mermaid（图表，支持深色/浅色主题）。渲染代码在 `server.js` 的 `renderMarkdown` 函数。

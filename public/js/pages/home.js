@@ -10,13 +10,13 @@ import { openContentTemplateMarket } from './content-templates.js';
 // ---------- 模块级状态 ----------
 let allFiles = [];
 let pagination = { page: 1, limit: 20, total: 0, totalPages: 1 };
-let filterState = { query: '', filter: 'all', tagId: null, categoryId: null };
+const filterState = { query: '', filter: 'all', tagId: null, categoryId: null };
 let allTags = [];
 let allCategories = [];
-let selectedFileIds = new Set();
+const selectedFileIds = new Set();
 let lastCheckedIndex = -1;
 let skillModalCurrent = null;
-let allTemplates = [];
+const allTemplates = [];
 let searchResults = null;
 
 // ---------- Home Page ----------
@@ -1269,14 +1269,79 @@ async function loadTokensList() {
         <code class="token-prefix">${esc(t.token_prefix)}…</code>
         <span class="token-time">创建于 ${formatDate(t.created_at)}${t.last_used_at ? ' · 最后使用 ' + formatDate(t.last_used_at) : ''}</span>
       </div>
-      <button class="btn btn-small btn-danger-outline" data-token-id="${t.id}" data-token-name="${esc(t.name)}">删除</button>
+      <div class="token-actions">
+        <button class="btn btn-small" data-token-reveal="${t.id}" data-token-name="${esc(t.name)}" ${t.viewable ? '' : 'disabled title="此令牌创建于功能启用前，无法查看，请删除后重建"'}>查看/复制</button>
+        <button class="btn btn-small btn-danger-outline" data-token-id="${t.id}" data-token-name="${esc(t.name)}">删除</button>
+      </div>
     </div>`).join('');
     listEl.querySelectorAll('[data-token-id]').forEach(btn => {
       btn.addEventListener('click', () => deleteTokenConfirm(parseInt(btn.dataset.tokenId), btn.dataset.tokenName));
     });
+    listEl.querySelectorAll('[data-token-reveal]').forEach(btn => {
+      if (btn.disabled) return;
+      btn.addEventListener('click', () => revealToken(parseInt(btn.dataset.tokenReveal), btn.dataset.tokenName));
+    });
   } catch (e) {
     listEl.innerHTML = '<p class="login-error">加载失败: ' + esc(e.message) + '</p>';
   }
+}
+
+// 复制到剪贴板：navigator.clipboard 优先，不支持时回退 execCommand。
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (_) {
+    try {
+      const input = document.createElement('input');
+      input.value = text;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      input.remove();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+}
+
+async function revealToken(id, name) {
+  let data;
+  try {
+    data = await api('/api/tokens/' + id + '/reveal', { method: 'POST' });
+  } catch (e) { toast(e.message, 'error'); return; }
+
+  const modal = document.getElementById('token-reveal-modal');
+  const input = modal.querySelector('#token-reveal-modal-input');
+  modal.querySelector('#token-reveal-modal-name').textContent = '令牌「' + name + '」的明文：';
+  input.value = data.token;
+  openModal(modal);
+
+  const closeBtn = modal.querySelector('#token-reveal-modal-close');
+  const dismissBtn = modal.querySelector('#token-reveal-modal-dismiss');
+  const copyBtn = modal.querySelector('#token-reveal-modal-copy');
+  const close = () => closeModal(modal);
+  closeBtn.onclick = close;
+  dismissBtn.onclick = close;
+  copyBtn.onclick = async () => {
+    const ok = await copyToClipboard(data.token);
+    if (ok) {
+      copyBtn.textContent = '已复制';
+      toast('令牌已复制');
+      setTimeout(() => { copyBtn.textContent = '复制'; }, 2000);
+    } else {
+      input.focus();
+      input.select();
+      toast('复制失败，请手动选中复制', 'error');
+    }
+  };
+  if (!modal.dataset.bound) {
+    modal.dataset.bound = '1';
+    modal.addEventListener('click', e => { if (e.target === modal) closeModal(modal); });
+  }
+  // 延迟聚焦，等待弹窗显示动画结束
+  setTimeout(() => { input.focus(); input.select(); }, 0);
 }
 
 async function createTokenDialog() {
@@ -1284,7 +1349,7 @@ async function createTokenDialog() {
   if (!name) return;
   try {
     const data = await api('/api/tokens', { method: 'POST', body: { name } });
-    await dialogModal.alert({ title: '令牌已创建', message: '请立即复制以下令牌，关闭后无法再次查看：\n\n' + esc(data.token) });
+    await dialogModal.alert({ title: '令牌已创建', message: '请妥善保存以下令牌。也可稍后在列表中点击「查看/复制」再次获取：\n\n' + esc(data.token) });
     loadTokensList();
   } catch (e) { toast(e.message, 'error'); }
 }

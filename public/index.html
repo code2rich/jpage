@@ -570,13 +570,31 @@ MCP 配置
 </div>
 <div class="modal-body">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-<p class="modal-hint">令牌用于 MCP 端点或 API 调用鉴权。创建后仅显示一次完整令牌。</p>
+<p class="modal-hint">令牌用于 MCP 端点或 API 调用鉴权。可在列表中随时查看并复制。</p>
 <button type="button" class="btn btn-primary btn-small" id="btn-create-token">+ 创建令牌</button>
 </div>
 <div class="tokens-list" id="tokens-list"></div>
 </div>
 <div class="modal-footer">
 <button type="button" class="btn btn-small" id="tokens-modal-dismiss">关闭</button>
+</div>
+</div>
+</div>
+
+<!-- 令牌明文查看弹窗 -->
+<div class="modal-backdrop" id="token-reveal-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="token-reveal-modal-title">
+<div class="modal-panel modal-panel-sm">
+<div class="modal-header">
+<h2 id="token-reveal-modal-title">查看令牌</h2>
+<button type="button" class="btn btn-small modal-close" id="token-reveal-modal-close" aria-label="关闭">×</button>
+</div>
+<div class="modal-body">
+<p class="modal-hint" id="token-reveal-modal-name" style="margin-bottom:8px"></p>
+<input type="text" id="token-reveal-modal-input" class="token-reveal-input" readonly autocomplete="off">
+</div>
+<div class="modal-footer">
+<button type="button" class="btn btn-primary btn-small" id="token-reveal-modal-copy">复制</button>
+<button type="button" class="btn btn-small" id="token-reveal-modal-dismiss">关闭</button>
 </div>
 </div>
 </div>

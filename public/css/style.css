@@ -2356,6 +2356,17 @@ html:not(.light) {
   width: fit-content;
 }
 .token-time { font-size: 12px; color: var(--text-secondary); }
+.token-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.token-reveal-input {
+  width: 100%;
+  font-family: monospace;
+  font-size: 13px;
+  padding: 8px 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+}
 .btn-danger-outline {
   color: var(--danger);
   border: 1px solid var(--danger);
