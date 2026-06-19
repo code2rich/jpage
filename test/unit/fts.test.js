@@ -1,7 +1,6 @@
 // lib/fts.js 单元测试
 const test = require('node:test');
 const assert = require('node:assert');
-const path = require('path');
 const { escapeFtsQuery, isFtsIndexable } = require('../../lib/fts');
 
 test('isFtsIndexable：可索引扩展名', () => {

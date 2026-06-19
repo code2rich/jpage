@@ -2,7 +2,6 @@
 // 用法: node test/perf-harness.js [PORT]
 // 退出码 0 = 全部通过, 非 0 = 有失败
 const http = require('http');
-const crypto = require('crypto');
 
 const PORT = parseInt(process.argv[2] || process.env.PORT || '8890', 10);
 const HOST = '127.0.0.1';
@@ -40,14 +39,6 @@ function req(method, path, { body, headers = {}, raw, formData } = {}) {
 }
 
 // 多部分表单：单字段 file
-function multipart(boundary, field) {
-  const CRLF = '\r\n';
-  const pre = `--${boundary}${CRLF}Content-Disposition: form-data; name="file"; filename="${field.filename}"${CRLF}Content-Type: ${field.type || 'text/markdown'}${CRLF}${CRLF}`;
-  const post = `${CRLF}--${boundary}--${CRLF}`;
-  const body = Buffer.concat([Buffer.from(pre, 'utf8'), Buffer.from(field.content, 'utf8'), Buffer.from(post, 'utf8')]);
-  return { body, headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` } };
-}
-
 async function run() {
   console.log(`\n=== jpage 验证套件 (port ${PORT}) ===\n`);
 

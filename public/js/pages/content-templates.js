@@ -1,6 +1,6 @@
 // 内容模板市场：浏览、上传、详情
 
-import { api, API_BASE } from '../api.js';
+import { api } from '../api.js';
 import { toast } from '../components/toast.js';
 import { dialogModal } from '../components/dialog.js';
 import { escapeHtml, relativeTime, openModal, closeModal } from '../utils.js';

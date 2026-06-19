@@ -8,7 +8,6 @@ process.env.ADMIN_USER = 'admin';
 process.env.ADMIN_PASSWORD = 'testpassword123';
 process.env.MCP_TOKEN = 'bench-mcp-token';
 
-const path = require('path');
 const fs = require('fs');
 // 清理临时目录
 fs.rmSync(process.env.JPAGE_DATA_DIR, { recursive: true, force: true });
@@ -22,7 +21,6 @@ const express = require('express');
 async function main() {
   const app = express();
   app.use(express.json());
-  let calls = 0;
   // 模拟 requireAuth：解析 Bearer token（模拟一次 DB 查询的延迟 ~真实场景）
   app.use((req, res, next) => {
     // 模拟鉴权开销（DB token 查询）：真实场景约 0.3-0.8ms，这里用同步 CPU 占用近似
@@ -30,7 +28,6 @@ async function main() {
     next();
   });
   app.get('/api/files', (req, res) => {
-    calls++;
     res.json({ files: [{ id: 1, name: 'a' }, { id: 2, name: 'b' }], pagination: { total: 2 } });
   });
 

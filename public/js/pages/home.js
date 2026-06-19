@@ -16,7 +16,6 @@ let allCategories = [];
 const selectedFileIds = new Set();
 let lastCheckedIndex = -1;
 let skillModalCurrent = null;
-const allTemplates = [];
 let searchResults = null;
 
 // ---------- Home Page ----------
@@ -798,7 +797,7 @@ async function doRename(container, id, currentName) {
     value: currentName,
     validate: v => {
       if (!v.trim()) return '文件名不能为空';
-      if (/[\/\\]/.test(v)) return '文件名不能包含 / 或 \\';
+      if (/[/\\]/.test(v)) return '文件名不能包含 / 或 \\';
       return null;
     },
   });
@@ -1239,7 +1238,6 @@ async function createUserDialog() {
 
 // 需要挂到 window 上因为 users table 用了 inline onclick
 async function editUserDialog(id, username, role, email) {
-  const ops = ['修改用户名/邮箱', '修改角色', '重置密码'];
   const choice = await dialogModal.confirm({
     title: '编辑用户: ' + username,
     message: '请选择操作',

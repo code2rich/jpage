@@ -3,7 +3,7 @@
 import { api } from '../api.js';
 import { state, navigate } from '../app.js';
 
-function renderLanding(container, openModal) {
+function renderLanding(container) {
   if (state.currentUser) { navigate('/'); return; }
   const tmpl = document.getElementById('landing-template');
   container.innerHTML = '';

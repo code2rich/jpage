@@ -244,7 +244,7 @@ app.get('*', (req, res) => {
 });
 
 // --- 全局错误处理 ---
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   logger.error({ type: 'app', message: err.message, stack: err.stack });
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: '文件大小超过50MB限制' });
