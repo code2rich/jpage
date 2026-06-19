@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project: 即页 (jpage)
 
-零配置 HTML / Markdown 即时预览与分享工具。Express 服务（`server.js`）+ MCP server 模块（`mcp-server.js`）+ Skills 注册模块（`skills-registry.js`）。SQLite 存元数据与用户表，磁盘 `data/uploads/` 存原始文件，session 存 `data/sessions.sqlite`。单管理员鉴权（bcrypt）。支持 Markdown 增强渲染（代码高亮、KaTeX 公式、Mermaid 图表）。
+零配置 HTML / Markdown 即时预览与分享工具。Express 服务（`server.js`）+ MCP server 模块（`mcp-server.js`）+ Skills 注册模块（`skills-registry.js`）。SQLite 存元数据与用户表，磁盘 `data/uploads/` 存原始文件，session 存 `data/sessions.sqlite`。多用户 + 角色体系（admin / 普通用户），bcrypt 密码哈希，可选开放注册（邮箱验证）。支持 Markdown 增强渲染（代码高亮、KaTeX 公式、Mermaid 图表）。
 
 ## Commands
 
@@ -25,19 +25,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **前端构建（可选，生产用）**：`public/js` 与 `public/css` 是源文件，开发模式直接被浏览器加载。`npm run build` 用 esbuild 把 `public/js/app.js` 打包到 `public/dist/`，路由级代码分割（landing/login/home/preview 各为独立懒加载 chunk），CSS minify。server 的 SPA 兜底读 `public/dist/manifest.json` 把 `index.html` 里的 `/css/style.css?v=` 与 `/js/app.js?v=` 替换为 `/dist/<hash>.css|.js`；**无 dist 时自动回退源文件路径**，故不构建也能跑。`public/dist/` 是构建产物，已 gitignore；Docker 构建时在 `frontend` 阶段执行 `npm run build` 并 COPY 进运行镜像。
 
-环境变量说明见 `.env` 文件注释。`MCP_TOKEN` 设置后自动启用 `/mcp` 端点。
+环境变量说明见 `.env` 文件注释。`MCP_TOKEN` 或用户级 API Token 任一即可挂载 `/mcp` 端点。
 
-There is no test suite, linter, or build step. Verify changes by hitting the API, loading the UI in a browser at http://localhost:8858, or using `npx @modelcontextprotocol/inspector http://localhost:8858/mcp` to debug the MCP server.
+**自动化测试**：`npm test` 跑单元 + 集成测试（node:test + supertest，覆盖 `lib/` 纯函数与 `routes/` 鉴权/上传/渲染流程，70+ 用例）。`npm run test:unit` 仅单元测试。GitHub Actions CI（`.github/workflows/ci.yml`）在 Node 20/22 矩阵上跑 `npm test` + `npm run build`。
+
+**手动验证**：用浏览器打开 http://localhost:8858 加载 UI、直接打 API，或 `npx @modelcontextprotocol/inspector http://localhost:8858/mcp` 调试 MCP。`test/` 目录下还有 e2e / 性能 harness（`perf-harness.js`、`mcp-harness.js`、`browser-harness.js`、`dispatch-bench.js`）和 `run-server.sh`，需先起服务后手动跑。
 
 ## Architecture
 
-**Five-module backend**:
-- `server.js` (~1534 lines) — Express app, REST API, auth (session + bcrypt), multer upload, ZIP 包上传/批量处理, SQLite, Markdown 渲染增强（marked + highlight.js + KaTeX + Mermaid）
-- `logger.js` (~20 lines) — 结构化 JSON Lines 日志工具，导出 info/warn/error/audit 方法，error 输出到 stderr，其余到 stdout
-- `mcp-server.js` (~614 lines) — MCP Streamable HTTP server. Exports `mountMcpServer(app, {port, mcpToken, mcpIp, protocol, authenticateRequest})` and `closeMcpTransports()`. 15 tools + 2 resources; tools call the REST API **in-process via `lib/dispatch.js`** (no TCP loopback fetch), carrying the same Bearer token.
-- `lib/dispatch.js` — 进程内请求分发器 `createDispatcher(app, {token})`，返回与 `buildApiClient` 同构的 `{get,post,put,del}`。合成 IncomingMessage/ServerResponse 走 `app.handle()`，绕过 TCP 序列化与二次鉴权 DB 查询（单次调用快 ~80%）。
-- `migrations.js` (~65 lines) — Migration runner，启动时自动执行 `migrations/` 目录下未应用的 migration，记录到 `_migrations` 表。
+**模块化后端架构**（`server.js` 已从 3174 行精简为 ~360 行，业务逻辑全部拆入 `lib/` 与 `routes/`）:
+- `server.js` (~360 lines) — 仅 app 装配、中间件（helmet/CSP/session/morgan）、路由挂载、MCP/静态/catch-all、全局错误处理、启动编排（迁移/模板加载/管理员引导/定时备份）、SIGINT/SIGTERM 钩子。
+- `logger.js` (~16 lines) — 结构化 JSON Lines 日志工具，导出 `info`/`warn`/`error`/`audit` 方法，error 输出到 stderr，其余到 stdout。
+- `mcp-server.js` (~717 lines) — MCP Streamable HTTP server. Exports `mountMcpServer(app, {port, mcpToken, mcpIp, protocol, authenticateRequest})` and `closeMcpTransports()`. 15 tools + 2 resources; tools call the REST API **in-process via `lib/dispatch.js`** (no TCP loopback fetch), carrying the same Bearer token.
+- `lib/dispatch.js` — 进程内请求分发器 `createDispatcher(app, {token})`，返回 `{get,post,put,del}`。合成 IncomingMessage/ServerResponse 走 `app.handle()`，绕过 TCP 序列化与二次鉴权 DB 查询（单次调用快 ~80%）。**仅 `mcp-server.js` 引用此模块**。
+- `migrations.js` (~65 lines) — Migration runner，启动时自动执行 `migrations/` 目录下未应用的 migration，记录到 `_migrations` 表。同时导出 `dbRun`/`dbGet`/`dbAll` Promise 封装供 `server.js` 使用。
+- `mailer.js` (~34 lines) — SMTP 邮件发送模块（nodemailer），导出 `initMailer`/`sendMail`/`getAppUrl`/`isMailerConfigured`。
 - `skills-registry.js` (~135 lines) — 自动扫描 `skills/*/SKILL.md`，解析 YAML frontmatter，提供 skill 列表/详情/ZIP 打包下载。
+
+> ✅ **模块化已完成**：`server.js` 已 require 全部 `lib/`（`db.js`/`paths.js`/`util.js`/`csp.js`/`auth-state.js`/`templates.js`/`render.js`/`render-cache.js`/`fts.js`/`categories.js`/`view-counts.js`/`zip.js`/`dispatch.js` 及 `lib/middleware/auth.js`、`lib/middleware/files.js`）与 `routes/`（`auth.js`/`users.js`/`tokens.js`/`files.js`/`tags.js`/`categories.js`/`content-templates.js`/`admin.js`/`skills.js`）。**改 bug 或加端点时，改对应 `routes/*.js` 与 `lib/*.js`，`server.js` 只管装配**。
 
 **Storage**（均自动创建）：
 - `data/database.sqlite` — 业务表（files、users 等）+ `_migrations` 版本追踪表
@@ -46,7 +51,7 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 
 **Database schema**:
 - `_migrations(id, name UNIQUE, applied_at)` — 记录已执行的 migration
-- `files(id, original_name, stored_name, file_type, size, created_at, is_public, uploaded_by, share_key, updated_at, category_id, is_bundle, entry_path)` — `is_public=1` means anonymous can read; `uploaded_by` references `users.id`; `share_key` is 8-char URL-safe random string for short links
+- `files(id, original_name, stored_name, file_type, size, created_at, is_public, uploaded_by, share_key, updated_at, category_id, is_bundle, entry_path, view_count, template_id)` — `is_public=1` means anonymous can read; `uploaded_by` references `users.id`; `share_key` is 8-char URL-safe random string for short links; `is_bundle=1` 为解压后的网站包；`view_count` 由短链访问批量回写；`template_id` 绑定样式模板
 - `users(id, username UNIQUE, email UNIQUE, email_verified, password_hash, role, created_at)` — `email` 可为 NULL；`email_verified` 0/1
 - `file_versions(id, file_id, version, stored_name, size, created_at, uploaded_by)` — 文件版本历史
 - `tokens(id, user_id, name, token_hash, token_prefix, last_used_at, created_at)` — API token
@@ -54,7 +59,11 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 - `file_tags(file_id, tag_id)` — 文件-标签多对多
 - `starred_files(user_id, file_id, created_at)` — 收藏
 - `categories(id, name, user_id, created_at)` — 分类
-- `email_verifications(id, user_id, token_hash, token_prefix, type, new_email, expires_at, created_at)` — 邮箱验证 token
+- `email_verifications(id, user_id, token_hash, token_prefix, type, new_email, expires_at, created_at)` — 邮箱验证 token（含 `type='register_code'` 注册验证码）
+- `link_visits(id, file_id, share_key, ip_hash, user_agent, visited_at)` — 短链访问明细（去重统计）
+- `templates(id, name UNIQUE, description, file_path, is_builtin, created_at)` — 样式模板（内置 default/github/academic/dark-pro）
+- `content_templates(id, title, description, file_type, scene, style_tags, content, uploaded_by, use_count, is_public, created_at, updated_at)` — 内容模板（公开库 + 用户自建）
+- `file_contents_fts` — FTS5 虚拟表（`content`, `file_id UNINDEXED`），全文搜索索引
 
 **REST API**:
 - `GET /api/auth/me` — 当前用户（返回 `{id, username, email, emailVerified, role}`）
@@ -65,7 +74,9 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 - `POST /api/auth/profile` — `{username?, email?}` 编辑个人资料（需登录）
 - `GET /api/auth/verify-email?token=...` — 验证邮箱 token，重定向前端页面
 - `POST /api/auth/resend-verification` — 重发验证邮件（需登录），限流 5/h
+- `POST /api/auth/send-register-code` — `{email}` 发送 6 位注册验证码（需 `ALLOW_REGISTRATION=true`，10 分钟有效）
 - `GET /api/auth/smtp-status` — 返回 `{configured: bool}` SMTP 是否配置
+- `GET /api/auth/registration-status` — 返回 `{enabled: bool}` 注册是否开放
 - `GET /api/users` — 列出用户含 email（仅 admin）
 - `POST /api/users` — 创建用户 `{username, password, role, email?}`（仅 admin）
 - `PUT /api/users/:id` — 更新用户名、邮箱、角色或重置密码（仅 admin）
@@ -74,9 +85,13 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 - `POST /api/tokens` — 创建 Token `{name}`，返回明文（仅一次）
 - `DELETE /api/tokens/:id` — 删除 Token（自己的或 admin 删任意）
 - `GET /api/files` — 列出文件（admin 看全部，普通用户看自己的+公开的）
+- `GET /api/files/search` — FTS5 + 文件名 LIKE 合并搜索（带 snippet、分页、过滤）
 - `POST /api/files/upload` — multipart 上传（需登录，50/15min，50MB，支持 .html/.htm/.md/.markdown/.zip）
 - `POST /api/files/upload-json` — JSON `{name, content, isPublic?}`（需登录，同名自动覆盖）
-- `PUT /api/files/:id` — `{name?, isPublic?}`（admin 或文件所有者）
+- `POST /api/files/upload-zip-base64` — MCP 使用的 ZIP base64 上传入口（largeJson）
+- `POST /api/files/batch` — 批量操作 `{action, ids, data?}`（delete/setPublic/setPrivate/setCategory，≤200）
+- `GET /api/files/:id` — 单文件元数据（`loadFileWithPrivacy` 校验所有权/公开性）
+- `PUT /api/files/:id` — `{name?, isPublic?, templateId?}`（admin 或文件所有者）
 - `DELETE /api/files/:id` — 删除数据库记录和磁盘文件（admin 或文件所有者）
 - `GET /api/files/:id/content` — 返回原始文件文本 JSON（公开文件无需登录）
 - `GET /api/files/:id/render` — 返回渲染 HTML（Markdown 使用 marked + highlight.js + KaTeX + Mermaid；Bundle 注入 `<base>` 标签）
@@ -89,7 +104,8 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 - `GET /api/files/:id/versions/:ver/render` — 渲染历史版本
 - `POST /api/files/:id/versions/:ver/restore` — 恢复到指定版本
 - `DELETE /api/files/:id/versions/:ver` — 删除指定历史版本
-- `GET /s/:key` — 短链接渲染页面（通过 share_key 查找文件并渲染，公开文件无需登录）
+- `GET /api/files/:id/stats` — 返回 `{viewCount, daily7, daily30}`（viewCount 含未回写缓冲值）
+- `GET /s/:key` — 短链接渲染页面（通过 share_key 查找文件并渲染，公开文件无需登录，访问计数 30s 批量回写）
 - `GET /api/tags` — 列出所有标签（含 file_count）
 - `POST /api/tags` — `{name}` 创建标签（已存在则返回现有）
 - `DELETE /api/tags/:id` — 删除标签
@@ -98,9 +114,20 @@ There is no test suite, linter, or build step. Verify changes by hitting the API
 - `DELETE /api/files/:id/star` — 取消收藏
 - `GET /api/categories` — 列出分类（含 file_count）
 - `POST /api/categories` — `{name}` 创建分类
-- `PUT /api/categories/:id` — `{name}` 重命名分类
-- `DELETE /api/categories/:id` — 删除分类（文件变未分类）
-- `PUT /api/files/:id/category` — `{categoryId: number|null}` 设置文件分类
+- `PUT /api/categories/:id` — `{name}` 重命名分类（**仅 admin**）
+- `DELETE /api/categories/:id` — 删除分类（文件变未分类，**仅 admin**）
+- `PUT /api/files/:id/category` — `{categoryId: number|null}` 设置文件分类（admin 或文件所有者）
+- `GET /api/templates` — 样式模板列表（含内置 default/github/academic/dark-pro）
+- `GET /api/content-templates/public` — 公开内容模板列表（无需登录）
+- `GET /api/content-templates/public/:id/preview` — 公开模板预览
+- `GET /api/content-templates` — 当前用户内容模板列表
+- `GET /api/content-templates/scenes` — 模板场景分类
+- `GET /api/content-templates/:id` / `/:id/content` — 模板详情 / 原文
+- `POST /api/content-templates` / `PUT /api/content-templates/:id` / `DELETE /api/content-templates/:id` — 创建/更新/删除（仅所有者）
+- `POST /api/content-templates/:id/use` — 基于模板创建文件
+- `GET /api/admin/export` — 导出数据库备份（仅 admin）
+- `POST /api/admin/import` — 导入备份（替换连接后重新 `configureDatabase()`，仅 admin）
+- `GET /api/admin/stats` — 系统统计（仅 admin）
 - `GET /api/skills` — 列出已安装的 skill 包（需登录）
 - `GET /api/skills/:name` — skill 详情（含 SKILL.md 内容、文件列表、INSTALL.md 渲染）
 - `GET /api/skills/:name/download` — ZIP 下载整个 skill 目录
@@ -228,10 +255,10 @@ migrations/              # Migration 文件目录（按文件名排序执行）
   006_zip_bundle.js
   007_add_file_type_uploaded_by_indexes.js
   008_add_fts5.js
-  008_add_link_visits.js
-  008_add_templates_system.js
-  009_content_templates.js
-  010_add_email_and_verification.js
+  009_add_link_visits.js
+  010_add_templates_system.js
+  011_content_templates.js
+  012_add_email_and_verification.js
 skills-registry.js       # 扫描 skills/ 目录，解析 SKILL.md，提供列表/详情/ZIP 打包
 package.json             # 依赖: @modelcontextprotocol/sdk, zod, archiver, marked, highlight.js, katex, mermaid 等
 Dockerfile               # node:20-alpine, EXPOSE 8858

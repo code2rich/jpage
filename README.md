@@ -2,6 +2,8 @@
 
 > 拖入文件，即刻成页。
 
+[![CI](https://github.com/code2rich/jpage/actions/workflows/ci.yml/badge.svg)](https://github.com/code2rich/jpage/actions/workflows/ci.yml)
+
 [English](README_EN.md) | 中文
 
 **[>>> 查看即页产品介绍 <<<](https://jpage.cn/)**
@@ -52,11 +54,13 @@
 
 ## 技术栈
 
-- **后端**: Node.js + Express + express-session（SQLite 会话存储）
+- **后端**: Node.js + Express + express-session（SQLite 会话存储），按域拆分的 Router 架构（routes/ + lib/ 共享层）
 - **数据库**: SQLite3（零配置，自动迁移）
 - **前端**: 原生 JavaScript（无框架依赖）
 - **渲染**: marked.js + highlight.js + KaTeX + Mermaid
+- **安全**: helmet + 分级 CSP（管理界面严格策略，渲染页 iframe sandbox 隔离 + 内容分级 CSP）
 - **协议**: MCP Streamable HTTP（@modelcontextprotocol/sdk）
+- **测试**: node:test + supertest（单元 + 集成），GitHub Actions CI
 - **容器**: Docker / Docker Compose
 
 ## 快速开始
@@ -85,9 +89,27 @@ ADMIN_USER=admin ADMIN_PASSWORD=test1234 SESSION_SECRET=dev-secret npm start
 npm run dev
 ```
 
+### 开发与测试
+
+```bash
+npm test            # 单元 + 集成测试（node:test + supertest）
+npm run test:unit   # 仅单元测试
+npm run build       # 构建前端产物（esbuild → public/dist）
+```
+
+端到端 / 性能基准（需先 `=8000# npm start= 起服务）：
+
+```bash
+node test/perf-harness.js 8858   # 核心流程 e2e（登录/上传/渲染/短链/标签）
+node test/mcp-harness.js 8858    # MCP 端点
+node test/perf-bench.js 8858     # 渲染/列表/缓存延迟基准
+```
+
 ## 鉴权与安全
 
-即页支持多用户体系。admin 可管理全部用户和文件，普通用户只能操作自己的文件和公开文件。分享链接（`/api/files/:id/render`、`/s/:key`、下载、源码）在文件标记为公开时可匿名访问；上传时取消勾选「公开访问」可让该文件仅所有者和 admin 可见。
+即页支持多用户体系。admin 可管理全部用户和文件，普通用户只能操作自己的文件和公开文件。
+
+**内容安全（CSP）**：通过 helmet + 分级策略加固——管理界面下发严格 CSP（仅放行同源 script），用户内容渲染页用 iframe sandbox（无 `allow-same-origin`，阻断对父窗口的访问）隔离，其中 Markdown 页套严格 CSP（内联 mermaid 脚本靠 nonce 放行），HTML 页用宽松 CSP + sandbox 兜底（用户 HTML 常含合法 script）。分享链接（`/api/files/:id/render`、`/s/:key`、下载、源码）在文件标记为公开时可匿名访问；上传时取消勾选「公开访问」可让该文件仅所有者和 admin 可见。
 
 ### 认证方式
 
@@ -106,7 +128,7 @@ API 和 MCP 端点支持三种认证方式：
 | `SESSION_SECRET` | 生产必填 | 加密会话 Cookie；缺失时开发模式自动生成临时密钥，重启会失效 |
 | `NODE_ENV` | 否 | `production` 时 Cookie 仅 HTTPS 下发送，SESSION_SECRET 缺失会拒绝启动 |
 | `PORT` | 否 | 默认 8858 |
-| `MCP_TOKEN` | 否 | 启用 `/mcp` 端点的 Bearer token；未设置时 MCP 端点不挂载 |
+| `MCP_TOKEN` | 否 | `/mcp` 端点的全局 Bearer token（向后兼容）；未设置时仍可用用户级 API Token（`jp_` 前缀）访问 MCP |
 | `ALLOW_REGISTRATION` | 否 | 设为 `true` 开放用户自助注册；默认关闭，仅 admin 可创建用户 |
 | `SMTP_HOST` | 否 | SMTP 服务器地址（如 `smtp.qq.com`），配置后支持邮箱验证 |
 | `SMTP_PORT` | 否 | SMTP 端口（如 `465`） |
@@ -146,13 +168,41 @@ sqlite3 data/database.sqlite "UPDATE users SET password_hash='<上面生成的ha
 
 ```
 jpage/
-├── server.js           # Express 服务端（REST API + 鉴权 + Markdown 渲染）
-├── logger.js           # 结构化 JSON Lines 日志工具
+├── server.js           # 入口：app 装配 + 中间件 + 启动编排（业务逻辑已拆分）
+├── routes/             # 按域拆分的 Express Router
+│   ├── auth.js         # 登录/注册/邮箱验证
+│   ├── users.js        # 用户管理（admin）
+│   ├── tokens.js       # API Token
+│   ├── files.js        # 文件 CRUD/上传/渲染/版本/标签/收藏/统计
+│   ├── tags.js         # 标签
+│   ├── categories.js   # 分类 + 模板元数据
+│   ├── content-templates.js  # 内容模板市场
+│   ├── admin.js        # 备份导出/导入/统计
+│   └── skills.js       # Skills + MCP 配置
+├── lib/                # 共享层（被 routes 复用）
+│   ├── db.js           # SQLite 访问（dbRun/dbGet/dbAll + PRAGMA）
+│   ├── paths.js        # 数据/上传目录常量
+│   ├── util.js         # now/shareKey/clientIp/decodeFilename 等纯函数
+│   ├── csp.js          # 分级 CSP 策略 + nonce
+│   ├── auth-state.js   # adminUserId 共享状态
+│   ├── templates.js    # 模板系统 + marked/hljs/KaTeX 渲染管线
+│   ├── render.js       # 文件 → HTML 渲染（含 CSP 下发）
+│   ├── render-cache.js # 渲染结果 LRU 缓存
+│   ├── fts.js          # FTS5 全文索引
+│   ├── categories.js   # 分类名内存缓存
+│   ├── view-counts.js  # 浏览数缓冲批量回写
+│   ├── zip.js          # ZIP 上传（安全校验/解压/分类）
+│   ├── dispatch.js     # MCP 进程内请求分发（绕过 TCP 自调用）
+│   └── middleware/     # 鉴权 + 文件加载中间件
+├── logger.js           # 结构化 JSON Lines 日志
+├── mailer.js           # SMTP 邮件（验证码/验证链接）
 ├── mcp-server.js       # MCP Streamable HTTP 端点（/mcp）
 ├── migrations.js       # 数据库迁移 runner
-├── migrations/         # 按序执行的 schema 迁移文件
+├── migrations/         # 按序执行的 schema 迁移文件（001-012）
 ├── skills-registry.js  # 扫描 skills/ 目录，提供 skill 列表/详情/zip 打包
+├── templates/          # Markdown 渲染样式模板（default/github/academic/dark-pro）
 ├── package.json
+├── build.js            # esbuild 打包前端 → public/dist
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .env.example        # 环境变量示例
@@ -163,29 +213,33 @@ jpage/
 ├── skills/
 │   └── jpage-upload/   # Claude Code / Desktop skill
 │       └── SKILL.md
+├── test/               # 单元 + 集成测试（node:test + supertest）+ e2e harness
 ├── data/               # SQLite 数据库、上传文件与会话存储（运行时自动创建）
-│   ├── database.sqlite
-│   ├── sessions.sqlite
-│   └── uploads/
 └── public/             # 前端静态资源
     ├── index.html
     ├── css/style.css
-    └── js/app.js
+    ├── js/             # 按页拆分的 ES 模块
+    └── dist/           # 构建产物（npm run build 生成，git 忽略）
 ```
 
 ## REST API
 
-端口 `8858`（`PORT` 可覆盖）。所有写入端点要求登录或 Bearer token。
+端口 `8858`（`PORT` 可覆盖）。所有写入端点要求登录或 Bearer token。完整参考见 [docs/api.md](docs/api.md)。
 
 ### 鉴权
 
 | 端点 | 方法 | 说明 |
 |---|---|---|
-| `/api/auth/me` | GET | 当前登录信息 |
-| `/api/auth/login` | POST | 登录（`{username, password}`） |
+| `/api/auth/me` | GET | 当前登录信息（返回 `{id, username, email, emailVerified, role}`） |
+| `/api/auth/login` | POST | 登录（`{account, password}` 或 `{username, password}`，自动识别用户名或邮箱） |
 | `/api/auth/register` | POST | 注册（需 `ALLOW_REGISTRATION=true`） |
 | `/api/auth/logout` | POST | 登出 |
 | `/api/auth/change-password` | POST | 修改密码（所有用户可用） |
+| `/api/auth/profile` | POST | 编辑个人资料（用户名/邮箱） |
+| `/api/auth/send-register-code` | POST | 发送注册验证码（需开放注册） |
+| `/api/auth/verify-email` | GET | 验证邮箱 token |
+| `/api/auth/smtp-status` | GET | SMTP 是否已配置 |
+| `/api/auth/registration-status` | GET | 注册是否开放 |
 
 ### 用户管理（仅 admin）
 
@@ -209,13 +263,21 @@ jpage/
 | 端点 | 方法 | 说明 |
 |---|---|---|
 | `/api/files` | GET | 列出文件（admin 看全部，普通用户看自己的 + 公开的） |
-| `/api/files/upload` | POST | multipart 上传 |
+| `/api/files/search` | GET | 全文 + 文件名搜索（分页、过滤） |
+| `/api/files/upload` | POST | multipart 上传（支持 `.html`/`.htm`/`.md`/`.markdown`/`.zip`，50MB） |
 | `/api/files/upload-json` | POST | JSON 上传（`{name, content, isPublic?}`） |
+| `/api/files/batch` | POST | 批量操作（删除/公开/私有/分类，≤200） |
+| `/api/files/:id` | GET | 单文件元数据 |
 | `/api/files/:id` | PUT | 重命名或切换公开/私有 |
 | `/api/files/:id` | DELETE | 删除文件 |
 | `/api/files/:id/content` | GET | 返回原始文本 |
 | `/api/files/:id/render` | GET | 返回渲染后 HTML |
-| `/api/files/:id/download` | GET | 流式下载文件 |
+| `/api/files/:id/download` | GET | 流式下载文件（Bundle 以 ZIP 下载） |
+| `/api/files/:id/asset/*` | GET | Bundle 资源文件访问 |
+| `/api/files/:id/overwrite` | POST | 覆盖上传（自动版本备份） |
+| `/api/files/:id/versions` | GET | 版本历史列表 |
+| `/api/files/:id/versions/:ver/restore` | POST | 恢复到指定版本 |
+| `/api/files/:id/stats` | GET | 访问统计（viewCount/daily7/daily30） |
 | `/s/:key` | GET | 短链接渲染页面 |
 
 ### 标签
@@ -240,9 +302,28 @@ jpage/
 |---|---|---|
 | `/api/categories` | GET | 列出分类（含 file_count） |
 | `/api/categories` | POST | 创建分类 |
-| `/api/categories/:id` | PUT | 重命名分类 |
-| `/api/categories/:id` | DELETE | 删除分类 |
+| `/api/categories/:id` | PUT | 重命名分类（仅 admin） |
+| `/api/categories/:id` | DELETE | 删除分类（仅 admin） |
 | `/api/files/:id/category` | PUT | 设置文件分类 |
+
+### 内容模板
+
+| 端点 | 方法 | 说明 |
+|---|---|---|
+| `/api/content-templates/public` | GET | 公开模板列表（无需登录） |
+| `/api/content-templates` | GET | 当前用户模板列表 |
+| `/api/content-templates` | POST | 创建模板 |
+| `/api/content-templates/:id` | PUT/DELETE | 更新/删除模板（仅所有者） |
+| `/api/content-templates/:id/use` | POST | 基于模板创建文件 |
+| `/api/templates` | GET | 样式模板（渲染皮肤） |
+
+### 管理后台（仅 admin）
+
+| 端点 | 方法 | 说明 |
+|---|---|---|
+| `/api/admin/export` | GET | 导出数据库备份 |
+| `/api/admin/import` | POST | 导入备份 |
+| `/api/admin/stats` | GET | 系统统计 |
 
 ### Skills
 
@@ -260,7 +341,7 @@ jpage/
 
 ### 启用
 
-设置 `MCP_TOKEN` 环境变量即可启用：
+设置全局 `MCP_TOKEN` 环境变量，或使用任意用户级 API Token（`jp_` 前缀）即可启用 `/mcp`。两者二选一：
 
 ```bash
 MCP_TOKEN=your-secret-token
@@ -345,7 +426,7 @@ npx -y @modelcontextprotocol/inspector http://localhost:8858/mcp
 
 现有的方案要么太重（需要配置服务器、域名、CI），要么太封闭（绑定特定平台）。
 
-即页只想做一件事：让静态内容的分享回归简单。拖入文件，得到一个链接。没有账户体系，没有学习成本，打开即用。
+即页只想做一件事：让静态内容的分享回归简单。拖入文件，得到一个链接。支持可选的多用户体系，但默认开箱即用——拖入文件即得链接，匿名也能分享公开文件，无需注册。
 
 ## 协议
 
