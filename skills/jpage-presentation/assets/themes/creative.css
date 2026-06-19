@@ -1,0 +1,81 @@
+/**
+ * jpage-presentation · 创意主题 (creative)
+ * 高饱和渐变 + 几何无衬线，适合产品发布、创意提案、活动 keynote。
+ */
+:root {
+  --r-background-color: #0f0e17;
+  --r-main-font: "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --r-main-color: #fffffe;
+  --r-heading-font: "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  --r-heading-color: #fffffe;
+  --r-heading-text-transform: none;
+  --r-heading-font-weight: 800;
+  --r-heading-letter-spacing: -0.02em;
+  --r-link-color: #ff8906;
+  --r-link-color-hover: #f25f4c;
+  --r-selection-background-color: #e53170;
+  --r-selection-color: #fff;
+  --r-code-font: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  --r-section-number-color: #ff8906;
+}
+
+.reveal {
+  font-size: 32px;
+  font-weight: 400;
+  background: linear-gradient(135deg, #0f0e17 0%, #1a1830 50%, #232946 100%);
+  background-attachment: fixed;
+}
+.reveal h1, .reveal h2, .reveal h3, .reveal h4 {
+  letter-spacing: -0.02em;
+}
+.reveal h1 {
+  font-size: 2.4em;
+  background: linear-gradient(90deg, #ff8906, #e53170);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.reveal h2 { font-size: 1.7em; color: #ff8906; }
+.reveal h3 { font-size: 1.2em; color: #e53170; }
+.reveal .slides section.cover h1 {
+  font-size: 3em;
+}
+.reveal .slides section.cover .subtitle {
+  color: #a7a9be;
+  font-size: 0.85em;
+  margin-top: 0.5em;
+}
+.reveal .slides section.divider {
+  text-align: center;
+}
+.reveal .slides section.divider h2 {
+  font-size: 2.2em;
+  background: linear-gradient(90deg, #ff8906, #e53170);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.reveal ul li::marker { color: #ff8906; }
+.reveal ol li::marker { color: #e53170; font-weight: 700; }
+.reveal strong { color: #ff8906; }
+.reveal em { color: #e53170; }
+.reveal blockquote {
+  border-left: 4px solid #e53170;
+  background: rgba(229, 49, 112, 0.1);
+  color: #fffffe;
+  padding: 0.5em 1em;
+  border-radius: 0 8px 8px 0;
+}
+.reveal pre {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 137, 6, 0.3);
+  font-size: 0.55em;
+  border-radius: 8px;
+}
+.reveal code { color: #ff8906; }
+.reveal a { text-decoration: underline; text-decoration-color: #e53170; }
+.reveal table th {
+  background: rgba(229, 49, 112, 0.2);
+  border-bottom: 2px solid #e53170;
+}
+.reveal table td { border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
