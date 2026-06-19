@@ -1061,8 +1061,10 @@ function openMcpConfigModal() {
       });
       const copyBtn = document.getElementById('mcp-copy-config');
       if (copyBtn) {
-        copyBtn.addEventListener('click', () => {
-          navigator.clipboard.writeText(activeConfigJson).then(() => {
+        copyBtn.addEventListener('click', async () => {
+          // PR #9：navigator.clipboard 优先，不支持/失败时回退 execCommand（copyToClipboard）
+          const ok = await copyToClipboard(activeConfigJson);
+          if (ok) {
             toast('已复制到剪贴板');
             copyBtn.textContent = '已复制';
             setTimeout(() => { copyBtn.textContent = '复制'; }, 2000);
