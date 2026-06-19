@@ -209,6 +209,10 @@ html.light .theme-toggle .icon-sun { display: block; }
   gap: 6px;
 }
 
+/* .btn 的 display:inline-flex 优先级与 [hidden] 相同，会覆盖 hidden 属性，
+   导致带 .btn 类的按钮（如预览页的保存/取消）即使在隐藏状态下也会显示 */
+.btn[hidden] { display: none; }
+
 .btn:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
@@ -944,6 +948,17 @@ html:not(.light) {
 .preview-title-strip:hover {
   border-color: #cbd5e1;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+/* 收起顶栏时：标题条作为展开入口显示（display:flex），完整工具栏隐藏。
+   工具栏重构把 .preview-toolbar-compact 并入 .preview-header-collapsed，但
+   对应 CSS 未同步，导致收起后无标题条可点、只能靠角落浮标展开（回归）。 */
+.preview-layout.preview-header-collapsed .preview-title-strip {
+  display: flex;
+}
+
+.preview-layout.preview-header-collapsed .preview-toolbar-expanded {
+  display: none !important;
 }
 
 .preview-title-strip:focus-visible {
@@ -2603,6 +2618,12 @@ html:not(.light) {
   flex-direction: column;
   background: var(--card);
 }
+
+
+/* .editor-container 的 display:flex 优先级与 [hidden] 相同，会覆盖 hidden 属性，
+   导致退出编辑模式回到渲染模式时编辑器仍占据视口、遮挡 iframe（回归）。
+   与 .btn[hidden] 同理，需显式补一条规则。 */
+.editor-container[hidden] { display: none; }
 
 .editor-wrap {
   flex: 1;

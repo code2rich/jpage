@@ -2052,6 +2052,14 @@ async function openTemplateSelect(container, fileId, currentTemplateId) {
   modal.hidden = false;
   modal.setAttribute('aria-hidden', 'false');
 
+  // 关闭按钮必须在任何异步加载之前绑定：否则加载失败提前 return 时，
+  // 弹窗会因没有关闭入口而卡死（回归）。
+  if (!templateSelectBound) {
+    document.getElementById('template-select-close').addEventListener('click', closeTemplateSelect);
+    document.getElementById('template-select-cancel').addEventListener('click', closeTemplateSelect);
+    templateSelectBound = true;
+  }
+
   let allTemplates;
   try {
     const data = await api('/api/templates');
@@ -2094,12 +2102,6 @@ async function openTemplateSelect(container, fileId, currentTemplateId) {
       renderHome(container);
     });
   });
-
-  if (!templateSelectBound) {
-    document.getElementById('template-select-close').addEventListener('click', closeTemplateSelect);
-    document.getElementById('template-select-cancel').addEventListener('click', closeTemplateSelect);
-    templateSelectBound = true;
-  }
 }
 
 function closeTemplateSelect() {

@@ -269,10 +269,14 @@ async function openTemplateSelectForPreview(container, fileId, currentTemplateId
   modal.hidden = false;
   modal.setAttribute('aria-hidden', 'false');
 
+  // 关闭按钮必须在任何异步加载之前绑定：否则加载失败提前 return 时，
+  // 弹窗会因没有关闭入口而卡死（回归）。
+  document.getElementById('template-select-close').onclick = closeTemplateSelect;
+  document.getElementById('template-select-cancel').onclick = closeTemplateSelect;
+
   let allTemplates;
   try {
-    const res = await authFetch('/api/templates');
-    const data = await res.json();
+    const data = await api('/api/templates');
     allTemplates = data.templates || [];
   } catch (e) {
     list.innerHTML = '<div class="empty-state">加载失败</div>';
@@ -302,10 +306,9 @@ async function openTemplateSelectForPreview(container, fileId, currentTemplateId
     item.addEventListener('click', async () => {
       const tplId = parseInt(item.dataset.tplId);
       try {
-        await authFetch(`/api/files/${fileId}`, {
+        await api(`/api/files/${fileId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ templateId: tplId })
+          body: { templateId: tplId }
         });
         const iframe = container.querySelector('#preview-iframe');
         if (iframe) iframe.src = iframe.src;
@@ -313,9 +316,6 @@ async function openTemplateSelectForPreview(container, fileId, currentTemplateId
       closeTemplateSelect();
     });
   });
-
-  document.getElementById('template-select-close').onclick = closeTemplateSelect;
-  document.getElementById('template-select-cancel').onclick = closeTemplateSelect;
 }
 
 // ---------- Preview Page ----------

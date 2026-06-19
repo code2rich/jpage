@@ -168,6 +168,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **view_count 批量回写** — 短链 `/s/:key` 的访问计数累积到 `VIEW_COUNT_BUFFER`，每 30s 或进程退出时 `flushViewCounts()` 批量写库。`/api/files/:id/stats` 返回时把缓冲值加上，保证读一致。
 - **大 body 端点专用解析** — 全局 `express.json` 限 1MB；`upload-json` / `upload-zip-base64` / `overwrite-json` 用 `largeJson`（50MB）。新增大 body 端点时挂 `largeJson`。
 - **静态资源长缓存** — `express.static` 统一带 `STATIC_OPTS`（30d + immutable）。前端 CSS/JS 引用带 `?v=x.y.z`，改资源后务必 bump 版本号以失效缓存。
+- **版本号必须全局一致** — 整个系统的版本号是单一事实来源，所有出现版本号的地方必须保持同步，不得随意 bump 或各自为政：
+  - **单一来源**：`package.json` 的 `version` 字段是权威版本。
+  - **前端缓存失效标记**：`public/index.html` 里 `style.css?v=` 与 `app.js?v=` 的 `?v=x.y.z` 必须与 `package.json` 的 `version` 完全一致。
+  - **同步时机**：仅在正式发版（修改 `package.json` 的 `version`）时同步更新这两处 `?v=`。修 bug 或加功能时**不要**单独 bump `?v=`（缓存失效改用资源指纹/文件名哈希或随发版统一 bump）。
+  - 禁止出现 `package.json=1.5.2` 但 `index.html` 里挂 `?v=1.6.2` 这种版本号漂移。
 - **MCP 进程内分发** — MCP tool 不再走 `fetch('http://127.0.0.1:port/...')` 自调用，改用 `lib/dispatch.js` 的 `createDispatcher(app, {token})` 直接调 `app.handle()`。新增 MCP tool 时用传入的 `api` 对象（`api.get/post/put/del`），接口与 fetch 版一致；鉴权靠 `Authorization: Bearer <token>` 头走 `requireAuth`，行为与 HTTP 完全相同（权限、限流、审计都生效）。
 - **CLI 与 MCP 双客户端入口必须同步** — `bin/commands/*.js`（CLI 命令）与 `mcp/tools-*.js`（MCP tool）是两个对等的客户端入口，都构建在同一套 REST API（`routes/`）之上。**新增或修改任一端的功能时，另一端必须同步实现对应能力**：CLI 加命令就同时给 MCP 加 tool，反之亦然，避免两边能力漂移。功能域与文件对应：文件管理 → `commands/{upload,ls,cat,url,mv,rm,star,tags}.js` ↔ `mcp/tools-files.js`；标签 → `commands/tags.js` ↔ `mcp/tools-tags.js`；版本 → `mcp/tools-versions.js`（CLI 待补）；分类 → `mcp/tools-categories.js`（CLI 待补）。
 - **模板预编译** — `loadTemplates()` 把每个模板经 `compileTemplate()` 编为函数存入 `templateCache`（静态 vendor URL 占位符在加载时一次替换，运行时仅 title/content/hljs_theme 三个 `split/join`）。`templateCache[name]` 是**函数**而非字符串，`applyTemplate(tplFn, ...)` 直接调用。
