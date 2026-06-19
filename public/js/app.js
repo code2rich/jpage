@@ -31,10 +31,13 @@ function navigate(path) {
 }
 
 // 动态加载各路由模块（esbuild 据此做代码分割，产出独立 chunk）
-async function loadHome() { const m = await import('./pages/home.js'); return m.renderHome; }
-async function loadLogin() { const m = await import('./pages/login.js'); return m.renderLogin; }
-async function loadLanding() { const m = await import('./pages/landing.js'); return m.renderLanding; }
-async function loadPreview() { const m = await import('./pages/preview.js'); return m.renderPreview; }
+// 动态 import 带字面量版本串：发版时连同 index.html 里 app.js 的 ?v= 一起改，
+// 让浏览器在开发模式（直接服务源文件、无内容哈希文件名）下也重新拉取各页面 chunk，
+// 绕过 immutable 长缓存。字面量（非模板）能被 esbuild 正确分割。
+async function loadHome() { const m = await import('./pages/home.js?v=1.5.2'); return m.renderHome; }
+async function loadLogin() { const m = await import('./pages/login.js?v=1.5.2'); return m.renderLogin; }
+async function loadLanding() { const m = await import('./pages/landing.js?v=1.5.2'); return m.renderLanding; }
+async function loadPreview() { const m = await import('./pages/preview.js?v=1.5.2'); return m.renderPreview; }
 
 function route() {
   const hash = location.hash.replace('#', '') || '/';
