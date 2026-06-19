@@ -12,7 +12,7 @@ function registerAssociations(router) {
   // --- 标签关联（替换文件的全部标签） ---
   router.put('/:id/tags', requireAuth, async (req, res) => {
     try {
-      const file = await dbGet('SELECT id FROM files WHERE id = ?', [req.params.id]);
+      const file = await dbGet('SELECT id, uploaded_by FROM files WHERE id = ?', [req.params.id]);
       if (!file) return res.status(404).json({ error: '文件不存在' });
       if (!checkFileOwnership(req, file)) return res.status(403).json({ error: '无权操作此文件' });
       const { tagIds } = req.body || {};
