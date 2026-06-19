@@ -1,0 +1,68 @@
+/**
+ * jpage-presentation · 学术主题 (academic)
+ * 深灰墨色 + 米白底 + 衬线标题，适合论文答辩、学术分享、研究报告。
+ */
+:root {
+  --r-background-color: #fbfaf7;
+  --r-main-font: "Noto Serif SC", Georgia, "PingFang SC", "Microsoft YaHei", serif;
+  --r-main-color: #2d2d2d;
+  --r-heading-font: "Noto Serif SC", Georgia, "Times New Roman", serif;
+  --r-heading-color: #1a1a1a;
+  --r-heading-text-transform: none;
+  --r-heading-font-weight: 700;
+  --r-heading-letter-spacing: 0.02em;
+  --r-link-color: #5a3e2b;
+  --r-link-color-hover: #3d2a1d;
+  --r-selection-background-color: #5a3e2b;
+  --r-selection-color: #fbfaf7;
+  --r-code-font: "SF Mono", Menlo, Consolas, monospace;
+  --r-section-number-color: #8b7355;
+}
+
+.reveal {
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+.reveal h1, .reveal h2, .reveal h3, .reveal h4 {
+  letter-spacing: 0.03em;
+}
+.reveal h1 { font-size: 2em; }
+.reveal h2 { font-size: 1.5em; border-bottom: 1px solid #8b7355; padding-bottom: 0.15em; }
+.reveal h3 { font-size: 1.15em; color: #5a3e2b; }
+.reveal .slides section.cover h1 {
+  font-size: 2.4em;
+  border-bottom: none;
+}
+.reveal .slides section.cover .meta {
+  font-family: var(--r-main-font);
+  color: #8b7355;
+  font-size: 0.7em;
+  margin-top: 1em;
+  font-style: italic;
+}
+.reveal .slides section.divider h2 {
+  font-size: 1.8em;
+  color: #5a3e2b;
+  border-bottom: none;
+  font-style: italic;
+}
+.reveal ul, .reveal ol { margin-left: 0.5em; }
+.reveal li { margin-bottom: 0.35em; line-height: 1.45; }
+.reveal em { color: #5a3e2b; }
+.reveal blockquote {
+  border-left: 3px solid #8b7355;
+  font-style: italic;
+  color: #4a4a4a;
+  background: #f5f1ea;
+  padding: 0.5em 1em;
+}
+.reveal pre {
+  background: #f5f1ea;
+  border: 1px solid #e5dfd3;
+  font-size: 0.55em;
+}
+.reveal code { color: #5a3e2b; }
+.reveal table { font-size: 0.7em; }
+.reveal th { background: #f5f1ea; border-bottom: 2px solid #8b7355; }
+.reveal td { border-bottom: 1px solid #e5dfd3; }

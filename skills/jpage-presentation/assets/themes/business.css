@@ -1,0 +1,64 @@
+/**
+ * jpage-presentation · 商务主题 (business)
+ * 深蓝主色 + 白底 + 稳重无衬线，适合季度汇报、商业提案、年终总结。
+ * 仅覆盖 reveal.js 的 CSS 变量与少量排版；基础布局由 reveal.js 引擎提供。
+ */
+:root {
+  --r-background-color: #ffffff;
+  --r-main-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --r-main-color: #1a1a1a;
+  --r-heading-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --r-heading-color: #0a4d8c;
+  --r-heading-text-transform: none;
+  --r-heading-font-weight: 700;
+  --r-heading-letter-spacing: normal;
+  --r-link-color: #0a4d8c;
+  --r-link-color-hover: #073a68;
+  --r-selection-background-color: #0a4d8c;
+  --r-selection-color: #fff;
+  --r-code-font: "SF Mono", Menlo, Consolas, monospace;
+  --r-section-number-color: #0a4d8c;
+}
+
+.reveal {
+  font-size: 32px;
+  font-weight: 400;
+}
+.reveal h1, .reveal h2, .reveal h3, .reveal h4 {
+  border-bottom: 3px solid #0a4d8c;
+  padding-bottom: 0.2em;
+}
+.reveal h1 { font-size: 2.2em; }
+.reveal h2 { font-size: 1.6em; }
+.reveal h3 { font-size: 1.2em; border-bottom-width: 2px; }
+.reveal .slides section.cover h1 {
+  font-size: 2.8em;
+  border-bottom: none;
+  color: #0a4d8c;
+}
+.reveal .slides section.cover .subtitle {
+  color: #4a5568;
+  font-size: 0.9em;
+  margin-top: 0.5em;
+}
+.reveal .slides section.divider {
+  text-align: center;
+}
+.reveal .slides section.divider h2 {
+  font-size: 2em;
+  border-bottom: none;
+  color: #0a4d8c;
+}
+.reveal ul, .reveal ol { margin-left: 0.5em; }
+.reveal li { margin-bottom: 0.3em; }
+.reveal strong { color: #0a4d8c; }
+.reveal blockquote {
+  border-left: 4px solid #0a4d8c;
+  color: #4a5568;
+  background: #f7fafc;
+  padding: 0.5em 1em;
+}
+.reveal pre {
+  border-left: 4px solid #0a4d8c;
+  font-size: 0.55em;
+}
