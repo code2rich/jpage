@@ -236,7 +236,10 @@ html.light .theme-toggle .icon-sun { display: block; }
   color: #fff;
   border-color: var(--primary);
 }
-.btn-copy-link { color: var(--primary); border-color: var(--primary); }
+/* 图标按钮（btn-small 内仅放 SVG）：方形、与星标/更多按钮视觉一致 */
+.btn-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; color: var(--text-secondary); }
+.btn-icon svg { width: 16px; height: 16px; }
+.btn-copy-link:hover { color: var(--primary); }
 .btn-copy-link:hover { background: var(--primary); color: #fff; }
 
 .auth-message {
@@ -2815,9 +2818,12 @@ html:not(.light) {
 .file-card-thumb-wrap.loaded { opacity: 1; }
 .file-card-thumb-iframe { width: 100%; height: 100%; border: none; background: #fff; }
 .file-card-thumb-loading { position: absolute; inset: 0; background: linear-gradient(135deg, var(--bg-secondary, #f1f5f9), var(--border)); animation: ct-thumb-pulse 1.5s ease-in-out infinite; }
-.file-card-star { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 999px; background: rgba(255,255,255,.85); color: var(--text-secondary); font-size: 14px; cursor: pointer; z-index: 2; transition: background .15s, color .15s; }
+.file-card-icon-btn { position: absolute; top: 6px; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 999px; background: rgba(255,255,255,.85); color: var(--text-secondary); font-size: 14px; cursor: pointer; z-index: 2; transition: background .15s, color .15s; }
+.file-card-icon-btn svg { width: 15px; height: 15px; }
+.file-card-star { right: 6px; } /* 星标靠最右 */
+.file-card-copy { right: 40px; } /* 复制链接在星标左侧（28 宽 + 6 间距 + 6 边距）*/
 .file-card-star.starred { color: #f59e0b; }
-.file-card-star:hover { background: #fff; color: var(--text); }
+.file-card-icon-btn:hover { background: #fff; color: var(--text); }
 .file-card-star.starred:hover { color: #f59e0b; }
 .file-card-name { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.4; word-break: break-all; }
 .file-card-badges { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -2825,8 +2831,8 @@ html:not(.light) {
 .file-card-footer { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-secondary); margin-top: auto; }
 html:not(.light) {
   .file-card-thumb { background: linear-gradient(135deg, #1e293b, #334155); }
-  .file-card-star { background: rgba(30,41,59,.85); color: #94a3b8; }
-  .file-card-star:hover { background: #334155; color: #e2e8f0; }
+  .file-card-icon-btn { background: rgba(30,41,59,.85); color: #94a3b8; }
+  .file-card-icon-btn:hover { background: #334155; color: #e2e8f0; }
   .file-card-star.starred { color: #fbbf24; }
 }
 @media (prefers-reduced-motion: reduce) {

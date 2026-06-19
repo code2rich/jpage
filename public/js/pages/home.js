@@ -564,7 +564,7 @@ function renderFileList(container, list, files) {
       </div>
       <div class="file-actions">
         <button type="button" class="btn btn-small btn-star ${f.starred ? 'starred' : ''}" data-id="${f.id}">${f.starred ? '★' : '☆'}</button>
-        <button type="button" class="btn btn-small btn-copy-link" data-id="${f.id}">复制链接</button>
+        <button type="button" class="btn btn-small btn-copy-link" data-id="${f.id}" title="复制链接" aria-label="复制链接"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button>
         <div class="file-more-dropdown">
           <button type="button" class="btn btn-small file-more-trigger" title="更多操作">⋯</button>
           <div class="file-more-menu">
@@ -718,7 +718,8 @@ function renderCardList(container, list, files) {
       <div class="file-card-thumb" aria-hidden="true">
         <div class="file-card-thumb-loading"></div>
       </div>
-      <button type="button" class="file-card-star ${f.starred ? 'starred' : ''}" data-id="${f.id}" aria-label="收藏">${f.starred ? '★' : '☆'}</button>
+      <button type="button" class="file-card-icon-btn file-card-star ${f.starred ? 'starred' : ''}" data-id="${f.id}" aria-label="收藏" title="收藏">${f.starred ? '★' : '☆'}</button>
+      <button type="button" class="file-card-icon-btn file-card-copy" data-id="${f.id}" aria-label="复制链接" title="复制链接"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button>
       <div class="file-card-name" title="${safeName}">${safeName}</div>
       <div class="file-card-badges"><span class="file-badge file-badge-type">${iconText}</span>${privacyBadge}${versionBadge}${tagBadges}</div>
       <div class="file-card-footer"><span>${size}</span><span>${timeStr}</span></div>
@@ -735,6 +736,10 @@ function renderCardList(container, list, files) {
       e.stopPropagation();
       await toggleStar(f.id, f.starred);
       loadFiles(container);
+    });
+    el.querySelector('.file-card-copy').addEventListener('click', e => {
+      e.stopPropagation();
+      doCopyLink(f.share_key);
     });
     el.querySelectorAll('.file-badge-tag').forEach(badge => {
       badge.addEventListener('click', e => {
