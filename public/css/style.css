@@ -278,19 +278,11 @@ html.light .theme-toggle .icon-sun { display: block; }
 }
 
 .brand-mark {
-  width: 40px;
-  height: 40px;
+  width: 96px;
+  height: 96px;
   border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, var(--primary) 0%, #7c3aed 100%);
-  color: #fff;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  object-fit: contain;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
 }
 
 .brand-text { min-width: 0; }
@@ -1437,7 +1429,7 @@ html:not(.light) {
   .main { padding: 16px 16px 40px; }
   .auth-box { padding: 28px 20px; }
   .source-view { padding: 16px; }
-  .brand-mark { width: 36px; height: 36px; font-size: 12px; }
+  .brand-mark { width: 80px; height: 80px; }
   .upload-area { padding: 28px 18px; }
   .preview-expanded-left {
     width: 100%;
@@ -1493,9 +1485,8 @@ html:not(.light) {
 }
 
 .login-brand .brand-mark {
-  width: 40px;
-  height: 40px;
-  font-size: 18px;
+  width: 128px;
+  height: 128px;
 }
 
 .login-title {
