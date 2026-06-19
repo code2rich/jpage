@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="即页，拖入 HTML 或 Markdown 文件，即刻获得在线预览页面。">
 <title>即页 — 拖入文件，即刻成页</title>
-<link rel="stylesheet" href="/css/style.css?v=1.5.0">
+<link rel="stylesheet" href="/css/style.css?v=1.6.0">
 </head>
 <body>
 <div id="app"></div>
@@ -349,6 +349,10 @@ MCP 配置
 <button type="button" class="filter-chip filter-dropdown-trigger">分类 ▾</button>
 <div class="filter-dropdown-menu" id="category-filter-menu"></div>
 </div>
+</div>
+<div class="view-toggle" role="tablist" aria-label="展示形式">
+<button type="button" class="view-toggle-btn active" data-view="list" role="tab" title="列表视图" aria-label="列表视图">≡</button>
+<button type="button" class="view-toggle-btn" data-view="card" role="tab" title="卡片视图" aria-label="卡片视图">▦</button>
 </div>
 </div>
 <div class="file-list" id="file-list" aria-busy="false"></div>
@@ -850,6 +854,6 @@ MCP 配置
 </div>
 </div>
 
-<script type="module" src="/js/app.js?v=1.4.1"></script>
+<script type="module" src="/js/app.js?v=1.5.0"></script>
 </body>
 </html>
