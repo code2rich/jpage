@@ -1018,12 +1018,15 @@ function openMcpConfigModal() {
       `;
       const copyBtn = document.getElementById('mcp-copy-config');
       if (copyBtn) {
-        copyBtn.addEventListener('click', () => {
-          navigator.clipboard.writeText(configJson).then(() => {
+        copyBtn.addEventListener('click', async () => {
+          const ok = await copyToClipboard(configJson);
+          if (ok) {
             toast('已复制到剪贴板');
             copyBtn.textContent = '已复制';
             setTimeout(() => { copyBtn.textContent = '复制'; }, 2000);
-          }).catch(() => toast('复制失败', 'error'));
+          } else {
+            toast('复制失败', 'error');
+          }
         });
       }
     } else {
