@@ -5,6 +5,7 @@ node_modules/
 data/
 data-test-*/
 data-bench-tmp/
+data-backup-*/
 
 # SQLite 文件兜底(data/ 已忽略,这里防止仓库根及其它路径误提交运行时数据库)
 *.sqlite

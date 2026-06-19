@@ -27,7 +27,7 @@ function syncPreviewHeaderState(layout, expandFloatingBtn, toggleHeaderBtn) {
 }
 
 // ---------- Version History ----------
-let _versionPanelState = { fileId: null, versions: null, currentVer: 0 };
+const _versionPanelState = { fileId: null, versions: null, currentVer: 0 };
 
 function loadVersions(container, fileId) {
   const body = container.querySelector('#version-panel-body');

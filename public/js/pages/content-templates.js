@@ -8,7 +8,7 @@ import { state } from '../app.js';
 
 const SCENE_LABELS = { dashboard: '仪表板', report: '报告', resume: '简历', landing: '落地页', note: '笔记', presentation: '演示', card: '卡片', email: '邮件', other: '其他' };
 
-let ctState = { scene: '', keyword: '', page: 1, templates: [], pagination: { page: 1, limit: 12, total: 0, totalPages: 1 }, currentId: null, editing: false };
+const ctState = { scene: '', keyword: '', page: 1, templates: [], pagination: { page: 1, limit: 12, total: 0, totalPages: 1 }, currentId: null, editing: false };
 
 const loadedThumbs = new Set();
 let activeThumbLoads = 0;

@@ -13,7 +13,7 @@ const HOST = '127.0.0.1';
 function req(method, path, { body, headers = {} } = {}) {
   return new Promise((resolve, reject) => {
     const opts = { host: HOST, port: PORT, method, path, headers: { ...headers } };
-    let payload = body !== undefined ? JSON.stringify(body) : null;
+    const payload = body !== undefined ? JSON.stringify(body) : null;
     if (payload) opts.headers['Content-Type'] = 'application/json', opts.headers['Content-Length'] = Buffer.byteLength(payload);
     const start = process.hrtime.bigint();
     const r = http.request(opts, res => {

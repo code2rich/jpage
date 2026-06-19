@@ -8,6 +8,8 @@
     "dev": "nodemon server.js",
     "build": "node build.js",
     "build:dev": "node build.js --dev",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "test": "node --test \"test/unit/**/*.test.js\" \"test/integration/**/*.test.js\"",
     "test:unit": "node --test \"test/unit/**/*.test.js\"",
     "test:integration": "node --test \"test/integration/**/*.test.js\""
@@ -36,7 +38,9 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "esbuild": "^0.28.1",
+    "eslint": "^10.5.0",
     "nodemon": "^3.0.3",
     "supertest": "^7.2.2"
   }
