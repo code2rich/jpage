@@ -19,9 +19,9 @@
     "build:dev": "node build.js --dev",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "node --test \"test/unit/**/*.test.js\" \"test/integration/**/*.test.js\"",
-    "test:unit": "node --test \"test/unit/**/*.test.js\"",
-    "test:integration": "node --test \"test/integration/**/*.test.js\""
+    "test": "node --test test/unit/*.test.js test/integration/*.test.js",
+    "test:unit": "node --test test/unit/*.test.js",
+    "test:integration": "node --test test/integration/*.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
