@@ -1,5 +1,5 @@
-// Skills 集成测试：列表 / 详情 / 下载 zip / mcp/config 结构。全部 requireAuth。
-// 挂载点 /api（/skills、/skills/:name、/skills/:name/download、/mcp/config）。
+// Skills 集成测试：列表 / 详情 / 下载 zip / mcp/config 结构 / cli 指南。全部 requireAuth。
+// 挂载点 /api（/skills、/skills/:name、/skills/:name/download、/mcp/config、/cli/guide）。
 // 依赖仓库内 skills/jpage-upload/SKILL.md（内置 skill）。
 const test = require('node:test');
 const assert = require('node:assert');
@@ -85,36 +85,42 @@ test('GET /api/mcp/config → 200，含 config.mcpServers.jpage', async () => {
   assert.ok(Array.isArray(res.body.tokens));
 });
 
-test('GET /api/mcp/config → 200，含多客户端 configs 数组', async () => {
+test('GET /api/mcp/config → 200，含多客户端 configs 数组（仅 MCP 客户端）', async () => {
   const res = await agent.get('/api/mcp/config');
   assert.strictEqual(res.status, 200);
   assert.ok(Array.isArray(res.body.configs));
-  // 6 项：5 个 MCP 客户端 + 1 个 CLI
-  assert.strictEqual(res.body.configs.length, 6);
+  // 5 项：全部为 MCP 客户端（CLI 走独立的 /api/cli/guide，不再混入此处）
+  assert.strictEqual(res.body.configs.length, 5);
   const ids = res.body.configs.map(c => c.id);
-  for (const id of ['claude-code', 'claude-desktop', 'cursor', 'zcode', 'generic', 'cli']) {
+  for (const id of ['claude-code', 'claude-desktop', 'cursor', 'zcode', 'generic']) {
     assert.ok(ids.includes(id), `configs 应包含 ${id}`);
   }
+  // CLI 不应再出现在 MCP 配置里
+  assert.ok(!ids.includes('cli'), 'configs 不应再包含 cli（已独立为 /api/cli/guide）');
   // 每项含 label / path
   res.body.configs.forEach(c => {
     assert.ok(c.label, `${c.id} 应有 label`);
     assert.ok('path' in c, `${c.id} 应有 path`);
   });
-  // MCP 客户端项含 config.mcpServers.jpage（排除 CLI 项，CLI 走 kind=cli）
-  res.body.configs.filter(c => c.kind !== 'cli').forEach(c => {
+  // 每项都是 MCP 客户端，config.mcpServers.jpage 必有
+  res.body.configs.forEach(c => {
     assert.ok(c.config && c.config.mcpServers && c.config.mcpServers.jpage, `${c.id} config 应含 mcpServers.jpage`);
   });
 });
 
-test('GET /api/mcp/config → CLI 项含 kind=cli + 渲染后的 cliHtml + cliText', async () => {
-  const res = await agent.get('/api/mcp/config');
+test('GET /api/cli/guide → 200，返回 CLI 用法指南（与 MCP 并列的独立入口）', async () => {
+  const res = await agent.get('/api/cli/guide');
   assert.strictEqual(res.status, 200);
-  const cli = res.body.configs.find(c => c.id === 'cli');
-  assert.ok(cli, '应有 cli 配置项');
-  assert.strictEqual(cli.kind, 'cli');
-  assert.ok(typeof cli.cliHtml === 'string' && cli.cliHtml.length > 0, 'cliHtml 应为非空 HTML');
-  assert.ok(cli.cliHtml.includes('jpage'), 'cliHtml 应含 jpage 说明');
-  assert.ok(typeof cli.cliText === 'string' && cli.cliText.length > 0, 'cliText 应为非空文档');
-  // cliText 里 baseUrl 应已被替换为实际服务地址（不含 <baseUrl> 占位）
-  assert.ok(!cli.cliText.includes('<baseUrl>'), 'cliText 不应残留 baseUrl 占位符');
+  assert.strictEqual(res.body.enabled, true);
+  assert.ok(typeof res.body.baseUrl === 'string' && res.body.baseUrl.length > 0, 'baseUrl 应为非空');
+  assert.ok(typeof res.body.guideHtml === 'string' && res.body.guideHtml.length > 0, 'guideHtml 应为非空 HTML');
+  assert.ok(res.body.guideHtml.includes('jpage'), 'guideHtml 应含 jpage 说明');
+  assert.ok(typeof res.body.guideText === 'string' && res.body.guideText.length > 0, 'guideText 应为非空文档');
+  // guideText 里 baseUrl 应已被替换为实际服务地址（不含 <baseUrl> 占位）
+  assert.ok(!res.body.guideText.includes('<baseUrl>'), 'guideText 不应残留 baseUrl 占位符');
+});
+
+test('未登录 GET /api/cli/guide → 401', async () => {
+  const res = await request(env.app).get('/api/cli/guide');
+  assert.strictEqual(res.status, 401);
 });

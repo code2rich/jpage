@@ -209,6 +209,11 @@ function renderHome(container) {
       settingsBtn.setAttribute('aria-expanded', 'false');
       openMcpConfigModal();
     });
+    settingsDropdown.querySelector('#menu-item-cli').addEventListener('click', () => {
+      settingsDropdown.classList.remove('open');
+      settingsBtn.setAttribute('aria-expanded', 'false');
+      openCliConfigModal();
+    });
     settingsDropdown.querySelector('#menu-item-tokens')?.addEventListener('click', () => {
       settingsDropdown.classList.remove('open');
       settingsBtn.setAttribute('aria-expanded', 'false');
@@ -1157,8 +1162,8 @@ function openMcpConfigModal() {
           <code class="mcp-value">${data.tokens.map(t => esc(t.token_prefix) + '…').join(', ')}</code>
         </div>` : ''}
       `;
-      // 多客户端 Tab：共用同一份标准 JSON，差异仅在目标文件路径/说明文字
-      // CLI tab 是特殊项：kind==='cli' 时渲染富文本文档（cliHtml）而非 JSON
+      // 多 MCP 客户端 Tab：共用同一份标准 JSON，差异仅在目标文件路径/说明文字。
+      // CLI 不在此弹窗内——它走独立的「CLI 工具」菜单 + /api/cli/guide。
       const configs = (data.configs && data.configs.length > 0)
         ? data.configs
         : [{ id: 'generic', label: '通用', path: '', config: data.config }];
@@ -1177,31 +1182,16 @@ function openMcpConfigModal() {
           <button type="button" class="btn btn-small mcp-copy-btn" id="mcp-copy-config">复制</button>
           <pre class="mcp-config-code"><code>${escapeHtml(activeConfigJson)}</code></pre>
         </div>
-        <div class="mcp-cli-doc" hidden></div>
       `;
-      const codeBlockEl = detailEl.querySelector('.mcp-config-block');
       const codeEl = detailEl.querySelector('.mcp-config-code code');
       const pathEl = detailEl.querySelector('.mcp-config-path code');
-      const cliDocEl = detailEl.querySelector('.mcp-cli-doc');
       const setConfig = (idx) => {
         const c = configs[idx];
         if (!c) return;
-        if (c.kind === 'cli') {
-          // CLI tab：显示富文本文档，隐藏 JSON 块
-          cliDocEl.innerHTML = c.cliHtml || '';
-          cliDocEl.hidden = false;
-          codeBlockEl.hidden = true;
-          // 复制按钮复制文档纯文本
-          activeConfigJson = c.cliText || '';
-          pathEl.textContent = c.path || '';
-        } else {
-          // MCP 客户端 tab：显示 JSON，隐藏文档
-          cliDocEl.hidden = true;
-          codeBlockEl.hidden = false;
-          activeConfigJson = JSON.stringify(c.config, null, 2);
-          codeEl.textContent = activeConfigJson;
-          pathEl.textContent = c.path || '';
-        }
+        // MCP 客户端 tab：显示 JSON
+        activeConfigJson = JSON.stringify(c.config, null, 2);
+        codeEl.textContent = activeConfigJson;
+        pathEl.textContent = c.path || '';
         detailEl.querySelectorAll('.mcp-tab').forEach((t, i) => {
           t.classList.toggle('active', i === idx);
         });
@@ -1246,6 +1236,54 @@ function openMcpConfigModal() {
 
 function closeMcpConfigModal() {
   const modal = document.getElementById('mcp-config-modal');
+  if (!modal) return;
+  modal.hidden = true;
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+// ---------- CLI Config Modal ----------
+// CLI 与 MCP 是并列的两个客户端入口，各自独立弹窗。这里只渲染 CLI 用法文档。
+function openCliConfigModal() {
+  const modal = document.getElementById('cli-config-modal');
+  if (!modal) return;
+
+  if (!modal.dataset.bound) {
+    modal.dataset.bound = '1';
+    modal.querySelector('#cli-config-close').addEventListener('click', closeCliConfigModal);
+    modal.querySelector('#cli-config-dismiss').addEventListener('click', closeCliConfigModal);
+    modal.addEventListener('click', e => { if (e.target === modal) closeCliConfigModal(); });
+  }
+
+  const detailEl = document.getElementById('cli-detail');
+  detailEl.textContent = '加载中…';
+
+  api('/api/cli/guide').then(data => {
+    // 渲染富文本用法文档；缓存纯文本供「复制文档」按钮使用
+    detailEl.innerHTML = data.guideHtml || '<p>（无文档）</p>';
+    const copyBtn = document.getElementById('cli-copy-guide');
+    if (copyBtn) {
+      copyBtn.onclick = async () => {
+        const ok = await copyToClipboard(data.guideText || '');
+        if (ok) {
+          toast('已复制到剪贴板');
+          copyBtn.textContent = '已复制';
+          setTimeout(() => { copyBtn.textContent = '复制文档'; }, 2000);
+        } else {
+          toast('复制失败', 'error');
+        }
+      };
+    }
+    modal.hidden = false;
+    modal.setAttribute('aria-hidden', 'false');
+  }).catch(e => {
+    detailEl.innerHTML = `<p style="color:var(--danger)">加载失败: ${escapeHtml(e.message)}</p>`;
+    modal.hidden = false;
+    modal.setAttribute('aria-hidden', 'false');
+  });
+}
+
+function closeCliConfigModal() {
+  const modal = document.getElementById('cli-config-modal');
   if (!modal) return;
   modal.hidden = true;
   modal.setAttribute('aria-hidden', 'true');

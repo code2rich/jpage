@@ -1,5 +1,6 @@
-// Skills 与 MCP 配置路由。从 server.js 提取，行为保持不变。
-// 挂载点：/api（内部路径 /skills、/skills/:name、/skills/:name/download、/mcp/config）
+// Skills、MCP 配置、CLI 指南路由。从 server.js 提取，行为保持不变。
+// 挂载点：/api（内部路径 /skills、/skills/:name、/skills/:name/download、/mcp/config、/cli/guide）
+// 设计：CLI 与 MCP 是并列的两个客户端入口（REST / MCP），各有独立端点与 UI 入口，不互相嵌套。
 
 const express = require('express');
 const { dbAll } = require('../lib/db');
@@ -112,25 +113,15 @@ router.get('/mcp/config', requireAuth, async (req, res) => {
 
   const globalToken = process.env.MCP_TOKEN && req.userRole === 'admin' ? process.env.MCP_TOKEN : null;
 
-  // 所有客户端共用同一配置对象；差异仅在目标文件路径/说明文字
+  // 所有 MCP 客户端共用同一配置对象；差异仅在目标文件路径/说明文字。
+  // CLI 不属于 MCP 客户端（它是 REST 命令行入口），走独立的 /api/cli/guide 端点，不混在此处。
   const config = buildServerConfig(url, globalToken);
-  // CLI 的 base = mcp url 去掉 /mcp 后缀（即服务根地址）
-  const baseUrl = url.replace(/\/mcp$/, '');
-  const cliGuideMd = buildCliGuide(baseUrl);
   const configs = [
     { id: 'claude-code',    label: 'Claude Code',    path: '.mcp.json（项目根）或 ~/.claude.json', config },
     { id: 'claude-desktop', label: 'Claude Desktop', path: 'claude_desktop_config.json',           config },
     { id: 'cursor',         label: 'Cursor',         path: '~/.cursor/mcp.json',                   config },
     { id: 'zcode',          label: 'ZCode',          path: 'ZCode 设置 → MCP 服务器',              config },
-    { id: 'generic',        label: '通用/标准 JSON', path: '任意支持 mcpServers 的客户端',         config },
-    {
-      id: 'cli',
-      label: 'CLI',
-      kind: 'cli',
-      path: 'npm i -g @code2rich/jpage',
-      cliHtml: marked.parse(cliGuideMd, { gfm: true, breaks: false, async: false }),
-      cliText: cliGuideMd
-    }
+    { id: 'generic',        label: '通用/标准 JSON', path: '任意支持 mcpServers 的客户端',         config }
   ];
 
   res.json({
@@ -140,6 +131,21 @@ router.get('/mcp/config', requireAuth, async (req, res) => {
     tokens,
     config,
     configs
+  });
+});
+
+// CLI 用法指南。CLI 与 MCP 是并列的两个客户端入口（都架在同一套 REST API 上），
+// 故独立成端点，供「CLI 工具」菜单/弹窗取用，不挂在 MCP 配置之下。
+router.get('/cli/guide', requireAuth, (req, res) => {
+  const host = req.headers.host || `localhost:${process.env.PORT || 8858}`;
+  const protocol = req.protocol || 'http';
+  const baseUrl = `${protocol}://${host}`;
+  const guideText = buildCliGuide(baseUrl);
+  res.json({
+    enabled: true,
+    baseUrl,
+    guideText,
+    guideHtml: marked.parse(guideText, { gfm: true, breaks: false, async: false })
   });
 });
 

@@ -133,7 +133,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `GET /api/skills` — 列出已安装的 skill 包（需登录）
 - `GET /api/skills/:name` — skill 详情（含 SKILL.md 内容、文件列表、INSTALL.md 渲染）
 - `GET /api/skills/:name/download` — ZIP 下载整个 skill 目录
-- `GET /api/mcp/config` — 返回 MCP 连接配置（URL、Token 列表、JSON 配置片段）
+- `GET /api/mcp/config` — 返回 MCP 连接配置（URL、Token 列表、多客户端 mcpServers JSON 片段；仅 MCP 客户端）
+- `GET /api/cli/guide` — 返回 `jpage` CLI 用法指南（baseUrl、渲染后的 guideHtml、纯文本 guideText）；CLI 与 MCP 是并列的两个客户端入口，各自独立端点
 
 **Skills registry** — `skills-registry.js` 自动发现 `skills/*/SKILL.md`，解析 YAML frontmatter（`name`, `description`, `version`, `author`）。Web UI 首页展示 Skills 区块，管理员可查看详情（弹窗）和下载 ZIP。ZIP 包与磁盘目录结构一致，可直接解压到 `~/.claude/skills/`。
 
