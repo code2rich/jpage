@@ -2,6 +2,8 @@
 
 > Drop a file, get a page — instantly.
 
+[![CI](https://github.com/code2rich/jpage/actions/workflows/ci.yml/badge.svg)](https://github.com/code2rich/jpage/actions/workflows/ci.yml)
+
 **[>>> View Product Introduction <<<](https://jpage.cn/)**
 
 **jpage** is a zero-config HTML / Markdown instant preview and sharing tool. Drop in a document and instantly get a clean online page — no deployment pipeline, no server knowledge required. Especially great for one-click sharing of AI-generated content.
@@ -50,11 +52,13 @@
 
 ## Tech Stack
 
-- **Backend**: Node.js + Express + express-session (SQLite session store)
+- **Backend**: Node.js + Express + express-session (SQLite session store), domain-split Router architecture (routes/ + lib/ shared layer)
 - **Database**: SQLite3 (zero-config, auto-migration)
 - **Frontend**: Vanilla JavaScript (no framework dependencies)
 - **Rendering**: marked.js + highlight.js + KaTeX + Mermaid
+- **Security**: helmet + layered CSP (strict policy for admin UI, iframe sandbox isolation + content-tiered CSP for render pages)
 - **Protocol**: MCP Streamable HTTP (@modelcontextprotocol/sdk)
+- **Testing**: node:test + supertest (unit + integration), GitHub Actions CI
 - **Container**: Docker / Docker Compose
 
 ## Quick Start
@@ -83,9 +87,27 @@ Development mode (hot reload):
 npm run dev
 ```
 
+### Development & Testing
+
+```bash
+npm test            # Unit + integration tests (node:test + supertest)
+npm run test:unit   # Unit tests only
+npm run build       # Build frontend bundle (esbuild → public/dist)
+```
+
+End-to-end / benchmarks (start the server first with `npm start`):
+
+```bash
+node test/perf-harness.js 8858   # Core e2e (login/upload/render/short-link/tags)
+node test/mcp-harness.js 8858    # MCP endpoint
+node test/perf-bench.js 8858     # Render/list/cache latency benchmarks
+```
+
 ## Auth & Security
 
 jpage supports a multi-user system. Admin manages all users and files; regular users can only access their own files and public files. Share links (`/api/files/:id/render`, `/s/:key`, download, source) are anonymously accessible when the file is marked public. Uncheck "Public access" on upload to make the file visible only to the owner and admin.
+
+**Content Security (CSP)**: Hardened via helmet + layered policies — the admin UI gets a strict CSP (same-origin scripts only); user-content render pages are isolated by iframe sandbox (without `allow-same-origin`, blocking access to the parent window). Markdown pages use a strict CSP (inline mermaid init script whitelisted via nonce), while HTML pages use a relaxed CSP + sandbox fallback (user HTML often contains legitimate scripts).
 
 ### Authentication Methods
 
@@ -104,7 +126,7 @@ API and MCP endpoints support three authentication methods:
 | `SESSION_SECRET` | Prod | Encrypts session cookies; in dev mode a temporary key is auto-generated (lost on restart) |
 | `NODE_ENV` | No | When `production`, cookies are sent only over HTTPS; missing SESSION_SECRET will refuse to start |
 | `PORT` | No | Default `8858` |
-| `MCP_TOKEN` | No | Bearer token for the `/mcp` endpoint; MCP endpoint is not mounted if unset |
+| `MCP_TOKEN` | No | Global Bearer token for the `/mcp` endpoint (backward compatible); when unset, `/mcp` is still accessible via a user-level API token (`jp_` prefix) |
 | `ALLOW_REGISTRATION` | No | Set to `true` to enable self-service registration; defaults to off (admin-only user creation) |
 | `SMTP_HOST` | No | SMTP server address (e.g. `smtp.qq.com`); enables email verification when configured |
 | `SMTP_PORT` | No | SMTP port (e.g. `465`) |
@@ -144,13 +166,41 @@ sqlite3 data/database.sqlite "UPDATE users SET password_hash='<hash-from-above>'
 
 ```
 jpage/
-├── server.js           # Express server (REST API + auth + Markdown rendering)
+├── server.js           # Entry: app assembly + middleware + startup orchestration (logic split out)
+├── routes/             # Domain-split Express Routers
+│   ├── auth.js         # Login/register/email verification
+│   ├── users.js        # User management (admin)
+│   ├── tokens.js       # API tokens
+│   ├── files.js        # File CRUD/upload/render/versions/tags/star/stats
+│   ├── tags.js         # Tags
+│   ├── categories.js   # Categories + template metadata
+│   ├── content-templates.js  # Content template marketplace
+│   ├── admin.js        # Backup export/import/stats
+│   └── skills.js       # Skills + MCP config
+├── lib/                # Shared layer (reused by routes)
+│   ├── db.js           # SQLite access (dbRun/dbGet/dbAll + PRAGMA)
+│   ├── paths.js        # Data/upload dir constants
+│   ├── util.js         # now/shareKey/clientIp/decodeFilename pure helpers
+│   ├── csp.js          # Layered CSP policies + nonce
+│   ├── auth-state.js   # Shared adminUserId state
+│   ├── templates.js    # Template system + marked/hljs/KaTeX pipeline
+│   ├── render.js       # File → HTML rendering (with CSP headers)
+│   ├── render-cache.js # Render result LRU cache
+│   ├── fts.js          # FTS5 full-text index
+│   ├── categories.js   # Category name in-memory cache
+│   ├── view-counts.js  # Buffered view-count batched flush
+│   ├── zip.js          # ZIP upload (security validation/extraction/classification)
+│   ├── dispatch.js     # MCP in-process request dispatch (bypass TCP self-call)
+│   └── middleware/     # Auth + file-loading middleware
 ├── logger.js           # Structured JSON Lines logger
+├── mailer.js           # SMTP mail (verification codes/links)
 ├── mcp-server.js       # MCP Streamable HTTP endpoint (/mcp)
 ├── migrations.js       # Database migration runner
-├── migrations/         # Sequential schema migration files
+├── migrations/         # Sequential schema migrations (001-012)
 ├── skills-registry.js  # Scans skills/ dir, provides skill list/details/zip packaging
+├── templates/          # Markdown render style templates (default/github/academic/dark-pro)
 ├── package.json
+├── build.js            # esbuild bundles frontend → public/dist
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .env.example        # Environment variable template
@@ -161,14 +211,13 @@ jpage/
 ├── skills/
 │   └── jpage-upload/   # Claude Code / Desktop skill
 │       └── SKILL.md
+├── test/               # Unit + integration tests (node:test + supertest) + e2e harness
 ├── data/               # SQLite databases, uploaded files & sessions (auto-created)
-│   ├── database.sqlite
-│   ├── sessions.sqlite
-│   └── uploads/
 └── public/             # Frontend static assets
     ├── index.html
     ├── css/style.css
-    └── js/app.js
+    ├── js/             # Page-split ES modules
+    └── dist/           # Build output (npm run build, git-ignored)
 ```
 
 ## REST API
@@ -343,7 +392,7 @@ npx -y @modelcontextprotocol/inspector http://localhost:8858/mcp
 
 Existing solutions are either too heavy (requiring server setup, domains, CI) or too closed (locked to specific platforms).
 
-jpage does one thing: make static content sharing simple again. Drop a file, get a link. No account system complexity, no learning curve — just open and use.
+jpage does one thing: make static content sharing simple again. Drop a file, get a link. An optional multi-user system exists, but the default is zero-friction — drop a file to get a link, share public files anonymously without registering.
 
 ## License
 

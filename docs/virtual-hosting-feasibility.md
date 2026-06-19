@@ -1,6 +1,8 @@
 # 即页虚拟主机（Virtual Hosting）方案可行性分析
 
-> 分析日期：基于即页当前代码库（server.js v1.0.0，Node.js + Express + SQLite3）
+> ⚠️ **本文为设计/分析提案，尚未实现。** 所有代码片段、migration、表名均为示例。下文 migration 编号 `013` 接续当前最大值（`012_add_email_and_verification.js`）；原始草案写的 `008` 已被 `008_add_fts5.js` 占用，落地时按实际序号续号。
+>
+> 分析日期：基于即页当前代码库（Node.js + Express + SQLite3，端口 8858）。
 
 ---
 
@@ -12,7 +14,7 @@
 | **部署方式** | Docker 单容器，端口 8858 |
 | **当前访问** | 内网 `36.138.227.105:8858` |
 | **路由结构** | `/s/:key` 通过 `share_key` 查 `files` 表渲染 |
-| **数据库** | SQLite 单文件，`files` / `users` / `tokens` / `tags` / `categories` |
+| **数据库** | SQLite 单文件，含 `files` / `users` / `tokens` / `tags` / `categories` / `file_versions` / `templates` / `content_templates` 等多表 |
 | **多租户** | ❌ 无，当前是单实例单用户群 |
 | **自定义域名** | ❌ 无支持 |
 | **SSL** | ❌ 当前内网 HTTP，无证书管理 |
@@ -70,7 +72,7 @@ app.use(async (req, res, next) => {
 只需新增一张表（migration 即可）：
 
 ```javascript
-// migrations/008_add_custom_domains.js
+// migrations/013_add_custom_domains.js
 module.exports = {
   name: 'add_custom_domains',
   async up(db, { dbRun }) {
@@ -167,7 +169,7 @@ module.exports = {
 ### 5.1 新增 Migration
 
 ```javascript
-// migrations/008_add_custom_domains.js
+// migrations/013_add_custom_domains.js
 module.exports = {
   name: 'add_custom_domains',
   async up(db, { dbRun }) {

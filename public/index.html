@@ -160,7 +160,7 @@
 
   <!-- 模板预览弹窗 -->
   <div class="modal-backdrop" id="template-preview-modal" hidden>
-    <div class="modal-panel modal-panel-lg" onclick="event.stopPropagation()">
+    <div class="modal-panel modal-panel-lg">
       <button class="btn btn-small modal-close" id="template-preview-close" aria-label="关闭">×</button>
       <div class="template-preview-header">
         <h3 id="template-preview-title"></h3>
@@ -456,7 +456,7 @@ MCP 配置
 <div class="spinner"></div>
 <span>加载中…</span>
 </div>
-<iframe id="preview-iframe" sandbox="allow-scripts allow-same-origin"></iframe>
+<iframe id="preview-iframe" sandbox="allow-scripts"></iframe>
 <div id="source-wrap" class="source-wrap">
 <aside id="bundle-tree" class="bundle-tree" hidden aria-label="网站包文件">
 <div class="bundle-tree-header">
@@ -821,7 +821,7 @@ MCP 配置
 </div>
 <div class="modal-body">
 <div class="ct-detail-meta" id="ct-detail-meta"></div>
-<div class="ct-detail-preview"><iframe id="ct-detail-iframe" sandbox="allow-scripts allow-same-origin" style="width:100%;min-height:400px;border:1px solid var(--border);border-radius:8px"></iframe></div>
+<div class="ct-detail-preview"><iframe id="ct-detail-iframe" sandbox="allow-scripts" style="width:100%;min-height:400px;border:1px solid var(--border);border-radius:8px"></iframe></div>
 </div>
 <div class="modal-footer">
 <button type="button" class="btn btn-small" id="ct-detail-copy">复制内容</button>
