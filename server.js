@@ -105,7 +105,9 @@ app.use(session({
   cookie: {
     httpOnly: true,
     sameSite: 'lax',
-    secure: false,
+    // HTTPS 部署应开启 secure，避免会话 cookie 被中间人嗅探。
+    // 显式通过 COOKIE_SECURE=true 开启；未设时保持 false 以兼容 HTTP 部署。
+    secure: process.env.COOKIE_SECURE === 'true',
     maxAge: 7 * 24 * 60 * 60 * 1000
   }
 }));
