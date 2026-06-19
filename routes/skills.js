@@ -82,6 +82,7 @@ CLI 需要一个 token（\`jp_\` 用户 token 或全局 \`MCP_TOKEN\`）。优�
 | \`tags <id> [add|set|clear] [名,名,...]\` | 标签（追加/替换/清空） |
 | \`skills ls | get <名> | download <名>\` | Skill 包 |
 | \`whoami\` | 校验 token 是否有效 |
+| \`update [--check] [--registry <url>]\` | 自更新到最新版（**不需 token**） |
 
 ## 示例
 
@@ -93,7 +94,19 @@ jpage tags 8 add Q3,财报
 jpage url 8
 \`\`\`
 
-> 首次使用需先设 token：\`export JPAGE_TOKEN=<YOUR_TOKEN>\`，或在命令后加 \`--token <YOUR_TOKEN>\`。
+### 更新到最新版
+
+\`update\` 是纯本地操作（npm 自更新），不调后端 API、不需 token：
+
+\`\`\`bash
+jpage update                  # 自更新到最新版
+jpage update --check          # 只查有没有新版本，不安装
+jpage update --registry https://registry.npmmirror.com   # 指定 npm 源（如国内镜像）
+\`\`\`
+
+> 更新后需重新运行 \`jpage\` 才生效。
+
+> 首次使用需先设 token（\`update\` 除外）：\`export JPAGE_TOKEN=<YOUR_TOKEN>\`，或在命令后加 \`--token <YOUR_TOKEN>\`。
 >
 > 完整说明：\`jpage --help\`
 `;
