@@ -3,6 +3,15 @@
   "version": "1.5.0",
   "description": "即页 — 零配置 HTML/Markdown 即时预览与分享工具",
   "main": "server.js",
+  "bin": {
+    "jpage": "bin/jpage.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",

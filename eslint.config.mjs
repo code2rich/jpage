@@ -36,6 +36,13 @@ const nodeGlobals = {
   AbortSignal: 'readonly',
   // fetch（Node 18+ 内置）
   fetch: 'readonly',
+  // fetch multipart / 二进制相关（Node 18+ 全局，与浏览器同名）
+  FormData: 'readonly',
+  Blob: 'readonly',
+  File: 'readonly',
+  Headers: 'readonly',
+  Response: 'readonly',
+  Request: 'readonly',
   // 错误构造器（非 ECMA 内置）
   DOMException: 'readonly',
 };

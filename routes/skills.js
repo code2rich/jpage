@@ -28,6 +28,76 @@ router.get('/skills/:name', requireAuth, async (req, res) => {
   res.json(skill);
 });
 
+// 生成标准 mcpServers 配置块（所有客户端共用同一格式，仅目标文件/说明不同）
+function buildServerConfig(url, token) {
+  return {
+    mcpServers: {
+      jpage: {
+        type: 'http',
+        url,
+        headers: { Authorization: `Bearer ${token || '<YOUR_TOKEN>'}` }
+      }
+    }
+  };
+}
+
+// 生成 CLI 用法文档 Markdown。
+// baseUrl 预填进示例（从 /mcp URL 去掉 /mcp 后缀得到），方便用户复制即用。
+// token 用占位符 <YOUR_TOKEN>，不泄露真实 token。
+function buildCliGuide(baseUrl) {
+  return `# jpage CLI
+
+\`jpage\` 是即页的命令行工具，通过 REST API 上传/列出/管理文件。与 MCP 是**对称的两个入口**：
+
+- **有 Bash 的场景**（Claude Code/ZCode 等 agent、脚本、CI、人工操作）→ 用 **CLI**：multipart 二进制流式上传，大文件/ZIP 不进 token 流，快且省
+- **纯 MCP 客户端**（Claude Desktop 等无 Bash）→ 用 **MCP**
+
+## 安装
+
+\`\`\`bash
+npm install -g @code2rich/jpage
+jpage --help
+\`\`\`
+
+## 配置 token
+
+CLI 需要一个 token（\`jp_\` 用户 token 或全局 \`MCP_TOKEN\`）。优先级：
+
+\`--token\` > \`JPAGE_TOKEN\` 环境变量 > \`.env\` 里的 \`MCP_TOKEN\`
+
+在本系统的 **API 令牌** 页创建或复制你的 token。服务地址默认 \`${baseUrl}\`，可用 \`--base\` 覆盖。
+
+## 命令
+
+| 命令 | 说明 |
+|---|---|
+| \`upload <路径> [--public] [--overwrite ID]\` | 上传（ZIP 自动判 bundle/batch） |
+| \`ls [--page --limit --kw --cat --tag]\` | 列出文件 |
+| \`cat <id>\` | 输出文件内容 |
+| \`url <id>\` | 打印 /s/:key 预览链接 |
+| \`mv <id> <新名> [--public|--private]\` | 改名 / 公开性 |
+| \`rm <id> [--yes]\` | 删除 |
+| \`star <id>\` / \`unstar <id>\` | 收藏 / 取消收藏 |
+| \`tags <id> [add|set|clear] [名,名,...]\` | 标签（追加/替换/清空） |
+| \`skills ls | get <名> | download <名>\` | Skill 包 |
+| \`whoami\` | 校验 token 是否有效 |
+
+## 示例
+
+\`\`\`bash
+jpage upload ./report.html --public --base ${baseUrl}
+jpage ls --kw 季度
+jpage cat 8
+jpage tags 8 add Q3,财报
+jpage url 8
+\`\`\`
+
+> 首次使用需先设 token：\`export JPAGE_TOKEN=<YOUR_TOKEN>\`，或在命令后加 \`--token <YOUR_TOKEN>\`。
+>
+> 完整说明：\`jpage --help\`
+`;
+}
+
 router.get('/mcp/config', requireAuth, async (req, res) => {
   const enabled = !!process.env.MCP_TOKEN || true; // 现在总是可以用用户级 Token
   const host = req.headers.host || `localhost:${process.env.PORT || 8858}`;
@@ -42,20 +112,34 @@ router.get('/mcp/config', requireAuth, async (req, res) => {
 
   const globalToken = process.env.MCP_TOKEN && req.userRole === 'admin' ? process.env.MCP_TOKEN : null;
 
+  // 所有客户端共用同一配置对象；差异仅在目标文件路径/说明文字
+  const config = buildServerConfig(url, globalToken);
+  // CLI 的 base = mcp url 去掉 /mcp 后缀（即服务根地址）
+  const baseUrl = url.replace(/\/mcp$/, '');
+  const cliGuideMd = buildCliGuide(baseUrl);
+  const configs = [
+    { id: 'claude-code',    label: 'Claude Code',    path: '.mcp.json（项目根）或 ~/.claude.json', config },
+    { id: 'claude-desktop', label: 'Claude Desktop', path: 'claude_desktop_config.json',           config },
+    { id: 'cursor',         label: 'Cursor',         path: '~/.cursor/mcp.json',                   config },
+    { id: 'zcode',          label: 'ZCode',          path: 'ZCode 设置 → MCP 服务器',              config },
+    { id: 'generic',        label: '通用/标准 JSON', path: '任意支持 mcpServers 的客户端',         config },
+    {
+      id: 'cli',
+      label: 'CLI',
+      kind: 'cli',
+      path: 'npm i -g @code2rich/jpage',
+      cliHtml: marked.parse(cliGuideMd, { gfm: true, breaks: false, async: false }),
+      cliText: cliGuideMd
+    }
+  ];
+
   res.json({
     enabled,
     globalToken,
     url,
     tokens,
-    config: {
-      mcpServers: {
-        jpage: {
-          type: 'http',
-          url,
-          headers: { Authorization: `Bearer ${globalToken || '<YOUR_TOKEN>'}` }
-        }
-      }
-    }
+    config,
+    configs
   });
 });
 
