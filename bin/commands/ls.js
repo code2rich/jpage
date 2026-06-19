@@ -1,9 +1,9 @@
 // ls 命令：列出文件。
 // 后端：GET /api/files（支持 page/limit/sort/order/keyword/category/tag）。
 
-const { formatSize, formatTime, out } = require('./_shared');
+const { formatSize, formatTime, shareUrl, out } = require('./_shared');
 
-async function run(client, args) {
+async function run(client, args, { base }) {
   const o = args.opts;
   const params = new URLSearchParams();
   if (o.page) params.set('page', o.page);
@@ -29,7 +29,8 @@ async function run(client, args) {
     const pub = f.is_public ? 'pub' : 'pri';
     const tags = (f.tags || []).map((t) => t.name).join(',');
     const bundle = f.is_bundle ? ' 📦' : '';
-    const short = f.share_key ? `  /s/${f.share_key}` : '';
+    const url = shareUrl(base, f);
+    const short = url ? `  ${url}` : '';
     out(
       `#${f.id}  [${f.file_type || '?'} ${pub}]  ${formatSize(f.size).padEnd(7)}  ` +
         `${formatTime(f.updated_at)}  ${f.original_name}${bundle}` +

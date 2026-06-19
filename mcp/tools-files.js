@@ -37,7 +37,11 @@ function registerFileTools(server, { api, port, mcpIp, protocol }) {
       if (tag) params.set('tag', tag);
       const qs = params.toString();
       const data = await api.get('/api/files' + (qs ? '?' + qs : ''));
-      return textResult({ files: data.files, pagination: data.pagination });
+      const files = (data.files || []).map((f) => ({
+        ...f,
+        url: f.share_key ? `${protocol}://${mcpIp}:${port}/s/${f.share_key}` : null,
+      }));
+      return textResult({ files, pagination: data.pagination });
     }
   );
 
