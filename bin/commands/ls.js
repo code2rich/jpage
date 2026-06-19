@@ -24,14 +24,16 @@ async function run(client, args) {
     return;
   }
 
-  // 对齐表格：id / 类型 / 公开 / 大小 / 更新时间 / 文件名 / 标签
+  // 对齐表格：id / 类型 / 公开 / 大小 / 更新时间 / 文件名 / 短链 / 标签
   for (const f of files) {
     const pub = f.is_public ? 'pub' : 'pri';
     const tags = (f.tags || []).map((t) => t.name).join(',');
     const bundle = f.is_bundle ? ' 📦' : '';
+    const short = f.share_key ? `  /s/${f.share_key}` : '';
     out(
       `#${f.id}  [${f.file_type || '?'} ${pub}]  ${formatSize(f.size).padEnd(7)}  ` +
         `${formatTime(f.updated_at)}  ${f.original_name}${bundle}` +
+        short +
         (tags ? `  {${tags}}` : '') +
         '\n'
     );
