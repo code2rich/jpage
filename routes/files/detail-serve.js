@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 const { dbAll, dbGet } = require('../../lib/db');
-const { requireAuth } = require('../../lib/middleware/auth');
+const { requireAuth, loadSession } = require('../../lib/middleware/auth');
 const { loadFileWithPrivacy } = require('../../lib/middleware/files');
 const { UPLOAD_DIR } = require('../../lib/paths');
 const { listBundleEntries, renderFile } = require('../../lib/render');
@@ -15,7 +15,7 @@ const logger = require('../../logger');
 
 function registerDetailServe(router) {
   // --- 详情 ---
-  router.get('/:id', loadFileWithPrivacy, async (req, res) => {
+  router.get('/:id', loadSession, loadFileWithPrivacy, async (req, res) => {
     try {
       const f = req.fileRecord;
       // 并行查询：tags / starred / category / version_count（WAL 下读不互斥）
@@ -113,7 +113,7 @@ function registerDetailServe(router) {
   });
 
   // --- 资源（bundle 内静态文件） ---
-  router.get('/:id/asset/*', loadFileWithPrivacy, async (req, res) => {
+  router.get('/:id/asset/*', loadSession, loadFileWithPrivacy, async (req, res) => {
     const file = req.fileRecord;
     if (!file.is_bundle) return res.status(400).json({ error: '非网站包' });
     const bundleDir = path.resolve(path.join(UPLOAD_DIR, file.stored_name));
@@ -136,12 +136,12 @@ function registerDetailServe(router) {
   });
 
   // --- 渲染 ---
-  router.get('/:id/render', loadFileWithPrivacy, async (req, res) => {
+  router.get('/:id/render', loadSession, loadFileWithPrivacy, async (req, res) => {
     await renderFile(res, req.fileRecord);
   });
 
   // --- 下载 ---
-  router.get('/:id/download', loadFileWithPrivacy, async (req, res) => {
+  router.get('/:id/download', loadSession, loadFileWithPrivacy, async (req, res) => {
     const file = req.fileRecord;
     if (file.is_bundle) {
       const bundleDir = path.join(UPLOAD_DIR, file.stored_name);
