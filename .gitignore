@@ -6,6 +6,12 @@ data/
 data-test-*/
 data-bench-tmp/
 
+# SQLite 文件兜底(data/ 已忽略,这里防止仓库根及其它路径误提交运行时数据库)
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
 # 前端构建产物（npm run build 生成）
 public/dist/
 
