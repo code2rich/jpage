@@ -26,7 +26,7 @@ async function main() {
   // 模拟 requireAuth：解析 Bearer token（模拟一次 DB 查询的延迟 ~真实场景）
   app.use((req, res, next) => {
     // 模拟鉴权开销（DB token 查询）：真实场景约 0.3-0.8ms，这里用同步 CPU 占用近似
-    const t = Date.now(); while (Date.now() - t < 0) {}
+    const t = Date.now(); while (Date.now() - t < 0) { /* busy-wait 占位 */ }
     next();
   });
   app.get('/api/files', (req, res) => {

@@ -17,7 +17,7 @@ function check(name, cond, detail) {
 function rawReq(method, path, { headers = {}, body } = {}) {
   return new Promise((resolve, reject) => {
     const opts = { host: HOST, port: PORT, method, path, headers: { ...headers } };
-    let payload = body !== undefined ? JSON.stringify(body) : null;
+    const payload = body !== undefined ? JSON.stringify(body) : null;
     if (payload) { opts.headers['Content-Type'] = 'application/json'; opts.headers['Content-Length'] = Buffer.byteLength(payload); }
     const r = http.request(opts, res => {
       const chunks = [];
