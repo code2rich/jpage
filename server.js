@@ -67,7 +67,9 @@ const app = express();
 app.set('trust proxy', 1);
 
 // helmet：关闭内置 CSP（由下方手写中间件 + render.js 分级下发），
-// 显式 frameguard=deny 与 CSP frame-ancestors 'none' 对齐，消除头冲突。
+// frameguard 默认 deny（全局 X-Frame-Options: DENY），但渲染端点需被同源 iframe 嵌入（文件列表卡片缩略图），
+// 故在下方 CSP 中间件里对渲染端点移除该头，改由 lib/render.js 显式下发 X-Frame-Options: SAMEORIGIN + CSP frame-ancestors 'self'，
+// 只允许同源嵌入、外站仍被拒。
 // crossOriginEmbedderPolicy 关闭：渲染端点会加载用户内容（可能含未带 CORP 的子资源）。
 app.use(helmet({
   contentSecurityPolicy: false,
@@ -77,9 +79,14 @@ app.use(helmet({
 
 // CSP 中间件：管理界面下发严格 APP_CSP；渲染端点（render/asset/短链）跳过，
 // 由 lib/render.js 的 renderFile 按内容类型分级下发 Markdown/HTML 策略。
+// 渲染端点还需被同源 iframe 嵌入（文件列表卡片缩略图），故移除 helmet 全局下发的
+// X-Frame-Options: DENY，改由 render.js 下发 SAMEORIGIN（仅同源可嵌入）。
 const { APP_CSP, isRenderPath } = require('./lib/csp');
 app.use((req, res, next) => {
-  if (isRenderPath(req.path)) return next();
+  if (isRenderPath(req.path)) {
+    res.removeHeader('X-Frame-Options'); // 由 render.js 按需下发 SAMEORIGIN
+    return next();
+  }
   res.setHeader('Content-Security-Policy', APP_CSP);
   next();
 });
