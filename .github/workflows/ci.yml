@@ -28,7 +28,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+          # 不启用 cache: 'npm'：setup-node 恢复缓存时 _cacache/tmp 残留与
+          # npm ci 冲突（EEXIST errno -17），Node 20 矩阵稳定复现。
+          # npm ci 本身够快（~10s），缓存收益不值得这个 bug。
 
       - name: Install dependencies
         run: npm ci

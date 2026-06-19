@@ -38,8 +38,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          # 发布用 npm 公开 registry，无需自定义 scope registry
+          # 不启用 cache: 'npm'：见 ci.yml 同款注释（EEXIST bug）
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
