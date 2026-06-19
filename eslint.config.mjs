@@ -99,6 +99,8 @@ export default [
       'data-bench-tmp/',
       'public/dist/',
       'article/',
+      // Skill 内的第三方资源（如 reveal.js 引擎/插件），不该 lint
+      'skills/*/assets/',
     ],
   },
 
