@@ -2282,6 +2282,120 @@ html:not(.light) {
   z-index: 1;
 }
 
+.mcp-config-path {
+  min-height: 18px;
+}
+
+.mcp-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin: 0 0 12px;
+}
+
+.mcp-tab {
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  background: none;
+  color: var(--text-secondary);
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color .2s, border-color .2s;
+  margin-bottom: -1px;
+}
+
+.mcp-tab:hover {
+  color: var(--text);
+}
+
+.mcp-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  font-weight: 600;
+}
+
+/* CLI tab：渲染后的 Markdown 文档（标题/段落/列表/代码块/表格） */
+.mcp-cli-doc {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.mcp-cli-doc h1 {
+  font-size: 18px;
+  margin: 0 0 12px;
+}
+.mcp-cli-doc h2 {
+  font-size: 14px;
+  margin: 18px 0 8px;
+  color: var(--text);
+}
+.mcp-cli-doc p {
+  margin: 0 0 10px;
+}
+.mcp-cli-doc ul,
+.mcp-cli-doc ol {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+.mcp-cli-doc li {
+  margin-bottom: 4px;
+}
+.mcp-cli-doc blockquote {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--primary);
+  background: var(--bg);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--text-secondary);
+}
+.mcp-cli-doc blockquote p {
+  margin: 0;
+}
+.mcp-cli-doc code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  background: var(--bg);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+/* 代码块（非行内）复用 .mcp-config-code 的样式，保持视觉一致 */
+.mcp-cli-doc pre {
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0 0 10px;
+  overflow-x: auto;
+}
+.mcp-cli-doc pre code {
+  background: none;
+  padding: 0;
+}
+.mcp-cli-doc table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 12px;
+  font-size: 12px;
+}
+.mcp-cli-doc th,
+.mcp-cli-doc td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.mcp-cli-doc th {
+  background: var(--bg);
+  font-weight: 600;
+}
+
 html:not(.light) {
   .mcp-status-on {
     background: rgba(22, 163, 74, 0.15);

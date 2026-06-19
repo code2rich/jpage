@@ -5,6 +5,7 @@
 // categories/resources/content-templates）。顺序对 MCP 协议无影响，仅为对照方便。
 
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+const pkgVersion = require('../package.json').version;
 const { registerFileTools } = require('./tools-files');
 const { registerVersionTools } = require('./tools-versions');
 const { registerTagTools } = require('./tools-tags');
@@ -23,7 +24,7 @@ const { registerResources } = require('./resources');
  */
 function createMcpServer({ port, api, mcpIp, protocol }) {
   const server = new McpServer(
-    { name: 'jpage', version: '1.0.0' },
+    { name: 'jpage', version: pkgVersion },
     { capabilities: {} }
   );
 

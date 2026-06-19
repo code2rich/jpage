@@ -84,3 +84,37 @@ test('GET /api/mcp/config → 200，含 config.mcpServers.jpage', async () => {
   // tokens 是当前用户的 token 列表
   assert.ok(Array.isArray(res.body.tokens));
 });
+
+test('GET /api/mcp/config → 200，含多客户端 configs 数组', async () => {
+  const res = await agent.get('/api/mcp/config');
+  assert.strictEqual(res.status, 200);
+  assert.ok(Array.isArray(res.body.configs));
+  // 6 项：5 个 MCP 客户端 + 1 个 CLI
+  assert.strictEqual(res.body.configs.length, 6);
+  const ids = res.body.configs.map(c => c.id);
+  for (const id of ['claude-code', 'claude-desktop', 'cursor', 'zcode', 'generic', 'cli']) {
+    assert.ok(ids.includes(id), `configs 应包含 ${id}`);
+  }
+  // 每项含 label / path
+  res.body.configs.forEach(c => {
+    assert.ok(c.label, `${c.id} 应有 label`);
+    assert.ok('path' in c, `${c.id} 应有 path`);
+  });
+  // MCP 客户端项含 config.mcpServers.jpage（排除 CLI 项，CLI 走 kind=cli）
+  res.body.configs.filter(c => c.kind !== 'cli').forEach(c => {
+    assert.ok(c.config && c.config.mcpServers && c.config.mcpServers.jpage, `${c.id} config 应含 mcpServers.jpage`);
+  });
+});
+
+test('GET /api/mcp/config → CLI 项含 kind=cli + 渲染后的 cliHtml + cliText', async () => {
+  const res = await agent.get('/api/mcp/config');
+  assert.strictEqual(res.status, 200);
+  const cli = res.body.configs.find(c => c.id === 'cli');
+  assert.ok(cli, '应有 cli 配置项');
+  assert.strictEqual(cli.kind, 'cli');
+  assert.ok(typeof cli.cliHtml === 'string' && cli.cliHtml.length > 0, 'cliHtml 应为非空 HTML');
+  assert.ok(cli.cliHtml.includes('jpage'), 'cliHtml 应含 jpage 说明');
+  assert.ok(typeof cli.cliText === 'string' && cli.cliText.length > 0, 'cliText 应为非空文档');
+  // cliText 里 baseUrl 应已被替换为实际服务地址（不含 <baseUrl> 占位）
+  assert.ok(!cli.cliText.includes('<baseUrl>'), 'cliText 不应残留 baseUrl 占位符');
+});

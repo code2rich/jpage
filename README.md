@@ -105,6 +105,24 @@ node test/mcp-harness.js 8858    # MCP 端点
 node test/perf-bench.js 8858     # 渲染/列表/缓存延迟基准
 ```
 
+### CLI 工具（npm 包已发布）
+
+即页随包提供 `jpage` 命令行工具，可通过 REST API 上传 / 列出 / 管理文件，对大文件和 ZIP 走 multipart 二进制流式上传（比 MCP 的 base64 进 token 流更快更省）：
+
+```bash
+npm install -g @code2rich/jpage
+jpage upload ./report.html --public --token <你的 token>
+jpage ls --kw 季度
+jpage cat 8
+jpage --help
+```
+
+`jpage` 与 MCP 是对称的两个客户端入口，都架在同一套 REST API 之上。详见 `jpage --help`。
+
+### 发版
+
+维护者发版指南（含 GitHub Actions 自动发版配置、token 轮换、故障排查）见 [`docs/RELEASING.md`](docs/RELEASING.md)。
+
 ## 鉴权与安全
 
 即页支持多用户体系。admin 可管理全部用户和文件，普通用户只能操作自己的文件和公开文件。

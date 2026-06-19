@@ -1,0 +1,87 @@
+# npm 自动发版：打 v* tag 触发，跑测试 + 校验版本号一致 + npm publish。
+#
+# 用法（本地）：
+#   1. 改 package.json 的 version（如 1.5.1）
+#   2. commit + push 到 main
+#   3. git tag v1.5.1 && git push origin v1.5.1
+#   4. 本 workflow 自动跑：test → 校验 tag==version → npm publish
+#
+# 前置（仓库设置，一次性）：
+#   GitHub 仓库 Settings → Secrets and variables → Actions → New repository secret
+#   Name: NPM_TOKEN
+#   Value: 在 npm 生成的 granular access token（@code2rich scope, Read and write）
+#   生成地址：https://www.npmjs.com/settings/code2richnpm/tokens/granular-access-tokens/new
+#
+# 版本一致性：tag 名（去 v 前缀）必须等于 package.json 的 version，否则失败。
+# 这样能防止「tag 标 v1.6.0 但 package.json 还写着 1.5.0」这类手滑。
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# 同一 tag 不要并发跑（理论上 git push tag 是原子的，但保险起见）
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    # 同时跑测试矩阵确认绿（轻量：只 Node 20，CI workflow 已覆盖 20+22）
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # 不启用 cache: 'npm'：见 ci.yml 同款注释（EEXIST bug）
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests (unit + integration)
+        run: npm test
+
+      - name: Build frontend bundle
+        run: npm run build
+
+      - name: Verify tag matches package version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(node -p "require('./package.json').version")
+          echo "tag (去 v 前缀): $TAG"
+          echo "package.json version: $PKG"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::tag ($TAG) 与 package.json version ($PKG) 不一致"
+            exit 1
+          fi
+
+      - name: Publish to npm
+        run: npm publish
+        env:
+          # setup-node 配置的 registry 会读这个环境变量做鉴权
+          # publishConfig.access=public 已设，scoped 包公开发布无需 --access
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Release ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ 已发布 \`$(node -p "require('./package.json').name")@$(node -p "require('./package.json').version")\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "安装：\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "npm install -g $(node -p "require('./package.json').name")" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ 发布失败，查看上面日志" >> $GITHUB_STEP_SUMMARY
+          fi

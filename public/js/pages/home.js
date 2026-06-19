@@ -1006,20 +1006,64 @@ function openMcpConfigModal() {
           <code class="mcp-value">${data.tokens.map(t => esc(t.token_prefix) + '…').join(', ')}</code>
         </div>` : ''}
       `;
-      const configJson = JSON.stringify(data.config, null, 2);
+      // 多客户端 Tab：共用同一份标准 JSON，差异仅在目标文件路径/说明文字
+      // CLI tab 是特殊项：kind==='cli' 时渲染富文本文档（cliHtml）而非 JSON
+      const configs = (data.configs && data.configs.length > 0)
+        ? data.configs
+        : [{ id: 'generic', label: '通用', path: '', config: data.config }];
+      let activeConfigJson = JSON.stringify(configs[0].config, null, 2);
       detailEl.innerHTML = `
         <h3>客户端配置</h3>
-        <p class="mcp-config-hint">将以下配置合并到 Claude Code 的 <code>.mcp.json</code> 或 Claude Desktop 的配置文件中：</p>
-        <p class="mcp-config-hint">请根据实际部署环境调整 URL。</p>
+        <p class="mcp-config-hint">选择客户端，复制配置粘贴到对应文件中。请根据实际部署环境调整 URL。</p>
+        <div class="mcp-tabs" role="tablist">
+          ${configs.map((c, i) => `
+            <button type="button" class="mcp-tab${i === 0 ? ' active' : ''}" role="tab"
+                    data-idx="${i}" id="mcp-tab-${escapeHtml(c.id)}">${escapeHtml(c.label)}</button>
+          `).join('')}
+        </div>
+        <p class="mcp-config-hint mcp-config-path"><code></code></p>
         <div class="mcp-config-block">
           <button type="button" class="btn btn-small mcp-copy-btn" id="mcp-copy-config">复制</button>
-          <pre class="mcp-config-code"><code>${escapeHtml(configJson)}</code></pre>
+          <pre class="mcp-config-code"><code>${escapeHtml(activeConfigJson)}</code></pre>
         </div>
+        <div class="mcp-cli-doc" hidden></div>
       `;
+      const codeBlockEl = detailEl.querySelector('.mcp-config-block');
+      const codeEl = detailEl.querySelector('.mcp-config-code code');
+      const pathEl = detailEl.querySelector('.mcp-config-path code');
+      const cliDocEl = detailEl.querySelector('.mcp-cli-doc');
+      const setConfig = (idx) => {
+        const c = configs[idx];
+        if (!c) return;
+        if (c.kind === 'cli') {
+          // CLI tab：显示富文本文档，隐藏 JSON 块
+          cliDocEl.innerHTML = c.cliHtml || '';
+          cliDocEl.hidden = false;
+          codeBlockEl.hidden = true;
+          // 复制按钮复制文档纯文本
+          activeConfigJson = c.cliText || '';
+          pathEl.textContent = c.path || '';
+        } else {
+          // MCP 客户端 tab：显示 JSON，隐藏文档
+          cliDocEl.hidden = true;
+          codeBlockEl.hidden = false;
+          activeConfigJson = JSON.stringify(c.config, null, 2);
+          codeEl.textContent = activeConfigJson;
+          pathEl.textContent = c.path || '';
+        }
+        detailEl.querySelectorAll('.mcp-tab').forEach((t, i) => {
+          t.classList.toggle('active', i === idx);
+        });
+      };
+      setConfig(0);
+      detailEl.querySelectorAll('.mcp-tab').forEach((t, i) => {
+        t.addEventListener('click', () => setConfig(i));
+      });
       const copyBtn = document.getElementById('mcp-copy-config');
       if (copyBtn) {
         copyBtn.addEventListener('click', async () => {
-          const ok = await copyToClipboard(configJson);
+          // PR #9：navigator.clipboard 优先，不支持/失败时回退 execCommand（copyToClipboard）
+          const ok = await copyToClipboard(activeConfigJson);
           if (ok) {
             toast('已复制到剪贴板');
             copyBtn.textContent = '已复制';

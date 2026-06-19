@@ -52,7 +52,27 @@ description: 当用户要"上传到即页"、"生成预览链接"、"查看已�
 
 ## 本地已有文件（尤其 ZIP 或 >1MB）→ curl multipart，别用 upload_file
 
-有 Bash 能力（Claude Code）时，直接打 REST multipart 端点，二进制流式上传，base64 完全不进模型：
+有 Bash 能力（Claude Code）时，直接打 REST multipart 端点，二进制流式上传，base64 完全不进模型。两种等价方式，**优先用 `jpage` CLI**（封装好了 token/base 解析与输出格式），手动 `curl` 是底层兜底：
+
+### 方式一：`jpage` CLI（推荐，需先 `npm i -g @code2rich/jpage`）
+
+```bash
+# token 优先级：--token > JPAGE_TOKEN > MCP_TOKEN（环境变量或项目 .env 自动读取）
+# base 优先级：--base > JPAGE_BASE > 默认 http://localhost:8858
+jpage upload ./site.zip --public
+
+# 覆盖更新已有文件（按 id，自动版本备份）
+jpage upload ./x.html --overwrite 42
+
+# 其余常用：
+jpage ls --kw 季度 --limit 5     # 列出文件
+jpage cat 8                      # 输出文件内容
+jpage url 8                      # 打印 /s/:key
+jpage tags 8 add Q3,财报          # 追加标签
+jpage rm 8 --yes                 # 删除
+```
+
+### 方式二：curl multipart（底层兜底，无 CLI 时）
 
 ```bash
 # token 三选一：.env 里的 MCP_TOKEN / .mcp.json 里 Authorization 的 Bearer / 用户给的 jp_ 用户 token
@@ -72,14 +92,13 @@ curl -sS -X POST "$BASE/api/files/upload" \
 - 覆盖更新已有文件内容：multipart 打 `POST "$BASE/api/files/:id/overwrite"`（自动版本备份）
 - 纯 MCP 客户端（如 Claude Desktop 无 Bash）才退回 `upload_file`，且尽量别传大 ZIP
 
-## 模型现场生成的多文件站点 → Write 写盘 → zip → curl
+## 模型现场生成的多文件站点 → Write 写盘 → zip → 上传
 
-不要把每个资源 base64 塞进 `upload_file`。先用 Write 工具把文件写到磁盘、Bash 打包，再 curl：
+不要把每个资源 base64 塞进 `upload_file`。先用 Write 工具把文件写到磁盘、Bash 打包，再上传（CLI 或 curl 二选一）：
 
 ```bash
 zip -r site.zip index.html assets/
-curl -sS -X POST "$BASE/api/files/upload" -H "Authorization: Bearer $TOKEN" \
-  -F "file=@site.zip" -F "isPublic=true"
+jpage upload site.zip --public      # 或退回上一节的 curl multipart
 ```
 
 ## 模型刚生成的 HTML/MD（含大文件）→ 直接 upload_file
