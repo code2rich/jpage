@@ -9,7 +9,7 @@ const multer = require('multer');
 const rateLimit = require('express-rate-limit');
 const archiver = require('archiver');
 const { dbGet, dbRun, dbAll } = require('../lib/db');
-const { requireAuth } = require('../lib/middleware/auth');
+const { loadSession, requireAuth } = require('../lib/middleware/auth');
 const { loadFileWithPrivacy, checkFileOwnership } = require('../lib/middleware/files');
 const { now, unlinkQuiet, generateShareKey, currentUserId, clientIp, decodeFilename } = require('../lib/util');
 const { UPLOAD_DIR } = require('../lib/paths');
@@ -574,7 +574,7 @@ router.post('/batch', requireAuth, async (req, res) => {
 });
 
 // --- 详情 ---
-router.get('/:id', loadFileWithPrivacy, async (req, res) => {
+router.get('/:id', loadSession, loadFileWithPrivacy, async (req, res) => {
   try {
     const f = req.fileRecord;
     // 并行查询：tags / starred / category / version_count（WAL 下读不互斥）
@@ -674,7 +674,7 @@ router.get('/:id/content', requireAuth, loadFileWithPrivacy, async (req, res) =>
 });
 
 // --- 资源 / 渲染 / 下载 ---
-router.get('/:id/asset/*', loadFileWithPrivacy, async (req, res) => {
+router.get('/:id/asset/*', loadSession, loadFileWithPrivacy, async (req, res) => {
   const file = req.fileRecord;
   if (!file.is_bundle) return res.status(400).json({ error: '非网站包' });
   const bundleDir = path.resolve(path.join(UPLOAD_DIR, file.stored_name));
@@ -696,11 +696,11 @@ router.get('/:id/asset/*', loadFileWithPrivacy, async (req, res) => {
   });
 });
 
-router.get('/:id/render', loadFileWithPrivacy, async (req, res) => {
+router.get('/:id/render', loadSession, loadFileWithPrivacy, async (req, res) => {
   await renderFile(res, req.fileRecord);
 });
 
-router.get('/:id/download', loadFileWithPrivacy, async (req, res) => {
+router.get('/:id/download', loadSession, loadFileWithPrivacy, async (req, res) => {
   const file = req.fileRecord;
   if (file.is_bundle) {
     const bundleDir = path.join(UPLOAD_DIR, file.stored_name);
