@@ -14,6 +14,7 @@ services:
       - SESSION_SECRET=${SESSION_SECRET:-}
       - MCP_TOKEN=${MCP_TOKEN:-}
       - MCP_IP=${MCP_IP:-localhost}
+      - TOKEN_ENCRYPTION_KEY=${TOKEN_ENCRYPTION_KEY:-}
       - SMTP_HOST=${SMTP_HOST:-}
       - SMTP_PORT=${SMTP_PORT:-}
       - SMTP_SECURE=${SMTP_SECURE:-}
