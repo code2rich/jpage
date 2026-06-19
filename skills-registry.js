@@ -53,12 +53,6 @@ function parseFrontmatter(text) {
   return { meta, body: m[2] };
 }
 
-function dirSize(root) {
-  let total = 0;
-  for (const f of walkFiles(root)) total += f.size;
-  return total;
-}
-
 function readSkillMeta(skillName) {
   const skillRoot = path.join(SKILLS_DIR, skillName);
   if (!fs.existsSync(skillRoot) || !fs.statSync(skillRoot).isDirectory()) return null;

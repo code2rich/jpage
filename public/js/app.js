@@ -5,7 +5,6 @@
 
 import { api } from './api.js';
 import { dialogModal } from './components/dialog.js';
-import { toast } from './components/toast.js';
 import { initTheme, setupThemeToggle } from './theme.js';
 
 const state = {
@@ -79,7 +78,7 @@ function route() {
   } else if (hash === '/register') {
     loadLogin().then((renderLogin) => { renderLogin(appEl, 'register'); setupThemeToggle(appEl); });
   } else {
-    loadLanding().then((renderLanding) => { renderLanding(appEl, null); setupThemeToggle(appEl); });
+    loadLanding().then((renderLanding) => { renderLanding(appEl); setupThemeToggle(appEl); });
   }
 }
 

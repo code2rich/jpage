@@ -16,8 +16,62 @@ let allCategories = [];
 const selectedFileIds = new Set();
 let lastCheckedIndex = -1;
 let skillModalCurrent = null;
-const allTemplates = [];
 let searchResults = null;
+
+// ---------- 视图模式（列表 / 卡片） ----------
+const FILE_VIEW_KEY = 'jpage-file-view';
+let viewMode = (() => { try { return localStorage.getItem(FILE_VIEW_KEY) === 'card' ? 'card' : 'list'; } catch { return 'list'; } })();
+function setViewMode(mode) {
+  viewMode = mode;
+  try { localStorage.setItem(FILE_VIEW_KEY, mode); } catch {}
+}
+
+// 卡片缩略图懒加载管线（镜像 content-templates.js 的 thumbObserver：rootMargin 预加载 + 最多 3 并发 + Set 去重）
+let cardThumbObserver = null;
+const cardThumbLoaded = new Set();
+let cardThumbActive = 0;
+const CARD_THUMB_MAX = 3;
+const cardThumbQueue = [];
+function ensureCardThumbObserver() {
+  if (cardThumbObserver) return cardThumbObserver;
+  cardThumbObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const card = entry.target;
+      cardThumbObserver.unobserve(card);
+      enqueueCardThumb(card);
+    });
+  }, { rootMargin: '200px' });
+  return cardThumbObserver;
+}
+function enqueueCardThumb(card) {
+  if (cardThumbActive < CARD_THUMB_MAX) {
+    cardThumbActive++;
+    loadCardThumb(card).finally(() => {
+      cardThumbActive--;
+      if (cardThumbQueue.length) enqueueCardThumb(cardThumbQueue.shift());
+    });
+  } else {
+    cardThumbQueue.push(card);
+  }
+}
+// iframe.src 直接指向已有的 /api/files/:id/render —— HTML / Markdown / ZIP bundle 入口页均可渲染；
+// 同源 iframe 默认携带 session cookie，用户自己的私有文件也能正常加载（loadFileWithPrivacy 放行 uploaded_by === userId）。
+function loadCardThumb(card) {
+  const id = parseInt(card.dataset.fileId);
+  if (cardThumbLoaded.has(id)) return Promise.resolve();
+  cardThumbLoaded.add(id);
+  const thumb = card.querySelector('.file-card-thumb');
+  if (!thumb) return Promise.resolve();
+  thumb.innerHTML = '<div class="file-card-thumb-wrap"><iframe class="file-card-thumb-iframe" loading="lazy" title="预览"></iframe></div>';
+  const wrap = thumb.querySelector('.file-card-thumb-wrap');
+  const iframe = thumb.querySelector('.file-card-thumb-iframe');
+  return new Promise(resolve => {
+    iframe.addEventListener('load', () => { wrap.classList.add('loaded'); resolve(); }, { once: true });
+    iframe.addEventListener('error', () => resolve(), { once: true });
+    iframe.src = API_BASE + '/api/files/' + id + '/render';
+  });
+}
 
 // ---------- Home Page ----------
 function renderHome(container) {
@@ -76,6 +130,7 @@ function renderHome(container) {
 
   setupUpload(container);
   setupFileFilter(container);
+  setupViewToggle(container);
   loadTagsAndCategories(container);
   loadFiles(container);
   setupSkillModal();
@@ -306,7 +361,7 @@ async function loadFiles(container, page) {
 
   list.setAttribute('aria-busy', 'true');
   list.classList.add('is-loading');
-  list.innerHTML = buildSkeletonCards(Math.min(pagination.limit, 5));
+  list.innerHTML = buildSkeletonCards(Math.min(pagination.limit, 5), viewMode);
   empty.style.display = 'none';
   countEl.textContent = '';
 
@@ -447,6 +502,11 @@ async function doBatchAction(container, action, data) {
 }
 
 function renderFileList(container, list, files) {
+  if (viewMode === 'card') {
+    renderCardList(container, list, files);
+    return;
+  }
+  list.classList.remove('view-card'); // 列表视图，恢复单列布局
   const selectAllCb = container.querySelector('#select-all-checkbox');
   if (selectAllCb) {
     selectAllCb.checked = false;
@@ -627,6 +687,70 @@ function renderFileList(container, list, files) {
   });
 }
 
+// 卡片视图：每张卡片含一个实时 iframe 缩略图（懒加载）+ 文件名 + 标签 + 状态。
+function renderCardList(container, list, files) {
+  // 切换容器为网格布局
+  list.classList.add('view-card');
+  // 卡片视图不支持全选（空间小），隐藏表头的全选 checkbox
+  const selectAllCb = container.querySelector('#select-all-checkbox');
+  if (selectAllCb) selectAllCb.checked = false;
+  const observer = ensureCardThumbObserver();
+
+  files.forEach((f) => {
+    const el = document.createElement('div');
+    el.className = 'file-card';
+    el.dataset.fileId = f.id;
+    if (selectedFileIds.has(f.id)) el.classList.add('selected');
+    const safeName = escapeHtml(f.original_name);
+    const isPublic = !!f.is_public;
+    const iconText = f.is_bundle ? 'ZIP' : (f.file_type === 'markdown' ? 'MD' : 'HTML');
+    const privacyBadge = isPublic
+      ? '<span class="file-badge file-badge-public">公开</span>'
+      : '<span class="file-badge file-badge-private">私有</span>';
+    const versionBadge = f.version_count > 0
+      ? `<span class="file-badge file-badge-version">v${f.version_count + 1}</span>` : '';
+    const tagBadges = (f.tags || []).slice(0, 3).map(t =>
+      `<span class="file-badge file-badge-tag" data-tag-id="${t.id}">${escapeHtml(t.name)}</span>`).join('');
+    const size = formatSize(f.size);
+    const timeStr = relativeTime(f.updated_at || f.created_at);
+
+    el.innerHTML = `
+      <div class="file-card-thumb" aria-hidden="true">
+        <div class="file-card-thumb-loading"></div>
+      </div>
+      <button type="button" class="file-card-star ${f.starred ? 'starred' : ''}" data-id="${f.id}" aria-label="收藏">${f.starred ? '★' : '☆'}</button>
+      <div class="file-card-name" title="${safeName}">${safeName}</div>
+      <div class="file-card-badges"><span class="file-badge file-badge-type">${iconText}</span>${privacyBadge}${versionBadge}${tagBadges}</div>
+      <div class="file-card-footer"><span>${size}</span><span>${timeStr}</span></div>
+    `;
+    el.setAttribute('role', 'button');
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('aria-label', `打开 ${f.original_name}`);
+
+    // 整张卡片点击 → 预览（星标按钮单独拦截）
+    const openPreview = () => navigate('/view/' + f.id);
+    el.addEventListener('click', openPreview);
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPreview(); } });
+    el.querySelector('.file-card-star').addEventListener('click', async e => {
+      e.stopPropagation();
+      await toggleStar(f.id, f.starred);
+      loadFiles(container);
+    });
+    el.querySelectorAll('.file-badge-tag').forEach(badge => {
+      badge.addEventListener('click', e => {
+        e.stopPropagation();
+        filterState.tagId = parseInt(badge.dataset.tagId);
+        renderFilterDropdowns(container);
+        loadFiles(container, 1);
+      });
+    });
+
+    // 注册懒加载：卡片滚到可视区附近才挂 iframe
+    observer.observe(el);
+    list.appendChild(el);
+  });
+}
+
 function renderPagination(container) {
   let wrap = container.querySelector('#pagination');
   if (!wrap) {
@@ -692,6 +816,29 @@ function buildPageNumbers(current, total) {
     pages.push(1, '...', current - 1, current, current + 1, '...', total);
   }
   return pages;
+}
+
+function setupViewToggle(container) {
+  const buttons = container.querySelectorAll('.view-toggle-btn');
+  const selectAllWrap = container.querySelector('.select-all-wrap'); // 卡片视图无单卡 checkbox，隐藏全选
+  const syncAllSelect = () => { if (selectAllWrap) selectAllWrap.hidden = (viewMode === 'card'); };
+  // 根据 viewMode 同步按钮的 active 态（首次进入 / 刷新后恢复持久化选择）
+  buttons.forEach(b => b.classList.toggle('active', b.dataset.view === viewMode));
+  syncAllSelect();
+  buttons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (viewMode === btn.dataset.view) return;
+      // 切换前断开旧 observer，避免卡片 DOM 已销毁仍持有引用造成泄漏
+      if (cardThumbObserver) { cardThumbObserver.disconnect(); }
+      cardThumbLoaded.clear();
+      cardThumbQueue.length = 0;
+      cardThumbActive = 0;
+      setViewMode(btn.dataset.view);
+      buttons.forEach(b => b.classList.toggle('active', b === btn));
+      syncAllSelect();
+      applyFilters(container); // 复用现有重渲染流，重建列表/卡片
+    });
+  });
 }
 
 function setupFileFilter(container) {
@@ -798,7 +945,7 @@ async function doRename(container, id, currentName) {
     value: currentName,
     validate: v => {
       if (!v.trim()) return '文件名不能为空';
-      if (/[\/\\]/.test(v)) return '文件名不能包含 / 或 \\';
+      if (/[/\\]/.test(v)) return '文件名不能包含 / 或 \\';
       return null;
     },
   });
@@ -1239,7 +1386,6 @@ async function createUserDialog() {
 
 // 需要挂到 window 上因为 users table 用了 inline onclick
 async function editUserDialog(id, username, role, email) {
-  const ops = ['修改用户名/邮箱', '修改角色', '重置密码'];
   const choice = await dialogModal.confirm({
     title: '编辑用户: ' + username,
     message: '请选择操作',

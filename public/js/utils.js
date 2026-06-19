@@ -41,15 +41,23 @@ function formatDate(iso) {
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
-function buildSkeletonCards(n) {
+function buildSkeletonCards(n, viewMode) {
   let html = '';
   for (let i = 0; i < n; i++) {
-    html += '<div class="skeleton-item" aria-hidden="true">'
-      + '<div class="skeleton-icon"></div>'
-      + '<div class="skeleton-lines">'
-      + '<div class="skeleton-line skeleton-w60"></div>'
-      + '<div class="skeleton-line skeleton-w40"></div>'
-      + '</div></div>';
+    if (viewMode === 'card') {
+      html += '<div class="skeleton-item skeleton-card" aria-hidden="true">'
+        + '<div class="skeleton-card-thumb"></div>'
+        + '<div class="skeleton-line skeleton-w60"></div>'
+        + '<div class="skeleton-line skeleton-w40"></div>'
+        + '</div>';
+    } else {
+      html += '<div class="skeleton-item" aria-hidden="true">'
+        + '<div class="skeleton-icon"></div>'
+        + '<div class="skeleton-lines">'
+        + '<div class="skeleton-line skeleton-w60"></div>'
+        + '<div class="skeleton-line skeleton-w40"></div>'
+        + '</div></div>';
+    }
   }
   return html;
 }

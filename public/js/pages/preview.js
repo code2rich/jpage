@@ -3,7 +3,7 @@
 import { api, API_BASE } from '../api.js';
 import { toast } from '../components/toast.js';
 import { dialogModal } from '../components/dialog.js';
-import { escapeHtml, formatSize, relativeTime, buildSkeletonCards } from '../utils.js';
+import { escapeHtml, formatSize, relativeTime } from '../utils.js';
 import { state, navigate } from '../app.js';
 import { closeTemplateSelect } from './home.js';
 
