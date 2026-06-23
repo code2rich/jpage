@@ -85,4 +85,25 @@ function closeModal(el) {
   el.setAttribute('aria-hidden', 'true');
 }
 
-export { escapeHtml, formatSize, relativeTime, formatDate, esc, buildSkeletonCards, openModal, closeModal };
+// 复制到剪贴板：优先用现代 Clipboard API，回退到 execCommand
+// 返回 boolean 表示是否成功，由调用方决定降级行为（如手动选中提示）
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (_) {
+    try {
+      const input = document.createElement('input');
+      input.value = text;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      input.remove();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+}
+
+export { escapeHtml, formatSize, relativeTime, formatDate, esc, buildSkeletonCards, openModal, closeModal, copyToClipboard };
