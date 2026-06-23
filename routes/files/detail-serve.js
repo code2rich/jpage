@@ -42,6 +42,8 @@ function registerDetailServe(router) {
         entry_path: f.entry_path,
         view_count: f.view_count,
         template_id: f.template_id,
+        share_expires_at: f.share_expires_at,
+        has_share_password: !!f.share_password_hash,
         version_count: versionRow ? versionRow.c : 0,
         tags,
         starred,

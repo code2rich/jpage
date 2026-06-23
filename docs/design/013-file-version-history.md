@@ -48,7 +48,7 @@ CREATE INDEX IF NOT EXISTS idx_fv_file_ver ON file_versions(file_id, version DES
 规则：
 - `files.stored_name` 始终指向**当前版本**文件
 - 覆盖上传时，先把旧 `stored_name` 写入 `file_versions`，再更新 `files` 主记录
-- `version` 从 1 递增，不设上限
+- `version` 从 1 递增；历史版本数有上限，由 `MAX_FILE_VERSIONS` 控制（默认 20，env 可配），超过则自动删除最旧的版本（含磁盘文件）。当前版本存于 `files` 主记录、不计入上限，故保留数 = N 个历史 + 1 个当前。（原设计为「不设上限」，后改为可配上限以避免长期占盘，见 `routes/files/_shared.js` 的 `pruneOldVersions`。）
 - 删除文件时 CASCADE 清理版本记录 + 遍历删磁盘文件
 
 ### 2.3 迁移策略

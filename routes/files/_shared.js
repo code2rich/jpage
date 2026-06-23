@@ -8,15 +8,18 @@ const express = require('express');
 const multer = require('multer');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
-const { dbGet, dbRun } = require('../../lib/db');
-const { now } = require('../../lib/util');
-const { decodeFilename } = require('../../lib/util');
+const { dbGet, dbAll, dbRun } = require('../../lib/db');
+const { now, unlinkQuiet, decodeFilename } = require('../../lib/util');
 const { UPLOAD_DIR } = require('../../lib/paths');
 
 // --- 常量 ---
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const ALLOWED_UPLOAD_EXTS = ['.html', '.htm', '.md', '.markdown', '.zip']; // 上传（含 ZIP）
 const ALLOWED_TEXT_EXTS = ['.html', '.htm', '.md', '.markdown'];          // JSON 上传（无 ZIP）
+// 单个文件保留的历史版本数（file_versions 表），超过则自动删除最旧的。
+// 当前版本存在 files 主记录，不计入此上限。env 可配，默认 20。
+// 注：推翻设计文档 013 原定的「version 不设上限」。
+const MAX_FILE_VERSIONS = parseInt(process.env.MAX_FILE_VERSIONS, 10) || 20;
 
 // --- 上传限流 ---
 const uploadLimiter = rateLimit({
@@ -79,7 +82,26 @@ async function backupAndApplyVersion(file, next, recordedBy) {
     'UPDATE files SET stored_name = ?, size = ?, updated_at = ? WHERE id = ?',
     [next.storedName, next.size, now(), file.id]
   );
+  // 超过上限时删除最旧的历史版本（含磁盘文件），避免长期占盘。
+  await pruneOldVersions(file.id, MAX_FILE_VERSIONS);
   return { version: nextVer + 1 };
+}
+
+// --- 历史版本裁剪 ---
+// 保留每个文件最近 keep 个历史版本（version 最大的 keep 个），删掉更老的，
+// 同步清理磁盘文件。当前版本在 files 主记录，不参与计数。
+async function pruneOldVersions(fileId, keep) {
+  if (!Number.isFinite(keep) || keep <= 0) return;
+  // version 倒序：前 keep 条保留，其余删除
+  const all = await dbAll(
+    'SELECT id, stored_name FROM file_versions WHERE file_id = ? ORDER BY version DESC',
+    [fileId]
+  );
+  const toRemove = all.slice(keep);
+  for (const v of toRemove) {
+    if (v.stored_name) await unlinkQuiet(path.join(UPLOAD_DIR, v.stored_name));
+    await dbRun('DELETE FROM file_versions WHERE id = ?', [v.id]);
+  }
 }
 
 // --- 下载 Content-Disposition 头（UTF-8 文件名） ---
@@ -100,6 +122,7 @@ function isWithinBundle(absPath, bundleDir) {
 
 module.exports = {
   MAX_FILE_SIZE,
+  MAX_FILE_VERSIONS,
   ALLOWED_UPLOAD_EXTS,
   ALLOWED_TEXT_EXTS,
   uploadLimiter,
@@ -107,6 +130,7 @@ module.exports = {
   largeJson,
   generateStoredName,
   backupAndApplyVersion,
+  pruneOldVersions,
   setDownloadHeaders,
   isWithinBundle,
 };

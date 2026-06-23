@@ -3081,3 +3081,124 @@ html:not(.light) {
 @media (prefers-color-scheme: dark) {
   .email-verify-banner:not([hidden]) { background: #422006; color: #fbbf24; }
 }
+
+
+/* Batch upload result list (dialog) */
+.batch-result-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.batch-result-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.batch-result-fail {
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+}
+
+.batch-result-name {
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.batch-result-error {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+/* ---------- 分享设置弹窗 ---------- */
+.share-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+/* 密码保护 / 过期时间徽标 */
+.file-badge-share-lock {
+  background: rgba(217, 119, 6, 0.12);
+  color: #b45309;
+}
+
+.file-badge-share-expire {
+  background: rgba(99, 102, 241, 0.12);
+  color: #4f46e5;
+}
+
+html:not(.light) {
+  .file-badge-share-lock { background: rgba(251, 191, 36, 0.16); color: #fbbf24; }
+  .file-badge-share-expire { background: rgba(129, 140, 248, 0.18); color: #a5b4fc; }
+}
+
+/* 链接行：只读输入框 + 复制按钮 */
+.share-link-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.share-link-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 分组区块：标签 + 输入 + 提示 + 操作按钮 */
+.share-section {
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.share-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.share-section input[type="text"],
+.share-section input[type="password"],
+.share-section input[type="datetime-local"] {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 4px;
+}
+
+.share-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.share-btn-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 弱化危险按钮：清除密码 / 重新生成等次级破坏性操作 */
+.btn-danger-soft {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+
+.btn-danger-soft:hover {
+  background: rgba(220, 38, 38, 0.08);
+}
+

@@ -11,6 +11,7 @@ const express = require('express');
 const { registerList } = require('./list');
 const { registerUpload } = require('./upload');
 const { registerCrud } = require('./crud');
+const { registerShare } = require('./share');
 const { registerDetailServe } = require('./detail-serve');
 const { registerOverwrite } = require('./overwrite');
 const { registerVersions } = require('./versions');
@@ -23,13 +24,15 @@ const router = express.Router();
 //   2. upload        : POST /upload, /upload-json, /upload-zip-base64, POST /batch
 //                      注意：batch 在 crud 里，紧跟 upload 之后（原文件即如此）
 //   3. crud          : PUT /:id, DELETE /:id, POST /batch
-//   4. detail-serve  : GET /:id, /:id/content, /:id/asset/*, /:id/render, /:id/download
-//   5. overwrite     : POST /:id/overwrite, /:id/overwrite-json
-//   6. versions      : GET /:id/versions, ...content/render/restore, DELETE version
-//   7. associations  : PUT /:id/tags, star/unstar, /:id/category, GET /:id/stats
+//   4. share         : POST /:id/share/regenerate, PUT /:id/share（过期/密码/别名）
+//   5. detail-serve  : GET /:id, /:id/content, /:id/asset/*, /:id/render, /:id/download
+//   6. overwrite     : POST /:id/overwrite, /:id/overwrite-json
+//   7. versions      : GET /:id/versions, ...content/render/restore, DELETE version
+//   8. associations  : PUT /:id/tags, star/unstar, /:id/category, GET /:id/stats
 registerList(router);
 registerUpload(router);
 registerCrud(router);          // 含 POST /batch（在 PUT/DELETE /:id 之间，与原文件一致）
+registerShare(router);
 registerDetailServe(router);
 registerOverwrite(router);
 registerVersions(router);

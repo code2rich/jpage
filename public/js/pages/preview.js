@@ -6,6 +6,7 @@ import { dialogModal } from '../components/dialog.js';
 import { escapeHtml, formatSize, relativeTime } from '../utils.js';
 import { state, navigate } from '../app.js';
 import { closeTemplateSelect } from './home.js';
+import { openShareSettings } from './share-settings.js';
 
 // ---------- Preview Header State ----------
 const PREVIEW_HEADER_COLLAPSED_KEY = 'htmlwebsite_preview_header_collapsed';
@@ -195,9 +196,25 @@ function setupVersionUpload(container, fileId) {
     const fd = new FormData();
     fd.append('file', file);
 
+    // 进度条（大文件上传反馈），复用首页 .upload-progress 样式
+    const progressEl = container.querySelector('#version-upload-progress');
+    const progressBar = container.querySelector('#version-upload-progress-bar');
+    const progressText = container.querySelector('#version-upload-progress-text');
+    if (progressEl) progressEl.style.display = 'block';
+    if (progressBar) progressBar.style.width = '0%';
+    if (progressText) progressText.textContent = '0%';
+    input.disabled = true; // 防止上传进行中重复触发
+
     const xhr = new XMLHttpRequest();
     xhr.open('POST', API_BASE + `/api/files/${fileId}/overwrite`);
     xhr.withCredentials = true;
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 100);
+        if (progressBar) progressBar.style.width = pct + '%';
+        if (progressText) progressText.textContent = pct + '%';
+      }
+    };
 
     xhr.onload = () => {
       const data = JSON.parse(xhr.responseText || '{}');
@@ -215,12 +232,18 @@ function setupVersionUpload(container, fileId) {
       } else {
         toast(data.error || `HTTP ${xhr.status}`, 'error');
       }
-      input.value = '';
+      finish();
     };
     xhr.onerror = () => {
       toast('上传失败，请检查网络', 'error');
-      input.value = '';
+      finish();
     };
+    function finish() {
+      input.disabled = false;
+      input.value = '';
+      if (progressBar) progressBar.style.width = '100%';
+      setTimeout(() => { if (progressEl) progressEl.style.display = 'none'; }, 400);
+    }
     xhr.send(fd);
   });
 }
@@ -703,6 +726,12 @@ function renderPreview(container, hash) {
     if (menuStats && state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.id == data.uploaded_by)) {
       menuStats.hidden = false;
       menuStats.addEventListener('click', () => { closeMoreDropdown(); openStatsDialog(id, container); });
+    }
+    // 分享设置菜单项：仅文件所有者或 admin 可见
+    const menuShare = container.querySelector('#menu-share');
+    if (menuShare && state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.id == data.uploaded_by)) {
+      menuShare.hidden = false;
+      menuShare.addEventListener('click', () => { closeMoreDropdown(); openShareSettings(id, data); });
     }
   }).catch(e => {
     toast(e.message, 'error');

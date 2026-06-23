@@ -130,6 +130,37 @@ test('upload-zip-base64 非 zip 扩展名 → 400', async () => {
   assert.strictEqual(res.status, 400);
 });
 
+test('ZIP batch 响应含 failed 字段（成功时为空数组）', async () => {
+  // 验证 batch 响应契约：新增 failed 数组，成功时为空
+  const buf = await makeZip({
+    'batch-ok-1.html': '<p>1</p>',
+    'batch-ok-2.html': '<p>2</p>',
+  });
+  const res = await user.post('/api/files/upload-zip-base64').send({
+    name: 'batch-contract.zip',
+    content: buf.toString('base64'),
+    isPublic: false,
+  });
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.type, 'batch');
+  assert.strictEqual(res.body.count, 2);
+  assert.ok(Array.isArray(res.body.failed), 'batch 响应必须含 failed 数组');
+  assert.strictEqual(res.body.failed.length, 0, '全部成功时 failed 为空数组');
+});
+
+test('损坏的 ZIP（非 ZIP 字节）→ 500 + 友好中文（不再含「ZIP 处理失败:」前缀）', async () => {
+  // 构造一段不是 ZIP 的字节
+  const notZip = Buffer.from('this is definitely not a zip file payload');
+  const res = await user.post('/api/files/upload-zip-base64').send({
+    name: 'corrupt.zip',
+    content: notZip.toString('base64'),
+  });
+  assert.strictEqual(res.status, 500);
+  assert.ok(res.body.error, '应返回错误消息');
+  assert.ok(!res.body.error.startsWith('ZIP 处理失败:'), '不应再用「ZIP 处理失败:」前缀');
+  assert.match(res.body.error, /损坏|损坏或不是|解压失败|加密/);
+});
+
 // ====================== CSP 分级下发 ======================
 
 test('Markdown 渲染页下发严格 CSP（含 nonce，无 unsafe-inline script）', async () => {

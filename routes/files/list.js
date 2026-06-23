@@ -63,7 +63,7 @@ function registerList(router) {
       const totalPages = Math.ceil(total / limit) || 1;
 
       // 数据查询
-      const sql = `SELECT f.id, f.original_name, f.file_type, f.size, f.is_public, f.created_at, f.updated_at, f.share_key, f.category_id, f.uploaded_by, f.is_bundle, f.entry_path, f.view_count, f.template_id,
+      const sql = `SELECT f.id, f.original_name, f.file_type, f.size, f.is_public, f.created_at, f.updated_at, f.share_key, f.category_id, f.uploaded_by, f.is_bundle, f.entry_path, f.view_count, f.template_id, f.share_expires_at, (f.share_password_hash IS NOT NULL) AS has_share_password,
         (SELECT COUNT(*) FROM file_versions WHERE file_id = f.id) AS version_count
       FROM files f ${whereClause} ORDER BY f.${sort} ${order} LIMIT ? OFFSET ?`;
       const files = await dbAll(sql, [...params, limit, offset]);
@@ -151,7 +151,7 @@ function registerList(router) {
       const totalPages = Math.ceil(total / limit) || 1;
 
       const files = await dbAll(
-        'SELECT f.id, f.original_name, f.file_type, f.size, f.is_public, f.created_at, f.updated_at, f.share_key, f.category_id, f.uploaded_by, f.is_bundle, f.entry_path, f.view_count, ' +
+        'SELECT f.id, f.original_name, f.file_type, f.size, f.is_public, f.created_at, f.updated_at, f.share_key, f.category_id, f.uploaded_by, f.is_bundle, f.entry_path, f.view_count, f.share_expires_at, (f.share_password_hash IS NOT NULL) AS has_share_password, ' +
         '(SELECT COUNT(*) FROM file_versions WHERE file_id = f.id) AS version_count, m.snippet ' +
         'FROM files f JOIN ' + matchedIdsSql + ' m ON m.id = f.id WHERE 1=1 ' + permClause + ' ' +
         'ORDER BY f.updated_at DESC LIMIT ? OFFSET ?',

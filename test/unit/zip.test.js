@@ -4,7 +4,16 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { classifyZip, findEntryHtml, validateZipEntries, extractEntries, ZIP_MAX_FILE_COUNT } = require('../../lib/zip');
+const {
+  classifyZip,
+  findEntryHtml,
+  validateZipEntries,
+  extractEntries,
+  ZIP_MAX_FILE_COUNT,
+  ZIP_MAX_SINGLE_FILE_SIZE,
+  userError,
+  translateZipError,
+} = require('../../lib/zip');
 
 function entry(name) { return { name, originalName: name }; }
 
@@ -161,4 +170,94 @@ test('extractEntries：正常条目写入 targetDir 内', async () => {
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
+});
+
+// ===== 错误分类：校验类错误应标记为 isUserError + 400 =====
+
+test('validateZipEntries：路径穿越错误标记为用户错误 400', async () => {
+  const zip = fakeZip([{ name: '../escape.txt' }, { name: 'index.html' }]);
+  await assert.rejects(
+    () => validateZipEntries(zip),
+    (err) => {
+      assert.strictEqual(err.isUserError, true);
+      assert.strictEqual(err.statusCode, 400);
+      return true;
+    },
+  );
+});
+
+test('validateZipEntries：符号链接错误标记为用户错误 400', async () => {
+  const zip = fakeZip([
+    { name: 'link.txt', unixPermissions: 0o120777 },
+    { name: 'index.html' },
+  ]);
+  await assert.rejects(
+    () => validateZipEntries(zip),
+    (err) => {
+      assert.strictEqual(err.isUserError, true);
+      assert.strictEqual(err.statusCode, 400);
+      return true;
+    },
+  );
+});
+
+test('extractEntries：超单文件限制错误标记为用户错误 400', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jpage-zip-'));
+  try {
+    const tooBig = Buffer.alloc(ZIP_MAX_SINGLE_FILE_SIZE + 1, 'x');
+    const zip = fakeExtractableZip([{ name: 'big.html', content: tooBig }]);
+    const entries = [{ name: 'big.html', originalName: 'big.html' }];
+    await assert.rejects(
+      () => extractEntries(zip, entries, tmp),
+      (err) => {
+        assert.strictEqual(err.isUserError, true);
+        assert.strictEqual(err.statusCode, 400);
+        return true;
+      },
+    );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('userError：构造带 isUserError + statusCode 的错误', () => {
+  const e = userError('测试消息', 400);
+  assert.ok(e instanceof Error);
+  assert.strictEqual(e.message, '测试消息');
+  assert.strictEqual(e.isUserError, true);
+  assert.strictEqual(e.statusCode, 400);
+});
+
+test('userError：默认 statusCode 为 400', () => {
+  const e = userError('不带状态码');
+  assert.strictEqual(e.statusCode, 400);
+});
+
+test('classifyZip：reject 分支返回 statusCode', () => {
+  const r = classifyZip([entry('a.png')]);
+  assert.strictEqual(r.type, 'reject');
+  assert.strictEqual(r.statusCode, 400);
+  assert.ok(r.reason);
+});
+
+// ===== translateZipError：底层异常转译为友好中文 =====
+
+test('translateZipError：损坏 ZIP（EOCD 缺失）→ 中文提示', () => {
+  const msg = translateZipError(new Error("Can't find end of central directory"));
+  assert.strictEqual(msg, 'ZIP 文件已损坏或不是有效的 ZIP 文件');
+});
+
+test('translateZipError：加密 ZIP → 中文提示', () => {
+  const msg = translateZipError(new Error('File is encrypted with password'));
+  assert.strictEqual(msg, 'ZIP 文件已加密，请先解密后再上传');
+});
+
+test('translateZipError：CRC 错误 → 中文提示', () => {
+  const msg = translateZipError(new Error('CRC check failed, corrupt'));
+  assert.strictEqual(msg, 'ZIP 文件校验失败，可能已损坏');
+});
+
+test('translateZipError：未知错误 → 兜底提示', () => {
+  const msg = translateZipError(new Error('something totally unexpected'));
+  assert.strictEqual(msg, 'ZIP 解压失败，请检查文件是否完整');
 });

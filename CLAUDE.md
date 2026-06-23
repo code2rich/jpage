@@ -52,7 +52,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Database schema**:
 - `_migrations(id, name UNIQUE, applied_at)` — 记录已执行的 migration
-- `files(id, original_name, stored_name, file_type, size, created_at, is_public, uploaded_by, share_key, updated_at, category_id, is_bundle, entry_path, view_count, template_id)` — `is_public=1` means anonymous can read; `uploaded_by` references `users.id`; `share_key` is 8-char URL-safe random string for short links; `is_bundle=1` 为解压后的网站包；`view_count` 由短链访问批量回写；`template_id` 绑定样式模板
+- `files(id, original_name, stored_name, file_type, size, created_at, is_public, uploaded_by, share_key, updated_at, category_id, is_bundle, entry_path, view_count, template_id, share_expires_at, share_password_hash)` — `is_public=1` means anonymous can read; `uploaded_by` references `users.id`; `share_key` is 8-char URL-safe random string for short links（可自定义别名或重新生成以撤销旧链）；`is_bundle=1` 为解压后的网站包；`view_count` 由短链访问批量回写；`template_id` 绑定样式模板；`share_expires_at` 为 UTC 过期时间（NULL=永不过期）；`share_password_hash` 为 bcrypt 访问密码哈希（NULL=无密码保护）
 - `users(id, username UNIQUE, email UNIQUE, email_verified, password_hash, role, created_at)` — `email` 可为 NULL；`email_verified` 0/1
 - `file_versions(id, file_id, version, stored_name, size, created_at, uploaded_by)` — 文件版本历史
 - `tokens(id, user_id, name, token_hash, token_prefix, token_enc, last_used_at, created_at)` — API token。`token_hash` 为 SHA-256（鉴权用，不可逆）；`token_enc` 为 AES-256-GCM 密文（可选，使明文可在界面后续查看/复制，旧令牌为 NULL）
@@ -107,7 +107,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `POST /api/files/:id/versions/:ver/restore` — 恢复到指定版本
 - `DELETE /api/files/:id/versions/:ver` — 删除指定历史版本
 - `GET /api/files/:id/stats` — 返回 `{viewCount, daily7, daily30}`（viewCount 含未回写缓冲值）
-- `GET /s/:key` — 短链接渲染页面（通过 share_key 查找文件并渲染，公开文件无需登录，访问计数 30s 批量回写）
+- `POST /api/files/:id/share/regenerate` — 重新生成短链（撤销旧链接，返回新 `{share_key}`，admin 或所有者）
+- `PUT /api/files/:id/share` — `{alias?, expiresAt?, password?}` 更新分享设置（自定义别名/过期时间/访问密码，admin 或所有者；响应回 `{share_key, share_expires_at, has_share_password}`，绝不回密码哈希）
+- `GET /s/:key` — 短链接渲染页面（通过 share_key 查找文件并渲染；访问门槛按序：文件存在 → 过期(410) → 私有未登录(重定向) → 访问密码(session 解锁) → 渲染。访问计数 30s 批量回写）
+- `POST /s/:key` — 短链访问密码校验（bcrypt 比对，成功写 session.unlockedShares[key] 后重定向回 GET，限流防爆破）
 - `GET /api/tags` — 列出所有标签（含 file_count）
 - `POST /api/tags` — `{name}` 创建标签（已存在则返回现有）
 - `DELETE /api/tags/:id` — 删除标签
@@ -268,6 +271,8 @@ migrations/              # Migration 文件目录（按文件名排序执行）
   010_add_templates_system.js
   011_content_templates.js
   012_add_email_and_verification.js
+  013_add_token_encrypted.js
+  014_add_share_control.js   # share_expires_at + share_password_hash
 skills-registry.js       # 扫描 skills/ 目录，解析 SKILL.md，提供列表/详情/ZIP 打包
 package.json             # 依赖: @modelcontextprotocol/sdk, zod, archiver, marked, highlight.js, katex, mermaid 等
 Dockerfile               # node:20-alpine, EXPOSE 8858

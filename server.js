@@ -14,11 +14,12 @@ const helmet = require('helmet');
 const sqlite3 = require('sqlite3').verbose();
 const morgan = require('morgan');
 const cron = require('node-cron');
+const rateLimit = require('express-rate-limit');
 
 const { runMigrations } = require('./migrations');
 const { setDb, dbGet, dbRun, configureDatabase } = require('./lib/db');
 const { DATA_DIR, UPLOAD_DIR } = require('./lib/paths');
-const { generateReadablePassword, currentUserId } = require('./lib/util');
+const { generateReadablePassword, currentUserId, now } = require('./lib/util');
 const { loadTemplates, loadTemplateNameMap } = require('./lib/templates');
 const { reloadCategoryNameCache } = require('./lib/categories');
 const { backfillFtsIndex } = require('./lib/fts');
@@ -171,15 +172,103 @@ app.use('/api/admin', adminRouter);
 app.use('/api', skillsRouter);            // /api/skills、/api/mcp/config
 
 // --- 短链（根路径，公开热点）---
+// 访问门槛（按序）：
+//   1. 文件不存在 → 404
+//   2. 已过期（share_expires_at <= 当前 UTC）→ 410 Gone 页
+//   3. 私有且未登录 → 重定向首页
+//   4. 设了访问密码且本会话未解锁 → 密码表单页（200）
+//   5. 否则记录访问 + 渲染
+//
+// 密码解锁态存服务端 SQLite session（unlockedShares: { [shareKey]: true }），
+// 会话级有效，无需额外 cookie。POST /s/:key 验密码并写入该态。
+const shareKeyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: '尝试过于频繁，请稍后再试' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// 判定短链文件是否已被本会话解锁（无密码视为已解锁）。
+function isShareUnlocked(req, file) {
+  if (!file.share_password_hash) return true;
+  const unlocked = req.session && req.session.unlockedShares;
+  return !!(unlocked && unlocked[file.share_key]);
+}
+
+// 过期页 HTML：告知链接已过期，引导联系分享者。
+const EXPIRED_HTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:sans-serif;text-align:center;padding:4em"><h1>链接已过期</h1><p>该分享链接已失效。</p><a href="/">返回首页</a></body></html>';
+
+// 密码表单页：内联样式 + 单一表单，POST 回 /s/:key。
+// 转义防 XSS（key 来自 DB 但仍防御性处理）。error 非空时显示错误提示。
+function renderSharePasswordPage(key, error) {
+  const safeKey = String(key).replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
+  const errorBlock = error
+    ? `<div style="color:#cf222e;margin-bottom:1em">${String(error).replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]))}</div>`
+    : '';
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>需要密码</title></head><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f6f8fa">
+<div style="background:#fff;padding:2.5em;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.12);width:100%;max-width:360px;box-sizing:border-box">
+<h1 style="font-size:1.3em;margin:0 0 .5em;color:#1f2328">需要访问密码</h1>
+<p style="color:#57606a;margin:0 0 1.5em;font-size:.9em">该分享链接受密码保护，请输入密码后查看。</p>
+<form method="POST" action="/s/${safeKey}">
+${errorBlock}
+<input type="password" name="password" placeholder="输入密码" autofocus required style="width:100%;padding:.6em .75em;border:1px solid #d0d7de;border-radius:6px;font-size:1em;box-sizing:border-box;margin-bottom:1em">
+<button type="submit" style="width:100%;padding:.65em;background:#1f6feb;color:#fff;border:none;border-radius:6px;font-size:1em;cursor:pointer">查看</button>
+</form>
+</div></body></html>`;
+}
+
 app.get('/s/:key', async (req, res) => {
   try {
     const file = await dbGet('SELECT * FROM files WHERE share_key = ?', [req.params.key]);
     if (!file) return res.status(404).send('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:sans-serif;text-align:center;padding:4em"><h1>404</h1><p>页面不存在</p><a href="/">返回首页</a></body></html>');
+    // 过期判定（UTC 字符串比较）
+    if (file.share_expires_at && file.share_expires_at <= now()) {
+      return res.status(410).send(EXPIRED_HTML);
+    }
     if (!file.is_public && !currentUserId(req)) return res.redirect('/');
+    // 访问密码门
+    if (!isShareUnlocked(req, file)) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(200).send(renderSharePasswordPage(req.params.key, null));
+    }
     recordVisit(file, req).catch(() => {});
     await renderFile(res, file);
   } catch (e) {
+    logger.error({ type: 'app', action: 'shortlink.get', error: e.message });
     res.status(500).json({ error: '渲染失败' });
+  }
+});
+
+// --- 短链密码校验（POST）---
+// 验证通过 → 在 session 标记解锁该 key → 重定向回 GET /s/:key（现可渲染）。
+// 失败 → 重新返回表单页并提示错误。
+app.post('/s/:key', shareKeyLimiter, async (req, res) => {
+  try {
+    const file = await dbGet('SELECT * FROM files WHERE share_key = ?', [req.params.key]);
+    // 出于安全：无论文件是否存在，密码错误时都回"密码错误"，避免泄露文件存在性。
+    const password = (req.body && req.body.password) ? String(req.body.password) : '';
+    if (!file) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(200).send(renderSharePasswordPage(req.params.key, '密码错误'));
+    }
+    if (file.share_expires_at && file.share_expires_at <= now()) {
+      return res.status(410).send(EXPIRED_HTML);
+    }
+    if (!file.is_public && !currentUserId(req)) return res.redirect('/');
+    const ok = file.share_password_hash
+      ? await bcrypt.compare(password, file.share_password_hash).catch(() => false)
+      : true; // 无密码：放行（与 GET 一致）
+    if (!ok) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(200).send(renderSharePasswordPage(req.params.key, '密码错误'));
+    }
+    if (!req.session.unlockedShares) req.session.unlockedShares = {};
+    req.session.unlockedShares[file.share_key] = true;
+    res.redirect(`/s/${encodeURIComponent(file.share_key)}`);
+  } catch (e) {
+    logger.error({ type: 'app', action: 'shortlink.post', error: e.message });
+    res.status(500).json({ error: '校验失败' });
   }
 });
 

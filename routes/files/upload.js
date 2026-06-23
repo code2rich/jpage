@@ -9,7 +9,7 @@ const { requireAuth } = require('../../lib/middleware/auth');
 const { now, unlinkQuiet, generateShareKey, currentUserId, clientIp, decodeFilename } = require('../../lib/util');
 const { UPLOAD_DIR } = require('../../lib/paths');
 const { isFtsIndexable, indexFileContent } = require('../../lib/fts');
-const { handleZipUpload } = require('../../lib/zip');
+const { handleZipUpload, translateZipError } = require('../../lib/zip');
 const { uploadLimiter, upload, largeJson, MAX_FILE_SIZE, ALLOWED_TEXT_EXTS, backupAndApplyVersion } = require('./_shared');
 const logger = require('../../logger');
 
@@ -195,8 +195,11 @@ function registerUpload(router) {
       req.body.isPublic = isPublic;
       return await handleZipUpload(req, res, zipBuffer);
     } catch (e) {
+      // handleZipUpload 已自行响应业务错误；这里仅捕获 base64 解码等前置异常。
+      if (res.headersSent) return;
       logger.error({ type: 'app', action: 'zip.base64', error: e.message });
-      return res.status(500).json({ error: 'ZIP 处理失败: ' + e.message });
+      const friendly = e.isUserError ? e.message : translateZipError(e);
+      return res.status(e.statusCode || 500).json({ error: friendly });
     }
   });
 }

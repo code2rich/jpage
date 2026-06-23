@@ -452,6 +452,10 @@ CLI 工具
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
 历史
 </button>
+<button type="button" class="settings-menu-item" id="menu-share" hidden>
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+分享设置
+</button>
 <button type="button" class="settings-menu-item" id="menu-template" hidden>
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
 模板
@@ -482,6 +486,10 @@ CLI 工具
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
 </button>
 <input type="file" id="version-file-input" accept=".html,.htm,.md,.markdown" hidden aria-label="选择要上传的新版本文件">
+<div class="upload-progress" id="version-upload-progress" style="display:none">
+<div class="upload-progress-bar" id="version-upload-progress-bar"></div>
+<span class="upload-progress-text" id="version-upload-progress-text">0%</span>
+</div>
 <div class="preview-container">
 <div class="version-panel" id="version-panel" hidden>
 <div class="version-panel-header">
@@ -804,6 +812,51 @@ CLI 工具
 </div>
 <div class="modal-footer">
 <button type="button" class="btn btn-small" id="template-select-cancel">取消</button>
+</div>
+</div>
+</div>
+
+<!-- 分享设置弹窗：重新生成 / 自定义别名 / 过期时间 / 访问密码 + 状态总览 -->
+<div class="modal-backdrop" id="share-settings-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="share-settings-title">
+<div class="modal-panel modal-panel-sm">
+<div class="modal-header">
+<h2 id="share-settings-title">分享设置</h2>
+<button type="button" class="btn btn-small modal-close" id="share-settings-close" aria-label="关闭">×</button>
+</div>
+<div class="modal-body">
+<div class="share-status" id="share-status-badges"></div>
+<div class="share-link-row">
+<input type="text" id="share-link-input" readonly>
+<button type="button" class="btn btn-small" id="share-link-copy">复制</button>
+</div>
+<div class="share-section">
+<label class="share-label" for="share-alias-input">自定义短链别名</label>
+<input type="text" id="share-alias-input" placeholder="留空则用随机短链" autocomplete="off">
+<div class="share-hint">仅字母、数字、下划线、连字符，3~32 位</div>
+<button type="button" class="btn btn-small" id="share-alias-save">保存别名</button>
+<button type="button" class="btn btn-small btn-danger-soft" id="share-regenerate">重新生成链接</button>
+</div>
+<div class="share-section">
+<label class="share-label" for="share-expires-input">过期时间</label>
+<input type="datetime-local" id="share-expires-input">
+<div class="share-hint">留空表示永不过期（UTC 时间存储，按本地时区显示）</div>
+<div class="share-btn-row">
+<button type="button" class="btn btn-small" id="share-expires-save">保存过期时间</button>
+<button type="button" class="btn btn-small" id="share-expires-clear">永不过期</button>
+</div>
+</div>
+<div class="share-section">
+<label class="share-label" for="share-password-input">访问密码</label>
+<input type="password" id="share-password-input" placeholder="设置后访问需输入密码" autocomplete="new-password">
+<div class="share-hint">留空保存表示清除密码</div>
+<div class="share-btn-row">
+<button type="button" class="btn btn-small" id="share-password-save">保存密码</button>
+<button type="button" class="btn btn-small btn-danger-soft" id="share-password-clear">清除密码</button>
+</div>
+</div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn btn-small" id="share-settings-done">完成</button>
 </div>
 </div>
 </div>
