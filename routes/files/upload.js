@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { dbGet, dbRun } = require('../../lib/db');
 const { requireAuth } = require('../../lib/middleware/auth');
-const { now, unlinkQuiet, generateShareKey, currentUserId, clientIp, decodeFilename } = require('../../lib/util');
+const { now, unlinkQuiet, generateShareKey, currentUserId, clientIp, decodeFilename, resolveUploadSource } = require('../../lib/util');
 const { UPLOAD_DIR } = require('../../lib/paths');
 const { isFtsIndexable, indexFileContent } = require('../../lib/fts');
 const { handleZipUpload, translateZipError } = require('../../lib/zip');
@@ -26,11 +26,13 @@ function registerUpload(router) {
     let fileType = 'html';
     if (ext === '.md' || ext === '.markdown') fileType = 'markdown';
     const isPublic = req.body.isPublic === 'true' || req.body.isPublic === true;
+    const source = resolveUploadSource(req);
     try {
-      // 检查同名文件
+      // 检查同名文件（按用户隔离：同名只在当前用户命名空间内匹配，
+      // 不会命中其他用户的同名记录，避免跨用户覆盖）
       const existing = await dbGet(
-        'SELECT id, stored_name, size, uploaded_by, file_type, is_public FROM files WHERE original_name = ?',
-        [req.file.originalname]
+        'SELECT id, stored_name, size, uploaded_by, file_type, is_public FROM files WHERE original_name = ? AND uploaded_by = ?',
+        [req.file.originalname, currentUserId(req)]
       );
 
       if (existing) {
@@ -42,10 +44,13 @@ function registerUpload(router) {
         }
 
         // 备份当前版本并更新主记录（新文件已由 multer 写入磁盘）
+        // performedBy = currentUserId：记录触发本次覆盖的操作者（审计用）
         const { version } = await backupAndApplyVersion(
           existing,
           { storedName: req.file.filename, size: req.file.size },
-          existing.uploaded_by
+          existing.uploaded_by,
+          source,
+          currentUserId(req)
         );
 
         // FTS 索引同步
@@ -54,7 +59,7 @@ function registerUpload(router) {
         }
 
         const shareKey = await dbGet('SELECT share_key FROM files WHERE id = ?', [existing.id]).then(r => r?.share_key);
-        logger.audit('file.overwrite', { fileId: existing.id, fileName: req.file.originalname, version, fileType, size: req.file.size, ip: clientIp(req) });
+        logger.audit('file.overwrite', { fileId: existing.id, fileName: req.file.originalname, version, fileType, size: req.file.size, userId: currentUserId(req), ip: clientIp(req) });
         return res.json({
           id: existing.id,
           overwritten: true,
@@ -69,15 +74,15 @@ function registerUpload(router) {
 
       // 不存在同名文件：新建
       const result = await dbRun(
-        'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [req.file.originalname, req.file.filename, fileType, req.file.size, isPublic ? 1 : 0, currentUserId(req), generateShareKey(), now()]
+        'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key, upload_source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [req.file.originalname, req.file.filename, fileType, req.file.size, isPublic ? 1 : 0, currentUserId(req), generateShareKey(), source, now()]
       );
       // FTS 索引同步
       if (isFtsIndexable(fileType, req.file.filename)) {
         indexFileContent(result.lastID, req.file.filename);
       }
       const shareKey = await dbGet('SELECT share_key FROM files WHERE id = ?', [result.lastID]).then(r => r?.share_key);
-      logger.audit('file.upload', { fileId: result.lastID, fileName: req.file.originalname, fileType, size: req.file.size, ip: clientIp(req) });
+      logger.audit('file.upload', { fileId: result.lastID, fileName: req.file.originalname, fileType, size: req.file.size, userId: currentUserId(req), ip: clientIp(req) });
       res.json({
         id: result.lastID,
         original_name: req.file.originalname,
@@ -102,6 +107,7 @@ function registerUpload(router) {
     const size = Buffer.byteLength(content, 'utf-8');
     if (size > MAX_FILE_SIZE) return res.status(400).json({ error: '文件大小超过50MB限制' });
     const fileType = (ext === '.md' || ext === '.markdown') ? 'markdown' : 'html';
+    const source = resolveUploadSource(req);
     const { generateStoredName } = require('./_shared');
     const storedName = generateStoredName(ext);
     const filePath = path.join(UPLOAD_DIR, storedName);
@@ -112,10 +118,10 @@ function registerUpload(router) {
       return res.status(500).json({ error: '写入文件失败' });
     }
 
-    // 检查同名文件
+    // 检查同名文件（按用户隔离，理由同 multipart /upload）
     const existing = await dbGet(
-      'SELECT id, stored_name, size, uploaded_by, file_type, is_public, share_key FROM files WHERE original_name = ?',
-      [decoded]
+      'SELECT id, stored_name, size, uploaded_by, file_type, is_public, share_key FROM files WHERE original_name = ? AND uploaded_by = ?',
+      [decoded, currentUserId(req)]
     ).catch(() => null);
 
     if (existing) {
@@ -129,7 +135,9 @@ function registerUpload(router) {
         const { version } = await backupAndApplyVersion(
           existing,
           { storedName, size },
-          existing.uploaded_by
+          existing.uploaded_by,
+          source,
+          currentUserId(req)
         );
 
         // FTS 索引同步
@@ -137,7 +145,7 @@ function registerUpload(router) {
           indexFileContent(existing.id, storedName);
         }
 
-        logger.audit('file.overwrite', { fileId: existing.id, fileName: decoded, version, fileType, size, ip: clientIp(req) });
+        logger.audit('file.overwrite', { fileId: existing.id, fileName: decoded, version, fileType, size, userId: currentUserId(req), ip: clientIp(req) });
         return res.json({
           id: existing.id,
           overwritten: true,
@@ -158,15 +166,15 @@ function registerUpload(router) {
     const isPublicFlag = isPublic === false ? 0 : 1;
     try {
       const result = await dbRun(
-        'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [decoded, storedName, fileType, size, isPublicFlag, currentUserId(req), generateShareKey(), now()]
+        'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key, upload_source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [decoded, storedName, fileType, size, isPublicFlag, currentUserId(req), generateShareKey(), source, now()]
       );
       // FTS 索引同步
       if (isFtsIndexable(fileType, storedName)) {
         indexFileContent(result.lastID, storedName);
       }
       const shareKey = await dbGet('SELECT share_key FROM files WHERE id = ?', [result.lastID]).then(r => r?.share_key);
-      logger.audit('file.upload', { fileId: result.lastID, fileName: decoded, fileType, size, ip: clientIp(req) });
+      logger.audit('file.upload', { fileId: result.lastID, fileName: decoded, fileType, size, userId: currentUserId(req), ip: clientIp(req) });
       res.json({
         id: result.lastID,
         original_name: decoded,

@@ -1,6 +1,6 @@
 ---
 name: jpage-content-template
-description: 当用户要生成 HTML/Markdown 内容时，先从模板市场查找风格样例，参照样例的风格生成新内容。适用于用户要求生成页面、报告、仪表板等，且希望有特定风格参考的场景。
+description: 当用户要生成 HTML/Markdown 内容时，先从模板市场查找风格样例，参照样例的风格生成新内容。适用于用户要求生成页面、演示、书稿等，且希望有特定风格参考的场景。
 ---
 
 # 核心规则
@@ -23,9 +23,9 @@ description: 当用户要生成 HTML/Markdown 内容时，先从模板市场查�
 
 ```
 1. 调 list_content_templates 查询模板市场
-   - 如果用户指定了场景类型（如「仪表板」），设置 scene 参数
+   - 如果用户指定了分类类型（如「PPT」「书稿」），设置 category 参数
    - 如果用户指定了风格关键词，设置 keyword 参数
-2. 向用户展示匹配的模板列表（标题、场景、描述）
+2. 向用户展示匹配的模板列表（标题、分类、描述）
 3. 用户选择一个模板后，调 get_content_template(id=选择的模板id) 获取完整样例
 4. 学习样例的以下特征：
    - 整体布局结构（header/main/footer/sidebar 等区域划分）
@@ -43,42 +43,41 @@ description: 当用户要生成 HTML/Markdown 内容时，先从模板市场查�
 用户没有指定模板，但要求生成特定类型的内容。
 
 ```
-1. 根据用户需求判断可能的场景类型
-2. 调 list_content_templates(scene=场景类型, sort="use_count", limit=3)
+1. 根据用户需求判断可能的分类类型
+2. 调 list_content_templates(category=分类, sort="use_count", limit=3)
 3. 如果有匹配模板，向用户推荐：
    「我找到了几个相关模板，是否参照某个模板的风格？还是直接生成？」
 4. 用户选择后，按场景一的流程继续
 5. 如果用户选择直接生成，则不使用模板，正常生成
 ```
 
-## 场景三：上传样例到模板市场
+## 场景三：提交样例到模板市场
 
-用户有一段好看的 HTML/Markdown，想保存为模板供以后参考。
+用户有一段好看的 HTML/Markdown，想提交到市场供以后参考。
 
 ```
-1. 调 POST /api/content-templates 上传模板
+1. 告知用户：提交后会进入审核，管理员审核通过且设为展示后才会出现在市场
+2. 调 POST /api/content-templates 提交模板
    - title: 模板名称
    - content: 完整的 HTML/Markdown 内容
-   - scene: 使用场景（dashboard/report/resume/landing/note/other）
-   - description: 风格描述
-   - styleTags: 风格标签（逗号分隔）
+   - categoryId: 分类 ID（见下表，需先用 GET /api/content-templates/categories 获取可用分类）
+   - description: 风格描述（可选，建议包含：链接、风格关键词、适合内容、借鉴模块）
    - fileType: html 或 markdown
-2. 告知用户模板已上传到市场
+3. 告知用户模板已提交，等待审核
 ```
 
-# 场景与关键词对照
+# 分类与关键词对照
 
-| 用户可能说的 | scene 参数 |
-|---|---|
-| 仪表板、数据看板、Dashboard、监控面板 | dashboard |
-| 报告、周报、月报、分析报告 | report |
-| 简历、CV、名片、个人主页 | resume |
-| 落地页、Landing Page、产品页、活动页 | landing |
-| 笔记、文档、会议纪要、技术文档 | note |
-| 卡片、海报、Banner、封面 | card |
-| 演示、PPT、幻灯片 | presentation |
-| 邮件、Email、Newsletter | email |
-| 其他未分类 | other |
+市场分类由管理员可配置，默认提供以下两个：
+
+| 用户可能说的 | category 参数 | 说明 |
+|---|---|---|
+| PPT、演示、幻灯片、路演、商务演示 | html-ppt | 适合演示型 HTML |
+| 书稿、文档、教程、手册、协议规范、开发者文档 | html-book | 适合阅读型 HTML |
+
+> 旧 scene 参数（dashboard/report/resume/landing/note/presentation/card/email/other）仍可传入作为兼容，
+> 工具会自动映射到对应分类（dashboard/presentation/card/email→html-ppt；report/note/resume/landing/other→html-book），
+> 但建议改用 category 参数。完整可用分类以 GET /api/content-templates/categories 返回为准。
 
 # 风格学习原则
 

@@ -266,6 +266,111 @@ test('admin 可访问任意用户的私有文件', async () => {
   assert.strictEqual(detail.status, 200);
 });
 
+test('跨用户上传同名文件：互不影响、不覆盖（按用户隔离）', async () => {
+  // alice 上传 alice-collision.md
+  const aliceUp = await user.post('/api/files/upload-json').send({
+    name: 'user-collision.md',
+    content: '# alice content',
+    isPublic: false,
+  });
+  assert.strictEqual(aliceUp.status, 200);
+  assert.ok(!aliceUp.body.overwritten, '首次上传不应是覆盖');
+  const aliceId = aliceUp.body.id;
+
+  // bob 上传同名 user-collision.md：应为新建，不覆盖 alice 的记录
+  const bobUp = await otherUser.post('/api/files/upload-json').send({
+    name: 'user-collision.md',
+    content: '# bob content',
+    isPublic: false,
+  });
+  assert.strictEqual(bobUp.status, 200);
+  assert.ok(!bobUp.body.overwritten, '跨用户同名不应覆盖');
+  assert.notStrictEqual(bobUp.body.id, aliceId, '应是两条不同记录');
+
+  // alice 的原文件内容未被改动（读回原文验证）
+  const aliceContent = await user.get(`/api/files/${aliceId}/content`);
+  assert.strictEqual(aliceContent.status, 200);
+  assert.strictEqual(aliceContent.body.content, '# alice content');
+
+  // alice 的版本数仍为 0（未被覆盖生成版本）
+  const aliceVersions = await user.get(`/api/files/${aliceId}/versions`);
+  assert.strictEqual(aliceVersions.status, 200);
+  assert.strictEqual(aliceVersions.body.versions.length, 0, 'alice 文件不应产生历史版本');
+});
+
+test('同用户上传同名文件：仍保留覆盖+版本语义', async () => {
+  const first = await user.post('/api/files/upload-json').send({
+    name: 'alice-self-overwrite.md',
+    content: 'v1',
+    isPublic: false,
+  });
+  const second = await user.post('/api/files/upload-json').send({
+    name: 'alice-self-overwrite.md',
+    content: 'v2',
+    isPublic: false,
+  });
+  assert.strictEqual(second.status, 200);
+  assert.ok(second.body.overwritten, '同用户同名应触发覆盖');
+  assert.strictEqual(second.body.id, first.body.id, '覆盖后应为同一条记录 id');
+  const versions = await user.get(`/api/files/${first.body.id}/versions`);
+  assert.ok(versions.body.versions.length >= 1, '应生成至少一条历史版本');
+});
+
+test('按 ID 覆盖他人文件 → 403（无权操作）', async () => {
+  // alice 上传一个公开文件
+  const up = await user.post('/api/files/upload-json').send({
+    name: 'alice-overwrite-target.md',
+    content: 'original',
+    isPublic: true,
+  });
+  assert.strictEqual(up.status, 200);
+  // bob 尝试按 id 覆盖（即便文件公开）→ 403
+  const overwrite = await otherUser.post(`/api/files/${up.body.id}/overwrite-json`).send({
+    content: '# hacked by bob',
+  });
+  assert.strictEqual(overwrite.status, 403);
+  // 验证 alice 的内容未被改动
+  const content = await user.get(`/api/files/${up.body.id}/content`);
+  assert.strictEqual(content.body.content, 'original');
+});
+
+test('改名撞同用户其他文件名 → 409', async () => {
+  // alice 先建两个文件
+  await user.post('/api/files/upload-json').send({ name: 'rename-target.md', content: 'a', isPublic: false });
+  const other = await user.post('/api/files/upload-json').send({ name: 'rename-exist.md', content: 'b', isPublic: false });
+  // 把 rename-target 改名为已存在的 rename-exist.md → 409
+  const res = await user.put(`/api/files/${other.body.id}`).send({ name: 'rename-target.md' });
+  assert.strictEqual(res.status, 409);
+});
+
+test('版本审计：覆盖者被记录为操作者（performed_by），与内容归属 uploaded_by 区分', async () => {
+  // alice 上传文件，admin 覆盖它（admin 经 checkFileOwnership 放行）
+  const up = await user.post('/api/files/upload-json').send({
+    name: 'audit-target.md',
+    content: 'alice-original',
+    isPublic: false,
+  });
+  assert.strictEqual(up.status, 200);
+  const aliceFileId = up.body.id;
+
+  // admin 通过同名上传覆盖（admin 命名空间内未同名，但 admin 可读 alice 私有文件 →
+  // 改用按 id 覆盖路径验证 performed_by）
+  const overwrite = await admin.post(`/api/files/${aliceFileId}/overwrite-json`).send({
+    content: 'admin-overwritten',
+  });
+  assert.strictEqual(overwrite.status, 200);
+  assert.strictEqual(overwrite.body.overwritten, true);
+
+  // 版本列表：被归档那一版的 uploaded_by 应仍为 alice（内容归属不变），
+  // performed_by 应为 admin（触发覆盖的操作者）
+  const versions = await admin.get(`/api/files/${aliceFileId}/versions`);
+  assert.strictEqual(versions.status, 200);
+  assert.ok(versions.body.versions.length >= 1, '应生成历史版本');
+  const archived = versions.body.versions[0]; // 仅 1 条历史版本（alice 的原内容）
+  assert.strictEqual(archived.performed_by_name, 'admin', '操作者应为 admin');
+  assert.notStrictEqual(archived.performed_by_name, 'alice', '操作者不应是 alice');
+});
+
 test('短链 /s/:key 私有文件未登录 → 重定向', async () => {
   const up = await user.post('/api/files/upload-json').send({
     name: 'short-private.md',

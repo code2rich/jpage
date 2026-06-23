@@ -321,22 +321,32 @@ MCP 使用的 JSON 覆盖上传，自动版本备份。
 
 ## 内容模板（Content Templates）
 
-公开模板库 + 用户自建模板，用于快速创建文件。
+内容模板市场：用户上架 HTML/Markdown 作品 → 管理员审核 → 审核通过且展示的模板才进入市场。
 
-| 端点 | 方法 | 说明 |
-|---|---|---|
-| `/api/content-templates/public` | GET | 公开模板列表（无需登录） |
-| `/api/content-templates/public/:id/preview` | GET | 公开模板预览 |
-| `/api/content-templates` | GET | 当前用户模板列表 |
-| `/api/content-templates/scenes` | GET | 模板场景分类 |
-| `/api/content-templates/:id` | GET | 模板详情 |
-| `/api/content-templates/:id/content` | GET | 模板原文内容 |
-| `/api/content-templates` | POST | 创建模板 |
-| `/api/content-templates/:id` | PUT | 更新模板（仅所有者） |
-| `/api/content-templates/:id` | DELETE | 删除模板（仅所有者） |
-| `/api/content-templates/:id/use` | POST | 基于模板创建文件 |
+| 端点 | 方法 | 权限 | 说明 |
+|---|---|---|---|
+| `/api/content-templates/market` | GET | 匿名 | 市场列表（仅 approved+visible+分类启用）。支持 category/keyword/fileType/sort/page/limit |
+| `/api/content-templates/market/:id` | GET | 匿名 | 市场详情（仅 approved+visible） |
+| `/api/content-templates/market/:id/preview` | GET | 匿名 | 市场预览内容（iframe 缩略图/详情页） |
+| `/api/content-templates/categories` | GET | 匿名 | 启用中的分类列表 |
+| `/api/content-templates/mine` | GET | 登录 | 我的模板（所有状态）。支持 status/page/limit |
+| `/api/content-templates` | POST | 登录 | 提交模板（默认进入 pending 审核） |
+| `/api/content-templates/:id` | GET | 登录 | 模板详情（作者/管理员，或 approved+visible） |
+| `/api/content-templates/:id/content` | GET | 登录 | 模板原文（作者/管理员，或 approved+visible） |
+| `/api/content-templates/:id` | PUT | 登录 | 编辑模板（作者；approved/rejected 编辑后回退 pending） |
+| `/api/content-templates/:id` | DELETE | 登录 | 归档模板（软删除为 archived，作者或管理员） |
+| `/api/content-templates/:id/use` | POST | 登录 | 使用计数（仅 approved+visible 生效） |
+| `/api/content-templates/:id/review` | POST | admin | 审核（status=approved/rejected + 可选 visibility + reviewNote） |
+| `/api/content-templates/:id/admin` | PATCH | admin | 运营配置（categoryId/visibility/featured/sortOrder） |
+| `/api/content-templates/admin/list` | GET | admin | 全量查询（支持 status/visibility/categoryId/keyword/uploaderId） |
+| `/api/content-templates/admin/:id/content` | GET | admin | 任意状态模板内容 |
+| `/api/content-templates/admin/categories` | GET/POST | admin | 分类列表（含禁用）/ 新增分类 |
+| `/api/content-templates/admin/categories/:id` | PUT/DELETE | admin | 编辑分类 / 删除（有模板则改为停用） |
 
-> 另有 `GET /api/templates`（样式模板，渲染皮肤）。
+模板状态：`draft` / `pending`（待审核）/ `approved`（通过）/ `rejected`（拒绝）/ `archived`（归档）。
+市场展示条件：`status='approved' AND visibility='visible' AND 分类 is_enabled=1`。
+
+> 另有 `GET /api/templates`（样式模板，渲染皮肤），区别于本内容模板市场。
 
 ## 管理后台（仅 admin）
 

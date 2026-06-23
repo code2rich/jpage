@@ -2174,6 +2174,19 @@ html:not(.light) {
   color: var(--primary);
 }
 
+/* 上传来源徽章：中性低饱和，仿 file-badge-type 风格 */
+.file-badge-source {
+  background: var(--bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+/* 上传者徽章：柔和的绿色调 */
+.file-badge-uploader {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+}
+
 html:not(.light) {
   .version-panel {
     box-shadow: -4px 0 20px rgba(0, 0, 0, 0.35);
@@ -2181,6 +2194,15 @@ html:not(.light) {
 
   .file-badge-version {
     background: rgba(96, 165, 250, 0.15);
+  }
+
+  .file-badge-source {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .file-badge-uploader {
+    background: rgba(16, 185, 129, 0.18);
+    color: #34d399;
   }
 
   .version-item-current {
@@ -3202,3 +3224,113 @@ html:not(.light) {
   background: rgba(220, 38, 38, 0.08);
 }
 
+
+/* ============================================================
+   内容模板市场（独立页面 #/market）
+   ============================================================ */
+
+.market-page { max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+.market-header {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 16px; margin-bottom: 20px; flex-wrap: wrap;
+}
+.market-header-left { display: flex; align-items: center; gap: 12px; }
+.market-back { color: var(--text-secondary); text-decoration: none; font-size: 14px; white-space: nowrap; }
+.market-back:hover { color: var(--primary); }
+.market-title { font-size: 22px; font-weight: 700; margin: 0; color: var(--text); }
+.market-nav { display: flex; gap: 6px; flex-wrap: wrap; }
+.market-nav-item {
+  padding: 6px 14px; border-radius: 6px; text-decoration: none;
+  font-size: 14px; color: var(--text-secondary); border: 1px solid transparent;
+}
+.market-nav-item:hover { color: var(--primary); background: var(--bg-secondary, #f1f5f9); }
+.market-nav-item.active { color: var(--primary); border-color: var(--primary); background: var(--primary-light, #ede9fe); }
+.market-nav-item.admin-only { color: var(--danger); }
+
+/* 市场首页工具条 */
+.market-toolbar { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+.market-search-wrap { flex: 1; min-width: 240px; }
+.market-search-wrap .search-input {
+  width: 100%; padding: 8px 12px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--bg); color: var(--text); font-size: 14px;
+}
+.market-sort { flex-shrink: 0; }
+.market-select {
+  padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); font-size: 14px; cursor: pointer;
+}
+
+/* 详情页 */
+.market-detail { display: grid; grid-template-columns: 1fr 320px; gap: 20px; }
+@media (max-width: 768px) { .market-detail { grid-template-columns: 1fr; } }
+.market-detail-preview { min-height: 400px; }
+.market-detail-iframe {
+  width: 100%; min-height: 60vh; border: 1px solid var(--border);
+  border-radius: 8px; background: #fff;
+}
+.market-detail-meta { display: flex; flex-direction: column; gap: 12px; }
+.market-detail-title { font-size: 20px; font-weight: 700; margin: 0; color: var(--text); }
+.market-detail-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+
+/* 提交/编辑表单 */
+.market-form { max-width: 720px; display: flex; flex-direction: column; gap: 16px; }
+.market-form-title { font-size: 16px; font-weight: 600; margin: 0; color: var(--text); }
+.market-form-row { display: flex; flex-direction: column; gap: 6px; }
+.market-form-label { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+.market-input {
+  padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); font-size: 14px;
+}
+.market-input-narrow { max-width: 120px; }
+.market-textarea {
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5;
+  resize: vertical; font-family: inherit;
+}
+.market-textarea-code {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px; line-height: 1.6;
+}
+.market-form-preview { display: flex; flex-direction: column; gap: 6px; }
+.market-form-preview-iframe {
+  width: 100%; min-height: 300px; border: 1px solid var(--border);
+  border-radius: 6px; background: #fff;
+}
+.market-form-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.market-form-hint { font-size: 12px; color: var(--text-secondary); margin: 0; }
+
+/* 列表（我的上架 / 管理） */
+.market-list { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.mine-item {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; flex-wrap: wrap;
+}
+.mine-item-main { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 200px; }
+.mine-item-title { font-size: 14px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mine-item-meta { font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mine-item-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.mine-review-note {
+  font-size: 12px; color: var(--danger); background: rgba(220, 38, 38, 0.08);
+  padding: 6px 10px; border-radius: 4px; margin-top: 4px;
+}
+
+/* 状态徽章 */
+.ct-status-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  font-size: 11px; font-weight: 500; line-height: 1.4;
+}
+.ct-status-draft { background: var(--bg-secondary, #f1f5f9); color: var(--text-secondary); }
+.ct-status-pending { background: #fef3c7; color: #92400e; }
+.ct-status-approved { background: #d1fae5; color: #065f46; }
+.ct-status-rejected { background: #fee2e2; color: #991b1b; }
+.ct-status-archived { background: var(--bg-secondary, #f1f5f9); color: var(--text-secondary); opacity: 0.7; }
+
+.ct-badge-featured { background: #fef3c7; color: #92400e; }
+
+/* 管理页 */
+.market-admin-tabs { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.market-cat-mgr-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.market-cat-add { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.market-cat-add .market-input { flex: 1; min-width: 140px; }

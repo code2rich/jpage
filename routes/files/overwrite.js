@@ -1,14 +1,16 @@
 // 按 ID 覆盖上传（预览页专用）：multipart / JSON。自动保留版本历史。
-// 从 routes/files.js 提取，行为保持不变。挂在共享 router 上。
+// 从 routes/files.js 提取。覆盖前校验所有权（admin 或所有者），避免任意登录用户
+// 拿到公开文件 id 即可覆盖他人文件。挂在共享 router 上。
 
 const fs = require('fs');
 const path = require('path');
 const { dbGet } = require('../../lib/db');
 const { requireAuth } = require('../../lib/middleware/auth');
-const { unlinkQuiet, clientIp, decodeFilename } = require('../../lib/util');
+const { unlinkQuiet, clientIp, decodeFilename, resolveUploadSource, currentUserId } = require('../../lib/util');
 const { UPLOAD_DIR } = require('../../lib/paths');
 const { isFtsIndexable, indexFileContent } = require('../../lib/fts');
 const { uploadLimiter, upload, largeJson, MAX_FILE_SIZE, backupAndApplyVersion } = require('./_shared');
+const { checkFileOwnership } = require('../../lib/middleware/files');
 const logger = require('../../logger');
 
 function registerOverwrite(router) {
@@ -19,10 +21,18 @@ function registerOverwrite(router) {
     const ext = path.extname(req.file.originalname).toLowerCase();
     let fileType = 'html';
     if (ext === '.md' || ext === '.markdown') fileType = 'markdown';
+    const source = resolveUploadSource(req);
 
     try {
       const file = await dbGet('SELECT * FROM files WHERE id = ?', [req.params.id]);
-      if (!file) return res.status(404).json({ error: '文件不存在' });
+      if (!file) {
+        await unlinkQuiet(path.join(UPLOAD_DIR, req.file.filename));
+        return res.status(404).json({ error: '文件不存在' });
+      }
+      if (!checkFileOwnership(req, file)) {
+        await unlinkQuiet(path.join(UPLOAD_DIR, req.file.filename));
+        return res.status(403).json({ error: '无权操作此文件' });
+      }
 
       // 校验文件类型
       if (file.file_type !== fileType) {
@@ -33,7 +43,9 @@ function registerOverwrite(router) {
       const { version } = await backupAndApplyVersion(
         file,
         { storedName: req.file.filename, size: req.file.size },
-        file.uploaded_by
+        file.uploaded_by,
+        source,
+        currentUserId(req)
       );
 
       // FTS 索引同步
@@ -41,7 +53,7 @@ function registerOverwrite(router) {
         indexFileContent(file.id, req.file.filename);
       }
 
-      logger.audit('file.overwrite', { fileId: file.id, fileName: file.original_name, version, fileType, size: req.file.size, ip: clientIp(req) });
+      logger.audit('file.overwrite', { fileId: file.id, fileName: file.original_name, version, fileType, size: req.file.size, userId: currentUserId(req), ip: clientIp(req) });
       res.json({
         id: file.id,
         overwritten: true,
@@ -66,6 +78,7 @@ function registerOverwrite(router) {
     try {
       const file = await dbGet('SELECT * FROM files WHERE id = ?', [req.params.id]);
       if (!file) return res.status(404).json({ error: '文件不存在' });
+      if (!checkFileOwnership(req, file)) return res.status(403).json({ error: '无权操作此文件' });
 
       const size = Buffer.byteLength(content, 'utf-8');
       if (size > MAX_FILE_SIZE) return res.status(400).json({ error: '文件大小超过50MB限制' });
@@ -85,7 +98,9 @@ function registerOverwrite(router) {
       const { version } = await backupAndApplyVersion(
         file,
         { storedName, size },
-        file.uploaded_by
+        file.uploaded_by,
+        resolveUploadSource(req),
+        currentUserId(req)
       );
 
       // FTS 索引同步
@@ -93,7 +108,7 @@ function registerOverwrite(router) {
         indexFileContent(file.id, storedName);
       }
 
-      logger.audit('file.overwrite', { fileId: file.id, fileName: file.original_name, version, fileType: file.file_type, size, ip: clientIp(req) });
+      logger.audit('file.overwrite', { fileId: file.id, fileName: file.original_name, version, fileType: file.file_type, size, userId: currentUserId(req), ip: clientIp(req) });
       res.json({
         id: file.id,
         overwritten: true,

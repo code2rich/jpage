@@ -24,16 +24,19 @@ class HttpError extends Error {
  * @param {object} opts
  * @param {string} opts.base - 服务地址（如 http://localhost:8858），无尾斜杠
  * @param {string} [opts.token] - Bearer token；为空时不发 Authorization 头
+ * @param {string} [opts.source] - 上传来源标记，写入 X-Upload-Source 头，默认 'cli'
  * @param {function} [opts.fetchImpl] - 可选 fetch 实现（测试注入）
  * @returns {object}
  */
-function createClient({ base, token, fetchImpl } = {}) {
+function createClient({ base, token, source = 'cli', fetchImpl } = {}) {
   const f = fetchImpl || fetch;
 
   async function raw(path, init = {}) {
     const url = base + path;
     const headers = { ...(init.headers || {}) };
     if (token) headers.Authorization = 'Bearer ' + token;
+    // 标记来源为 CLI：后端据此落库 upload_source（认证 token 无法区分 CLI/MCP）
+    if (source) headers['x-upload-source'] = source;
 
     let res;
     try {

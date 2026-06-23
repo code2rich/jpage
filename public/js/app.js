@@ -38,6 +38,7 @@ async function loadHome() { const m = await import('./pages/home.js?v=1.5.2'); r
 async function loadLogin() { const m = await import('./pages/login.js?v=1.5.2'); return m.renderLogin; }
 async function loadLanding() { const m = await import('./pages/landing.js?v=1.5.2'); return m.renderLanding; }
 async function loadPreview() { const m = await import('./pages/preview.js?v=1.5.2'); return m.renderPreview; }
+async function loadMarket() { const m = await import('./pages/market.js?v=1.5.2'); return m.renderMarket; }
 
 function route() {
   const hash = location.hash.replace('#', '') || '/';
@@ -62,6 +63,16 @@ function route() {
   if (hash.startsWith('/view/')) {
     loadPreview().then((renderPreview) => {
       renderPreview(appEl, hash);
+      setupThemeToggle(appEl);
+    });
+    return;
+  }
+
+  // 内容模板市场（独立路由，需登录）
+  if (hash === '/market' || hash.startsWith('/market/')) {
+    if (!state.currentUser) { navigate('/login'); return; }
+    loadMarket().then((renderMarket) => {
+      renderMarket(appEl, hash, navigate);
       setupThemeToggle(appEl);
     });
     return;

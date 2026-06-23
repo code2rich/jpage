@@ -147,6 +147,10 @@ test('CLI upload: 上传 HTML 文件成功', async () => {
   assert.strictEqual(s.code(), 0, '不应非零退出');
   assert.match(s.out(), /上传成功/);
   assert.match(s.out(), /\/s\//);
+  // CLI 客户端注入 X-Upload-Source: cli，后端应据此落库 upload_source
+  const id = s.out().match(/#(\d+)/)[1];
+  const res = await agent.get('/api/files/' + id);
+  assert.strictEqual(res.body.upload_source, 'cli');
 });
 
 test('CLI upload: 无文件参数 → UsageError 退出 2', async () => {

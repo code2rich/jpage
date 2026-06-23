@@ -5,7 +5,6 @@ import { toast } from '../components/toast.js';
 import { dialogModal } from '../components/dialog.js';
 import { escapeHtml, formatSize, relativeTime, esc, buildSkeletonCards, openModal, closeModal, copyToClipboard } from '../utils.js';
 import { state, navigate } from '../app.js';
-import { openContentTemplateMarket } from './content-templates.js';
 import { openShareSettings } from './share-settings.js';
 import { openUsersModal } from '../components/users-modal.js';
 import { openTokensModal } from '../components/tokens-modal.js';
@@ -27,6 +26,16 @@ let viewMode = (() => { try { return localStorage.getItem(FILE_VIEW_KEY) === 'ca
 function setViewMode(mode) {
   viewMode = mode;
   try { localStorage.setItem(FILE_VIEW_KEY, mode); } catch {}
+}
+
+// 上传来源徽章文案映射（后端 upload_source: web/cli/mcp）
+const UPLOAD_SOURCE_LABELS = { web: '网页', cli: 'CLI', mcp: 'MCP' };
+function sourceBadge(source) {
+  const label = UPLOAD_SOURCE_LABELS[source];
+  return label ? `<span class="file-badge file-badge-source" title="上传方式">${label}</span>` : '';
+}
+function uploaderBadge(name) {
+  return name ? `<span class="file-badge file-badge-uploader" title="上传者">👤 ${escapeHtml(name)}</span>` : '';
 }
 
 // 卡片缩略图懒加载管线（镜像 content-templates.js 的 thumbObserver：rootMargin 预加载 + 最多 3 并发）
@@ -205,7 +214,7 @@ function renderHome(container) {
     settingsDropdown.querySelector('#menu-item-content-templates').addEventListener('click', () => {
       settingsDropdown.classList.remove('open');
       settingsBtn.setAttribute('aria-expanded', 'false');
-      openContentTemplateMarket();
+      navigate('#/market');
     });
     settingsDropdown.querySelector('#menu-item-mcp').addEventListener('click', () => {
       settingsDropdown.classList.remove('open');
@@ -231,6 +240,11 @@ function renderHome(container) {
       settingsDropdown.classList.remove('open');
       settingsBtn.setAttribute('aria-expanded', 'false');
       openProfileModal();
+    });
+    settingsDropdown.querySelector('#menu-item-market-admin')?.addEventListener('click', () => {
+      settingsDropdown.classList.remove('open');
+      settingsBtn.setAttribute('aria-expanded', 'false');
+      navigate('#/market/admin');
     });
     settingsDropdown.querySelector('#menu-item-users')?.addEventListener('click', () => {
       settingsDropdown.classList.remove('open');
@@ -584,7 +598,7 @@ function renderFileList(container, list, files) {
         <div class="file-meta">
           <div class="file-name">${safeName}</div>
           ${snippetHtml}
-          <div class="file-subline">${typeBadge}${privacyBadge}${versionBadge}${tagBadges}${categoryBadge}${viewBadge}<span class="file-detail">${size} · ${timeStr}</span></div>
+          <div class="file-subline">${typeBadge}${privacyBadge}${versionBadge}${tagBadges}${categoryBadge}${viewBadge}${sourceBadge(f.upload_source)}${uploaderBadge(f.uploader_name)}<span class="file-detail">${size} · ${timeStr}</span></div>
         </div>
       </div>
       <div class="file-actions">
@@ -752,7 +766,7 @@ function renderCardList(container, list, files) {
       <button type="button" class="file-card-icon-btn file-card-star ${f.starred ? 'starred' : ''}" data-id="${f.id}" aria-label="收藏" title="收藏">${f.starred ? '★' : '☆'}</button>
       <button type="button" class="file-card-icon-btn file-card-copy" data-id="${f.id}" aria-label="复制链接" title="复制链接"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button>
       <div class="file-card-name" title="${safeName}">${safeName}</div>
-      <div class="file-card-badges"><span class="file-badge file-badge-type">${iconText}</span>${privacyBadge}${versionBadge}${tagBadges}</div>
+      <div class="file-card-badges"><span class="file-badge file-badge-type">${iconText}</span>${privacyBadge}${versionBadge}${tagBadges}${sourceBadge(f.upload_source)}${uploaderBadge(f.uploader_name)}</div>
       <div class="file-card-footer"><span>${size}</span><span>${timeStr}</span></div>
     `;
     el.setAttribute('role', 'button');

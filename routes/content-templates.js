@@ -1,89 +1,91 @@
-// 内容模板市场路由。从 server.js 提取，行为保持不变。
-// 挂载点：/api/content-templates
+// 内容模板市场路由。挂载点：/api/content-templates
+//
+// 重构后的语义：用户上架 → 管理员审核 → approved+visible 才进市场。
+// 分类由 template_market_categories 表驱动（管理员可配置）。
+// 旧 scene 概念废弃；旧 is_public 字段保留但不再被市场逻辑依赖。
 
 const express = require('express');
 const { dbGet, dbRun, dbAll } = require('../lib/db');
-const { requireAuth } = require('../lib/middleware/auth');
-const { clientIp } = require('../lib/util');
+const { requireAuth, requireAdmin } = require('../lib/middleware/auth');
+const { clientIp, now } = require('../lib/util');
 const logger = require('../logger');
 
 const router = express.Router();
 
 const CONTENT_TEMPLATE_MAX_SIZE = 512000; // 500KB
-const CONTENT_TEMPLATE_SCENES = ['dashboard', 'report', 'resume', 'landing', 'note', 'presentation', 'card', 'email', 'other'];
+const FILE_TYPES = ['html', 'markdown'];
+const STATUS_VALUES = ['draft', 'pending', 'approved', 'rejected', 'archived'];
+const VISIBILITY_VALUES = ['visible', 'hidden'];
 
-// 公开模板列表（无需登录）
-router.get('/public', async (req, res) => {
+// 市场展示条件片段：approved + visible + 分类启用
+const MARKET_VISIBLE_COND = `ct.status = 'approved' AND ct.visibility = 'visible' AND COALESCE(c.is_enabled, 0) = 1`;
+
+// 分页参数解析
+function parsePaging(req, defaultLimit = 12) {
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(20, Math.max(1, parseInt(req.query.limit) || defaultLimit));
+  const offset = (page - 1) * limit;
+  return { page, limit, offset };
+}
+
+// ============================================================
+// 公开端点（匿名可访问）—— 市场浏览
+// ============================================================
+
+// 公开分类列表（仅启用分类）
+router.get('/categories', async (req, res) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(20, Math.max(1, parseInt(req.query.limit) || 8));
-    const offset = (page - 1) * limit;
-    const { scene } = req.query;
-
-    const conditions = ['ct.is_public = 1'];
-    const params = [];
-    if (scene) { conditions.push('ct.scene = ?'); params.push(scene); }
-    const where = 'WHERE ' + conditions.join(' AND ');
-
-    const total = await dbGet(`SELECT COUNT(*) as count FROM content_templates ct ${where}`, params);
-    const templates = await dbAll(
-      `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.scene, ct.style_tags, ct.use_count
-       FROM content_templates ct
-       ${where} ORDER BY ct.use_count DESC LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
+    const rows = await dbAll(
+      `SELECT id, slug, name, description FROM template_market_categories
+       WHERE is_enabled = 1 ORDER BY sort_order ASC, id ASC`
     );
-    res.json({
-      templates,
-      pagination: { page, limit, total: total.count, totalPages: Math.ceil(total.count / limit) }
-    });
+    res.json({ categories: rows });
   } catch (e) {
-    logger.error({ type: 'app', msg: '获取公开模板列表失败', error: e.message });
-    res.status(500).json({ error: '获取模板列表失败' });
+    logger.error({ type: 'app', msg: '获取分类列表失败', error: e.message });
+    res.status(500).json({ error: '获取分类列表失败' });
   }
 });
 
-// 公开模板预览（无需登录）
-router.get('/public/:id/preview', async (req, res) => {
+// 市场首页列表（匿名）
+router.get('/market', async (req, res) => {
   try {
-    const t = await dbGet(
-      'SELECT id, title, file_type, content FROM content_templates WHERE id = ? AND is_public = 1',
-      [req.params.id]
-    );
-    if (!t) return res.status(404).json({ error: '模板不存在' });
-    res.json({ id: t.id, title: t.title, file_type: t.file_type, content: t.content });
-  } catch (e) {
-    res.status(500).json({ error: '获取模板预览失败' });
-  }
-});
+    const { page, limit, offset } = parsePaging(req);
+    const { category, keyword, fileType, sort } = req.query;
 
-router.get('/', requireAuth, async (req, res) => {
-  try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(20, Math.max(1, parseInt(req.query.limit) || 10));
-    const offset = (page - 1) * limit;
-    const { scene, keyword, fileType, sort } = req.query;
-
-    const conditions = [];
+    const conditions = [MARKET_VISIBLE_COND];
     const params = [];
-    if (req.userRole !== 'admin') {
-      conditions.push('(ct.is_public = 1 OR ct.uploaded_by = ?)');
-      params.push(req.userId);
+    if (category) {
+      conditions.push('(c.slug = ? OR c.name = ?)');
+      params.push(category, category);
     }
-    if (scene) { conditions.push('ct.scene = ?'); params.push(scene); }
     if (fileType) { conditions.push('ct.file_type = ?'); params.push(fileType); }
     if (keyword) {
       conditions.push('(ct.title LIKE ? OR ct.description LIKE ?)');
       params.push(`%${keyword}%`, `%${keyword}%`);
     }
-    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
-    const orderBy = sort === 'created_at' ? 'ct.created_at DESC' : 'ct.use_count DESC';
+    const where = 'WHERE ' + conditions.join(' AND ');
 
-    const total = await dbGet(`SELECT COUNT(*) as count FROM content_templates ct ${where}`, params);
+    // 排序：featured 优先，再按 sort_order / use_count / created_at
+    let orderBy;
+    if (sort === 'created_at') {
+      orderBy = 'ct.featured DESC, ct.created_at DESC, ct.sort_order ASC';
+    } else if (sort === 'featured') {
+      orderBy = 'ct.featured DESC, ct.sort_order ASC, ct.use_count DESC';
+    } else {
+      orderBy = 'ct.featured DESC, ct.use_count DESC, ct.sort_order ASC';
+    }
+
+    const total = await dbGet(
+      `SELECT COUNT(*) as count FROM content_templates ct LEFT JOIN template_market_categories c ON ct.category_id = c.id ${where}`,
+      params
+    );
     const templates = await dbAll(
-      `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.scene, ct.style_tags,
-              ct.uploaded_by, ct.use_count, ct.is_public, ct.created_at, ct.updated_at,
-              u.username as uploader_name
-       FROM content_templates ct LEFT JOIN users u ON ct.uploaded_by = u.id
+      `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.use_count, ct.featured,
+              ct.created_at, ct.published_at, ct.category_id, c.slug AS category_slug, c.name AS category_name,
+              u.username AS uploader_name
+       FROM content_templates ct
+       LEFT JOIN template_market_categories c ON ct.category_id = c.id
+       LEFT JOIN users u ON ct.uploaded_by = u.id
        ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
@@ -92,39 +94,123 @@ router.get('/', requireAuth, async (req, res) => {
       pagination: { page, limit, total: total.count, totalPages: Math.ceil(total.count / limit) }
     });
   } catch (e) {
-    logger.error({ type: 'app', msg: '获取内容模板列表失败', error: e.message });
-    res.status(500).json({ error: '获取内容模板列表失败' });
+    logger.error({ type: 'app', msg: '获取市场模板列表失败', error: e.message });
+    res.status(500).json({ error: '获取市场模板列表失败' });
   }
 });
 
-router.get('/scenes', requireAuth, async (req, res) => {
-  res.json({ scenes: CONTENT_TEMPLATE_SCENES });
-});
-
-router.get('/:id', requireAuth, async (req, res) => {
+// 市场详情（匿名，仅 approved+visible）
+router.get('/market/:id', async (req, res) => {
   try {
     const t = await dbGet(
-      `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.scene, ct.style_tags,
-              ct.uploaded_by, ct.use_count, ct.is_public, ct.created_at, ct.updated_at,
-              u.username as uploader_name
-       FROM content_templates ct LEFT JOIN users u ON ct.uploaded_by = u.id
-       WHERE ct.id = ?`, [req.params.id]
+      `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.use_count, ct.featured,
+              ct.created_at, ct.published_at, ct.category_id,
+              c.slug AS category_slug, c.name AS category_name,
+              u.username AS uploader_name
+       FROM content_templates ct
+       LEFT JOIN template_market_categories c ON ct.category_id = c.id
+       LEFT JOIN users u ON ct.uploaded_by = u.id
+       WHERE ct.id = ? AND ${MARKET_VISIBLE_COND}`,
+      [req.params.id]
     );
-    if (!t) return res.status(404).json({ error: '模板不存在' });
-    if (!t.is_public && req.userRole !== 'admin' && t.uploaded_by !== req.userId) {
-      return res.status(403).json({ error: '无权访问' });
-    }
+    if (!t) return res.status(404).json({ error: '模板不存在或未上架' });
     res.json(t);
   } catch (e) {
+    logger.error({ type: 'app', msg: '获取市场模板详情失败', error: e.message });
     res.status(500).json({ error: '获取模板详情失败' });
   }
 });
 
+// 市场预览内容（匿名，用于 iframe 缩略图/详情页）
+router.get('/market/:id/preview', async (req, res) => {
+  try {
+    const t = await dbGet(
+      `SELECT ct.id, ct.title, ct.file_type, ct.content
+       FROM content_templates ct
+       LEFT JOIN template_market_categories c ON ct.category_id = c.id
+       WHERE ct.id = ? AND ${MARKET_VISIBLE_COND}`,
+      [req.params.id]
+    );
+    if (!t) return res.status(404).json({ error: '模板不存在或未上架' });
+    res.json({ id: t.id, title: t.title, file_type: t.file_type, content: t.content });
+  } catch (e) {
+    res.status(500).json({ error: '获取模板预览失败' });
+  }
+});
+
+// ============================================================
+// 登录用户端点 —— 提交、我的上架、编辑
+// ============================================================
+
+// 我的模板列表（所有状态）
+router.get('/mine', requireAuth, async (req, res) => {
+  try {
+    const { page, limit, offset } = parsePaging(req);
+    const { status } = req.query;
+
+    const conditions = ['ct.uploaded_by = ?'];
+    const params = [req.userId];
+    if (status && STATUS_VALUES.includes(status)) {
+      conditions.push('ct.status = ?');
+      params.push(status);
+    }
+    const where = 'WHERE ' + conditions.join(' AND ');
+
+    const total = await dbGet(`SELECT COUNT(*) as count FROM content_templates ct ${where}`, params);
+    const templates = await dbAll(
+      `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.status, ct.visibility,
+              ct.review_note, ct.use_count, ct.created_at, ct.submitted_at, ct.published_at,
+              ct.category_id, c.slug AS category_slug, c.name AS category_name
+       FROM content_templates ct
+       LEFT JOIN template_market_categories c ON ct.category_id = c.id
+       ${where} ORDER BY ct.created_at DESC LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+    res.json({
+      templates,
+      pagination: { page, limit, total: total.count, totalPages: Math.ceil(total.count / limit) }
+    });
+  } catch (e) {
+    logger.error({ type: 'app', msg: '获取我的模板失败', error: e.message });
+    res.status(500).json({ error: '获取我的模板失败' });
+  }
+});
+
+// 模板详情（作者或管理员）
+router.get('/:id', requireAuth, async (req, res) => {
+  try {
+    const t = await dbGet(
+      `SELECT ct.*, c.slug AS category_slug, c.name AS category_name, u.username AS uploader_name
+       FROM content_templates ct
+       LEFT JOIN template_market_categories c ON ct.category_id = c.id
+       LEFT JOIN users u ON ct.uploaded_by = u.id
+       WHERE ct.id = ?`,
+      [req.params.id]
+    );
+    if (!t) return res.status(404).json({ error: '模板不存在' });
+    if (req.userRole !== 'admin' && t.uploaded_by !== req.userId) {
+      // 非作者非管理员：仅当 approved+visible 才可看元数据
+      if (!(t.status === 'approved' && t.visibility === 'visible')) {
+        return res.status(403).json({ error: '无权访问' });
+      }
+    }
+    res.json(t);
+  } catch (e) {
+    logger.error({ type: 'app', msg: '获取模板详情失败', error: e.message });
+    res.status(500).json({ error: '获取模板详情失败' });
+  }
+});
+
+// 模板内容（作者或管理员，或已上架的公开内容）
 router.get('/:id/content', requireAuth, async (req, res) => {
   try {
-    const t = await dbGet('SELECT id, title, file_type, content, is_public, uploaded_by FROM content_templates WHERE id = ?', [req.params.id]);
+    const t = await dbGet(
+      'SELECT id, title, file_type, content, status, visibility, uploaded_by FROM content_templates WHERE id = ?',
+      [req.params.id]
+    );
     if (!t) return res.status(404).json({ error: '模板不存在' });
-    if (!t.is_public && req.userRole !== 'admin' && t.uploaded_by !== req.userId) {
+    const isMarketVisible = t.status === 'approved' && t.visibility === 'visible';
+    if (!isMarketVisible && req.userRole !== 'admin' && t.uploaded_by !== req.userId) {
       return res.status(403).json({ error: '无权访问' });
     }
     res.json({ id: t.id, title: t.title, file_type: t.file_type, content: t.content });
@@ -133,50 +219,80 @@ router.get('/:id/content', requireAuth, async (req, res) => {
   }
 });
 
+// 提交模板（默认进入 pending）
 router.post('/', requireAuth, async (req, res) => {
-  const { title, description, fileType, scene, styleTags, content, isPublic } = req.body || {};
+  const { title, description, fileType, categoryId, content } = req.body || {};
   if (!title || !title.trim()) return res.status(400).json({ error: '模板标题不能为空' });
   if (!content) return res.status(400).json({ error: '样例内容不能为空' });
   if (Buffer.byteLength(content, 'utf-8') > CONTENT_TEMPLATE_MAX_SIZE) {
     return res.status(400).json({ error: '样例内容不能超过 500KB' });
   }
   const ft = fileType || 'html';
-  if (ft !== 'html' && ft !== 'markdown') return res.status(400).json({ error: '文件类型仅支持 html 或 markdown' });
+  if (!FILE_TYPES.includes(ft)) return res.status(400).json({ error: '文件类型仅支持 html 或 markdown' });
+  if (!categoryId) return res.status(400).json({ error: '请选择分类' });
+
   try {
+    // 校验分类存在且启用
+    const cat = await dbGet('SELECT id FROM template_market_categories WHERE id = ? AND is_enabled = 1', [categoryId]);
+    if (!cat) return res.status(400).json({ error: '分类不存在或已停用' });
+
+    const ts = now();
     const result = await dbRun(
-      `INSERT INTO content_templates (title, description, file_type, scene, style_tags, content, uploaded_by, is_public) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [title.trim(), description || null, ft, scene || null, styleTags || null, content, req.userId, isPublic !== false ? 1 : 0]
+      `INSERT INTO content_templates
+        (title, description, file_type, content, uploaded_by, category_id,
+         status, visibility, submitted_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', 'hidden', ?)`,
+      [title.trim(), description || null, ft, content, req.userId, categoryId, ts]
     );
-    logger.audit('content_template.create', { templateId: result.lastID, title: title.trim(), scene, ip: clientIp(req) });
-    res.json({ id: result.lastID, title: title.trim() });
+    logger.audit('content_template.submit', { templateId: result.lastID, title: title.trim(), categoryId, ip: clientIp(req) });
+    res.json({ id: result.lastID, title: title.trim(), status: 'pending' });
   } catch (e) {
     logger.error({ type: 'app', msg: '创建内容模板失败', error: e.message });
     res.status(500).json({ error: '创建内容模板失败' });
   }
 });
 
+// 编辑模板（作者）
 router.put('/:id', requireAuth, async (req, res) => {
   try {
-    const t = await dbGet('SELECT id, uploaded_by FROM content_templates WHERE id = ?', [req.params.id]);
+    const t = await dbGet('SELECT id, uploaded_by, status FROM content_templates WHERE id = ?', [req.params.id]);
     if (!t) return res.status(404).json({ error: '模板不存在' });
     if (req.userRole !== 'admin' && t.uploaded_by !== req.userId) return res.status(403).json({ error: '无权操作' });
+    if (t.status === 'archived') return res.status(400).json({ error: '已归档模板不可编辑' });
 
-    const { title, description, scene, styleTags, content, isPublic } = req.body || {};
+    const { title, description, fileType, categoryId, content } = req.body || {};
     const sets = [];
     const params = [];
-    if (title !== undefined) { sets.push('title = ?'); params.push(title.trim()); }
+
+    if (title !== undefined) {
+      if (!title.trim()) return res.status(400).json({ error: '模板标题不能为空' });
+      sets.push('title = ?'); params.push(title.trim());
+    }
     if (description !== undefined) { sets.push('description = ?'); params.push(description); }
-    if (scene !== undefined) { sets.push('scene = ?'); params.push(scene); }
-    if (styleTags !== undefined) { sets.push('style_tags = ?'); params.push(styleTags); }
+    if (fileType !== undefined) {
+      if (!FILE_TYPES.includes(fileType)) return res.status(400).json({ error: '文件类型仅支持 html 或 markdown' });
+      sets.push('file_type = ?'); params.push(fileType);
+    }
+    if (categoryId !== undefined) {
+      const cat = await dbGet('SELECT id FROM template_market_categories WHERE id = ? AND is_enabled = 1', [categoryId]);
+      if (!cat) return res.status(400).json({ error: '分类不存在或已停用' });
+      sets.push('category_id = ?'); params.push(categoryId);
+    }
     if (content !== undefined) {
       if (Buffer.byteLength(content, 'utf-8') > CONTENT_TEMPLATE_MAX_SIZE) {
         return res.status(400).json({ error: '样例内容不能超过 500KB' });
       }
       sets.push('content = ?'); params.push(content);
     }
-    if (isPublic !== undefined) { sets.push('is_public = ?'); params.push(isPublic ? 1 : 0); }
+
     if (sets.length === 0) return res.json({ success: true });
 
+    // approved 编辑后回退到 pending（避免绕过审核）；pending/pending 保持 pending
+    // 已 rejected 编辑后变 pending（重新提交）
+    if (t.status === 'approved' || t.status === 'rejected') {
+      sets.push('status = ?', 'submitted_at = ?', 'review_note = NULL');
+      params.push('pending', now());
+    }
     sets.push("updated_at = datetime('now')");
     params.push(req.params.id);
     await dbRun(`UPDATE content_templates SET ${sets.join(', ')} WHERE id = ?`, params);
@@ -188,27 +304,257 @@ router.put('/:id', requireAuth, async (req, res) => {
   }
 });
 
+// 软删除（归档）
 router.delete('/:id', requireAuth, async (req, res) => {
   try {
     const t = await dbGet('SELECT id, uploaded_by FROM content_templates WHERE id = ?', [req.params.id]);
     if (!t) return res.status(404).json({ error: '模板不存在' });
     if (req.userRole !== 'admin' && t.uploaded_by !== req.userId) return res.status(403).json({ error: '无权操作' });
-    await dbRun('DELETE FROM content_templates WHERE id = ?', [req.params.id]);
-    logger.audit('content_template.delete', { templateId: parseInt(req.params.id), ip: clientIp(req) });
+    await dbRun(
+      `UPDATE content_templates SET status = 'archived', visibility = 'hidden', updated_at = datetime('now') WHERE id = ?`,
+      [req.params.id]
+    );
+    logger.audit('content_template.archive', { templateId: parseInt(req.params.id), ip: clientIp(req) });
     res.json({ success: true });
   } catch (e) {
-    logger.error({ type: 'app', msg: '删除内容模板失败', error: e.message });
-    res.status(500).json({ error: '删除内容模板失败' });
+    logger.error({ type: 'app', msg: '归档内容模板失败', error: e.message });
+    res.status(500).json({ error: '归档内容模板失败' });
   }
 });
 
+// 使用计数（仅对 approved+visible 生效）
 router.post('/:id/use', requireAuth, async (req, res) => {
   try {
+    const t = await dbGet('SELECT id, status, visibility FROM content_templates WHERE id = ?', [req.params.id]);
+    if (!t) return res.status(404).json({ error: '模板不存在' });
+    if (!(t.status === 'approved' && t.visibility === 'visible')) {
+      return res.status(400).json({ error: '模板未上架' });
+    }
     await dbRun('UPDATE content_templates SET use_count = use_count + 1 WHERE id = ?', [req.params.id]);
-    const t = await dbGet('SELECT use_count FROM content_templates WHERE id = ?', [req.params.id]);
-    res.json({ success: true, use_count: t ? t.use_count : 0 });
+    const updated = await dbGet('SELECT use_count FROM content_templates WHERE id = ?', [req.params.id]);
+    res.json({ success: true, use_count: updated ? updated.use_count : 0 });
   } catch (e) {
     res.status(500).json({ error: '记录使用失败' });
+  }
+});
+
+// ============================================================
+// 管理员端点 —— 审核、运营、分类管理
+// ============================================================
+
+// 管理员查询所有模板
+router.get('/admin/list', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { page, limit, offset } = parsePaging(req, 20);
+    const { status, visibility, categoryId, keyword, uploaderId } = req.query;
+
+    const conditions = [];
+    const params = [];
+    if (status && STATUS_VALUES.includes(status)) { conditions.push('ct.status = ?'); params.push(status); }
+    if (visibility && VISIBILITY_VALUES.includes(visibility)) { conditions.push('ct.visibility = ?'); params.push(visibility); }
+    if (categoryId) { conditions.push('ct.category_id = ?'); params.push(categoryId); }
+    if (keyword) {
+      conditions.push('(ct.title LIKE ? OR ct.description LIKE ?)');
+      params.push(`%${keyword}%`, `%${keyword}%`);
+    }
+    if (uploaderId) { conditions.push('ct.uploaded_by = ?'); params.push(uploaderId); }
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    const total = await dbGet(
+      `SELECT COUNT(*) as count FROM content_templates ct ${where}`, params
+    );
+    const templates = await dbAll(
+      `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.status, ct.visibility,
+              ct.review_note, ct.use_count, ct.featured, ct.sort_order,
+              ct.created_at, ct.submitted_at, ct.published_at, ct.reviewed_at,
+              ct.category_id, ct.uploaded_by, ct.content IS NOT NULL AS has_content,
+              c.slug AS category_slug, c.name AS category_name,
+              u.username AS uploader_name, ru.username AS reviewer_name
+       FROM content_templates ct
+       LEFT JOIN template_market_categories c ON ct.category_id = c.id
+       LEFT JOIN users u ON ct.uploaded_by = u.id
+       LEFT JOIN users ru ON ct.reviewed_by = ru.id
+       ${where} ORDER BY ct.created_at DESC LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+    res.json({
+      templates,
+      pagination: { page, limit, total: total.count, totalPages: Math.ceil(total.count / limit) }
+    });
+  } catch (e) {
+    logger.error({ type: 'app', msg: '管理员查询模板失败', error: e.message });
+    res.status(500).json({ error: '查询模板失败' });
+  }
+});
+
+// 审核模板
+router.post('/:id/review', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { status, visibility, reviewNote } = req.body || {};
+    if (!STATUS_VALUES.includes(status)) {
+      return res.status(400).json({ error: '非法状态' });
+    }
+    const t = await dbGet('SELECT id, status FROM content_templates WHERE id = ?', [req.params.id]);
+    if (!t) return res.status(404).json({ error: '模板不存在' });
+
+    const sets = ['status = ?', 'review_note = ?', 'reviewed_by = ?', 'reviewed_at = ?', "updated_at = datetime('now')"];
+    const params = [status, reviewNote || null, req.userId, now()];
+    const ts = now();
+
+    if (status === 'approved') {
+      const vis = visibility === 'visible' ? 'visible' : 'hidden';
+      sets.push('visibility = ?', 'published_at = ?');
+      params.push(vis, ts);
+    } else if (status === 'rejected') {
+      // 拒绝时保持 hidden
+      sets.push('visibility = ?');
+      params.push('hidden');
+    }
+    params.push(req.params.id);
+    await dbRun(`UPDATE content_templates SET ${sets.join(', ')} WHERE id = ?`, params);
+    logger.audit('content_template.review', {
+      templateId: parseInt(req.params.id), status, visibility: status === 'approved' ? visibility : null,
+      ip: clientIp(req)
+    });
+    res.json({ success: true });
+  } catch (e) {
+    logger.error({ type: 'app', msg: '审核模板失败', error: e.message });
+    res.status(500).json({ error: '审核失败' });
+  }
+});
+
+// 管理员运营配置（分类/可见性/精选/排序）
+router.patch('/:id/admin', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const t = await dbGet('SELECT id FROM content_templates WHERE id = ?', [req.params.id]);
+    if (!t) return res.status(404).json({ error: '模板不存在' });
+
+    const { categoryId, visibility, featured, sortOrder } = req.body || {};
+    const sets = [];
+    const params = [];
+
+    if (categoryId !== undefined) {
+      const cat = await dbGet('SELECT id FROM template_market_categories WHERE id = ?', [categoryId]);
+      if (!cat) return res.status(400).json({ error: '分类不存在' });
+      sets.push('category_id = ?'); params.push(categoryId);
+    }
+    if (visibility !== undefined) {
+      if (!VISIBILITY_VALUES.includes(visibility)) return res.status(400).json({ error: '非法可见性' });
+      sets.push('visibility = ?'); params.push(visibility);
+    }
+    if (featured !== undefined) { sets.push('featured = ?'); params.push(featured ? 1 : 0); }
+    if (sortOrder !== undefined) { sets.push('sort_order = ?'); params.push(parseInt(sortOrder) || 0); }
+
+    if (sets.length === 0) return res.json({ success: true });
+    sets.push("updated_at = datetime('now')");
+    params.push(req.params.id);
+    await dbRun(`UPDATE content_templates SET ${sets.join(', ')} WHERE id = ?`, params);
+    logger.audit('content_template.admin_config', { templateId: parseInt(req.params.id), ip: clientIp(req) });
+    res.json({ success: true });
+  } catch (e) {
+    logger.error({ type: 'app', msg: '管理员配置模板失败', error: e.message });
+    res.status(500).json({ error: '配置失败' });
+  }
+});
+
+// 管理员查看模板内容（任意状态）
+router.get('/admin/:id/content', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const t = await dbGet('SELECT id, title, file_type, content FROM content_templates WHERE id = ?', [req.params.id]);
+    if (!t) return res.status(404).json({ error: '模板不存在' });
+    res.json({ id: t.id, title: t.title, file_type: t.file_type, content: t.content });
+  } catch (e) {
+    res.status(500).json({ error: '获取模板内容失败' });
+  }
+});
+
+// ---- 分类管理 ----
+
+// 分类列表（含禁用的）
+router.get('/admin/categories', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const rows = await dbAll(
+      `SELECT mc.*,
+              (SELECT COUNT(*) FROM content_templates ct WHERE ct.category_id = mc.id) AS template_count
+       FROM template_market_categories mc
+       ORDER BY mc.sort_order ASC, mc.id ASC`
+    );
+    res.json({ categories: rows });
+  } catch (e) {
+    logger.error({ type: 'app', msg: '获取分类列表失败', error: e.message });
+    res.status(500).json({ error: '获取分类列表失败' });
+  }
+});
+
+router.post('/admin/categories', requireAuth, requireAdmin, async (req, res) => {
+  const { slug, name, description, sortOrder } = req.body || {};
+  if (!slug || !slug.trim()) return res.status(400).json({ error: '分类 slug 不能为空' });
+  if (!name || !name.trim()) return res.status(400).json({ error: '分类名称不能为空' });
+  if (!/^[a-z0-9-]+$/.test(slug.trim())) {
+    return res.status(400).json({ error: 'slug 只能包含小写字母、数字和连字符' });
+  }
+  try {
+    const result = await dbRun(
+      `INSERT INTO template_market_categories (slug, name, description, sort_order) VALUES (?, ?, ?, ?)`,
+      [slug.trim(), name.trim(), description || null, parseInt(sortOrder) || 0]
+    );
+    logger.audit('content_template.category_create', { categoryId: result.lastID, slug: slug.trim(), ip: clientIp(req) });
+    res.json({ id: result.lastID });
+  } catch (e) {
+    if (String(e.message).includes('UNIQUE')) {
+      return res.status(400).json({ error: 'slug 已存在' });
+    }
+    logger.error({ type: 'app', msg: '创建分类失败', error: e.message });
+    res.status(500).json({ error: '创建分类失败' });
+  }
+});
+
+router.put('/admin/categories/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const existing = await dbGet('SELECT id FROM template_market_categories WHERE id = ?', [req.params.id]);
+    if (!existing) return res.status(404).json({ error: '分类不存在' });
+
+    const { name, description, sortOrder, isEnabled } = req.body || {};
+    const sets = [];
+    const params = [];
+    if (name !== undefined) {
+      if (!name.trim()) return res.status(400).json({ error: '分类名称不能为空' });
+      sets.push('name = ?'); params.push(name.trim());
+    }
+    if (description !== undefined) { sets.push('description = ?'); params.push(description); }
+    if (sortOrder !== undefined) { sets.push('sort_order = ?'); params.push(parseInt(sortOrder) || 0); }
+    if (isEnabled !== undefined) { sets.push('is_enabled = ?'); params.push(isEnabled ? 1 : 0); }
+    if (sets.length === 0) return res.json({ success: true });
+    sets.push("updated_at = datetime('now')");
+    params.push(req.params.id);
+    await dbRun(`UPDATE template_market_categories SET ${sets.join(', ')} WHERE id = ?`, params);
+    logger.audit('content_template.category_update', { categoryId: parseInt(req.params.id), ip: clientIp(req) });
+    res.json({ success: true });
+  } catch (e) {
+    logger.error({ type: 'app', msg: '更新分类失败', error: e.message });
+    res.status(500).json({ error: '更新分类失败' });
+  }
+});
+
+router.delete('/admin/categories/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const count = await dbGet(
+      'SELECT COUNT(*) as count FROM content_templates WHERE category_id = ?', [req.params.id]
+    );
+    if (count.count > 0) {
+      // 有模板的分类只能停用，不能物理删除
+      await dbRun(
+        `UPDATE template_market_categories SET is_enabled = 0, updated_at = datetime('now') WHERE id = ?`,
+        [req.params.id]
+      );
+      return res.json({ success: true, disabled: true, message: '分类下有模板，已停用而非删除' });
+    }
+    await dbRun('DELETE FROM template_market_categories WHERE id = ?', [req.params.id]);
+    logger.audit('content_template.category_delete', { categoryId: parseInt(req.params.id), ip: clientIp(req) });
+    res.json({ success: true, disabled: false });
+  } catch (e) {
+    logger.error({ type: 'app', msg: '删除分类失败', error: e.message });
+    res.status(500).json({ error: '删除分类失败' });
   }
 });
 

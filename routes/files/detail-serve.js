@@ -38,6 +38,7 @@ function registerDetailServe(router) {
         share_key: f.share_key,
         category_id: f.category_id,
         uploaded_by: f.uploaded_by,
+        upload_source: f.upload_source,
         is_bundle: f.is_bundle,
         entry_path: f.entry_path,
         view_count: f.view_count,

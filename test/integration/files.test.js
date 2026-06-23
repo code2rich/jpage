@@ -49,6 +49,25 @@ test('列表包含已上传文件', async () => {
   assert.ok(res.body.pagination);
   // 每个文件含 tags 数组
   assert.ok(Array.isArray(res.body.files[0].tags));
+  // 网页上传（无 X-Upload-Source 头）落库为 'web'，且 LEFT JOIN users 解析出 uploader_name
+  const f = res.body.files[0];
+  assert.strictEqual(f.upload_source, 'web');
+  assert.ok(typeof f.uploader_name === 'string' && f.uploader_name.length > 0);
+});
+
+test('X-Upload-Source 头标记来源（cli/mcp）并持久化', async () => {
+  // CLI 来源
+  await agent.post('/api/files/upload-json')
+    .set('x-upload-source', 'cli')
+    .send({ name: 'from-cli.md', content: 'cli' });
+  // MCP 来源
+  await agent.post('/api/files/upload-json')
+    .set('x-upload-source', 'mcp')
+    .send({ name: 'from-mcp.md', content: 'mcp' });
+  const list = await agent.get('/api/files');
+  const byName = Object.fromEntries(list.body.files.map(f => [f.original_name, f]));
+  assert.strictEqual(byName['from-cli.md'].upload_source, 'cli');
+  assert.strictEqual(byName['from-mcp.md'].upload_source, 'mcp');
 });
 
 test('详情 GET /api/files/:id', async () => {
@@ -58,6 +77,7 @@ test('详情 GET /api/files/:id', async () => {
   assert.strictEqual(res.body.original_name, 'detail.md');
   assert.ok(Array.isArray(res.body.tags));
   assert.strictEqual(typeof res.body.starred, 'boolean');
+  assert.strictEqual(res.body.upload_source, 'web');
 });
 
 test('详情不存在 → 404', async () => {

@@ -63,24 +63,33 @@ function generateStoredName(ext) {
 // 原先在 upload/upload-json/overwrite/overwrite-json/restore 共 5 处重复。
 // 行为零差异：读 nextVer → INSERT 旧版本到 file_versions → UPDATE files 主记录。
 //
-// @param {object} file       - 旧 files 行（含 stored_name/size/id）
-// @param {object} next       - 新版本数据 { storedName, size }
-// @param {number} recordedBy - 写入 file_versions.uploaded_by 的用户 id
-//                              （upload/overwrite 各处用 file.uploaded_by；restore 用 currentUserId）
+// @param {object} file        - 旧 files 行（含 stored_name/size/id）
+// @param {object} next        - 新版本数据 { storedName, size }
+// @param {number} recordedBy  - 写入 file_versions.uploaded_by 的用户 id。
+//                               语义为「被归档那一版内容的原始上传者」，由各处传
+//                               file.uploaded_by（注意：这不是本次操作者）。
+// @param {string} [source]    - 本次上传来源 'web'|'cli'|'mcp'，缺省 'web'。
+//                               写入 file_versions.upload_source（该版本被写入时的来源），
+//                               并刷新 files.upload_source（最近一次来源）。
+// @param {number} [performedBy] - 写入 file_versions.performed_by 的用户 id。
+//                                 语义为「触发本次版本创建的操作者」（覆盖/恢复动作的执行者），
+//                                 与 recordedBy 区分。缺省时回退到 recordedBy，保持向后兼容。
 // @returns {Promise<{ version: number }>} 返回新版本号（nextVer + 1，对齐审计日志语义）
-async function backupAndApplyVersion(file, next, recordedBy) {
+async function backupAndApplyVersion(file, next, recordedBy, source = 'web', performedBy) {
   const verRow = await dbGet(
     'SELECT COALESCE(MAX(version), 0) + 1 AS nextVer FROM file_versions WHERE file_id = ?',
     [file.id]
   );
   const nextVer = verRow.nextVer;
+  // performed_by 缺省回退到 recordedBy（原始上传者）：旧调用方未传时仍可审计。
+  const performedById = performedBy !== undefined ? performedBy : recordedBy;
   await dbRun(
-    'INSERT INTO file_versions (file_id, version, stored_name, size, uploaded_by) VALUES (?, ?, ?, ?, ?)',
-    [file.id, nextVer, file.stored_name, file.size, recordedBy]
+    'INSERT INTO file_versions (file_id, version, stored_name, size, uploaded_by, upload_source, performed_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [file.id, nextVer, file.stored_name, file.size, recordedBy, source, performedById]
   );
   await dbRun(
-    'UPDATE files SET stored_name = ?, size = ?, updated_at = ? WHERE id = ?',
-    [next.storedName, next.size, now(), file.id]
+    'UPDATE files SET stored_name = ?, size = ?, upload_source = ?, updated_at = ? WHERE id = ?',
+    [next.storedName, next.size, source, now(), file.id]
   );
   // 超过上限时删除最旧的历史版本（含磁盘文件），避免长期占盘。
   await pruneOldVersions(file.id, MAX_FILE_VERSIONS);

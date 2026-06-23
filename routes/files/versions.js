@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { dbGet, dbAll, dbRun } = require('../../lib/db');
 const { requireAuth } = require('../../lib/middleware/auth');
-const { unlinkQuiet, currentUserId, clientIp } = require('../../lib/util');
+const { unlinkQuiet, currentUserId, clientIp, resolveUploadSource } = require('../../lib/util');
 const { UPLOAD_DIR } = require('../../lib/paths');
 const { renderFile } = require('../../lib/render');
 const { generateStoredName, backupAndApplyVersion } = require('./_shared');
@@ -19,7 +19,11 @@ function registerVersions(router) {
       if (!file) return res.status(404).json({ error: '文件不存在' });
 
       const versions = await dbAll(
-        'SELECT id, version, size, created_at FROM file_versions WHERE file_id = ? ORDER BY version DESC',
+        `SELECT fv.id, fv.version, fv.size, fv.created_at, fv.performed_by,
+                pu.username AS performed_by_name
+         FROM file_versions fv
+         LEFT JOIN users pu ON fv.performed_by = pu.id
+         WHERE fv.file_id = ? ORDER BY fv.version DESC`,
         [req.params.id]
       );
 
@@ -122,10 +126,12 @@ function registerVersions(router) {
       const { version } = await backupAndApplyVersion(
         file,
         { storedName: newStoredName, size: newSize },
+        currentUserId(req),
+        resolveUploadSource(req),
         currentUserId(req)
       );
 
-      logger.audit('file.restore', { fileId: file.id, fileName: file.original_name, restoredVersion: parseInt(req.params.ver), newVersion: version, ip: clientIp(req) });
+      logger.audit('file.restore', { fileId: file.id, fileName: file.original_name, restoredVersion: parseInt(req.params.ver), newVersion: version, userId: currentUserId(req), ip: clientIp(req) });
       res.json({
         success: true,
         id: file.id,
@@ -155,7 +161,7 @@ function registerVersions(router) {
       // 删除版本记录
       await dbRun('DELETE FROM file_versions WHERE id = ?', [ver.id]);
 
-      logger.audit('file.version.delete', { fileId: parseInt(req.params.id), version: parseInt(req.params.ver), ip: clientIp(req) });
+      logger.audit('file.version.delete', { fileId: parseInt(req.params.id), version: parseInt(req.params.ver), userId: currentUserId(req), ip: clientIp(req) });
       res.json({ success: true });
     } catch (e) {
       res.status(500).json({ error: '删除版本失败' });

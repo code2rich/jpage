@@ -24,8 +24,16 @@ function registerCrud(router) {
       if (!file) return res.status(404).json({ error: '文件不存在' });
       if (!checkFileOwnership(req, file)) return res.status(403).json({ error: '无权操作此文件' });
       if (name !== undefined) {
-        if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: '文件名不能为空' });
-        await dbRun('UPDATE files SET original_name = ? WHERE id = ?', [name.trim(), req.params.id]);
+        const trimmed = typeof name === 'string' ? name.trim() : '';
+        if (!trimmed) return res.status(400).json({ error: '文件名不能为空' });
+        // 改名按用户隔离同名：目标名若已被文件归属者的其他文件占用则拒绝，
+        // 与上传同名隔离保持一致（每用户命名空间内文件名唯一）。
+        const dup = await dbGet(
+          'SELECT id FROM files WHERE original_name = ? AND uploaded_by = ? AND id != ?',
+          [trimmed, file.uploaded_by, file.id]
+        );
+        if (dup) return res.status(409).json({ error: '该名称下已存在同名文件' });
+        await dbRun('UPDATE files SET original_name = ? WHERE id = ?', [trimmed, req.params.id]);
       }
       if (isPublic !== undefined) {
         await dbRun('UPDATE files SET is_public = ? WHERE id = ?', [isPublic ? 1 : 0, req.params.id]);
