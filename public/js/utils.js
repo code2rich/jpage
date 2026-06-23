@@ -15,12 +15,25 @@ function formatSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
+// 数据库存储的时间是 UTC（SQLite CURRENT_TIMESTAMP / datetime('now')），
+// 但返回给前端的是无时区标记的字符串（如 "2026-06-23 06:33:37"）。
+// new Date() 会把这类字符串当作本地时间解析，导致显示偏移一个时区（东八区差 8 小时）。
+// 这里统一补上 'Z' 让其按 UTC 解析，再由浏览器换算成本地时区显示。
+function parseDate(dateStr) {
+  if (!dateStr) return null;
+  // 已带时区（Z / ±hh:mm）或仅日期：交给原生解析
+  if (/Z$|[+-]\d{2}:?\d{2}$/.test(dateStr) || /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return new Date(dateStr);
+  }
+  // "YYYY-MM-DD HH:MM:SS"（无时区）→ 视作 UTC
+  return new Date(dateStr.replace(' ', 'T') + 'Z');
+}
+
 function relativeTime(dateStr) {
-  if (!dateStr) return '';
+  const then = parseDate(dateStr);
+  if (!then || isNaN(then)) return '';
   const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  if (isNaN(then)) return '';
-  const diff = now - then;
+  const diff = now - then.getTime();
   const seconds = Math.floor(diff / 1000);
   if (seconds < 60) return '刚刚';
   const minutes = Math.floor(seconds / 60);
@@ -30,12 +43,12 @@ function relativeTime(dateStr) {
   const days = Math.floor(hours / 24);
   if (days === 1) return '昨天';
   if (days < 30) return `${days} 天前`;
-  return new Date(dateStr).toLocaleDateString('zh-CN');
+  return then.toLocaleDateString('zh-CN');
 }
 
 function formatDate(iso) {
-  if (!iso) return '-';
-  const d = new Date(iso);
+  const d = parseDate(iso);
+  if (!d || isNaN(d)) return '-';
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
