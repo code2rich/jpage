@@ -379,10 +379,20 @@ async function loadDetail(body, id, navigate) {
           <div class="ct-meta-info">
             作者：${escapeHtml(meta.uploader_name || '匿名')} · ${meta.instantiation_count || 0} 次使用 · ${relativeTime(meta.published_at || meta.created_at)}
           </div>
-          <div class="market-detail-actions">
-            <button class="btn btn-primary" id="detail-copy">复制内容</button>
-            <button class="btn" id="detail-use">使用此模板</button>
-            ${isOwner || isAdmin ? `<button class="btn btn-small" id="detail-edit">编辑</button>` : ''}
+          <div class="market-detail-actions mw-icon-actions">
+            <button class="mw-icon-btn" id="detail-star" title="收藏" aria-label="收藏" data-starred="${meta.starred ? '1' : '0'}">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 17.3 5.8 20.9l1.6-6.8L2.2 8.9l6.9-.6L12 2z"/></svg>
+            </button>
+            <button class="mw-icon-btn" id="detail-download" title="下载" aria-label="下载">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a1 1 0 011 1v9.6l3.3-3.3a1 1 0 011.4 1.4l-5 5a1 1 0 01-1.4 0l-5-5a1 1 0 111.4-1.4L11 13.6V4a1 1 0 011-1zM5 19a1 1 0 011-1h12a1 1 0 110 2H6a1 1 0 01-1-1z"/></svg>
+            </button>
+            <button class="mw-icon-btn" id="detail-copy-url" title="复制公开链接" aria-label="复制公开链接">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.6 13.4a1 1 0 010-1.4l3-3a1 1 0 011.4 1.4l-1.3 1.3 1.4 1.4 1.3-1.3a3 3 0 10-4.2-4.2l-3 3a3 3 0 000 4.2 1 1 0 001.4-1.4zM13.4 10.6a1 1 0 010 1.4l-3 3a1 1 0 01-1.4-1.4l1.3-1.3-1.4-1.4-1.3 1.3a3 3 0 104.2 4.2l3-3a1 1 0 000-1.4 1 1 0 00-1.4 0z"/></svg>
+            </button>
+            <button class="mw-icon-btn mw-icon-btn-primary" id="detail-use" title="使用此模板" aria-label="使用此模板">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3a1 1 0 01.7 1.7L8.4 11H20a1 1 0 110 2H8.4l6.3 6.3A1 1 0 0114 21H4a1 1 0 01-1-1V10a1 1 0 011.7-.7L10 15.6V5a1 1 0 01.3-.7L13 1.6A1 1 0 0114 3z" transform="translate(0,0)"/><path d="M20 3a1 1 0 011 1v4a1 1 0 11-2 0V6.4l-7.3 7.3a1 1 0 01-1.4-1.4L17.6 5H15a1 1 0 110-2h5z"/></svg>
+            </button>
+            ${isOwner || isAdmin ? `<button class="mw-icon-btn" id="detail-edit" title="编辑" aria-label="编辑"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>` : ''}
           </div>
         </aside>
       </div>
@@ -395,19 +405,46 @@ async function loadDetail(body, id, navigate) {
       iframe.srcdoc = contentData.content;
     }
 
-    body.querySelector('#detail-copy').onclick = async () => {
-      const ok = await copyToClipboard(contentData.content);
-      toast(ok ? '已复制到剪贴板' : '复制失败', ok ? 'success' : 'error');
+    // 收藏（toggle）
+    body.querySelector('#detail-star').onclick = async () => {
+      try {
+        const data = await api(`/api/content-templates/${id}/star`, { method: 'POST' });
+        const btn = body.querySelector('#detail-star');
+        btn.dataset.starred = data.starred ? '1' : '0';
+        toast(data.starred ? '已收藏' : '已取消收藏');
+      } catch (e) {
+        toast(e.status === 401 ? '请先登录' : (e.message || '操作失败'), 'error');
+      }
     };
+
+    // 下载
+    body.querySelector('#detail-download').onclick = () => {
+      window.open(`/api/content-templates/${id}/download`, '_blank');
+    };
+
+    // 复制公开短链（首次生成，之后复用）
+    body.querySelector('#detail-copy-url').onclick = async () => {
+      try {
+        const data = await api(`/api/content-templates/${id}/share`, { method: 'POST' });
+        const url = `${location.origin}/t/${data.key}`;
+        const ok = await copyToClipboard(url);
+        toast(ok ? `已复制公开链接：${url}` : '复制失败，请手动复制', ok ? 'success' : 'error');
+      } catch (e) {
+        toast(e.message || '生成链接失败', 'error');
+      }
+    };
+
+    // 使用模板（实例化 → 跳转编辑器）
     body.querySelector('#detail-use').onclick = async () => {
       try {
         const data = await api(`/api/content-templates/${id}/instantiate`, { method: 'POST' });
         toast('已基于该模板创建文件，正在打开…');
         navigate(`/view/${data.fileId}`);
       } catch (e) {
-        toast(e.message || '使用失败，请先登录', 'error');
+        toast(e.status === 401 ? '请先登录' : (e.message || '使用失败'), 'error');
       }
     };
+
     if (isOwner || isAdmin) {
       body.querySelector('#detail-edit').onclick = () => navigate('/market/my');
     }

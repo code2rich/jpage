@@ -8,7 +8,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { dbGet, dbRun, dbAll } = require('../lib/db');
-const { requireAuth, requireAdmin } = require('../lib/middleware/auth');
+const { requireAuth, requireAdmin, loadSession } = require('../lib/middleware/auth');
 const { clientIp, now, generateShareKey } = require('../lib/util');
 const { UPLOAD_DIR } = require('../lib/paths');
 const { generateStoredName } = require('./files/_shared');
@@ -106,11 +106,11 @@ router.get('/market', async (req, res) => {
 });
 
 // 市场详情（匿名，仅 approved+visible）
-router.get('/market/:id', async (req, res) => {
+router.get('/market/:id', loadSession, async (req, res) => {
   try {
     const t = await dbGet(
       `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.use_count, ct.featured,
-              ct.created_at, ct.published_at, ct.category_id,
+              ct.created_at, ct.published_at, ct.category_id, ct.share_key,
               c.slug AS category_slug, c.name AS category_name,
               u.username AS uploader_name,
               (SELECT COUNT(*) FROM content_template_installs i WHERE i.template_id = ct.id) AS instantiation_count
@@ -121,7 +121,13 @@ router.get('/market/:id', async (req, res) => {
       [req.params.id]
     );
     if (!t) return res.status(404).json({ error: '模板不存在或未上架' });
-    res.json(t);
+    // 登录用户附加收藏状态
+    let starred = false;
+    if (req.userId) {
+      const row = await dbGet('SELECT 1 FROM starred_templates WHERE user_id = ? AND template_id = ?', [req.userId, req.params.id]);
+      starred = !!row;
+    }
+    res.json({ ...t, starred });
   } catch (e) {
     logger.error({ type: 'app', msg: '获取市场模板详情失败', error: e.message });
     res.status(500).json({ error: '获取模板详情失败' });
@@ -515,6 +521,74 @@ router.post('/:id/instantiate', requireAuth, async (req, res) => {
   } catch (e) {
     logger.error({ type: 'app', msg: '实例化模板失败', error: e.message });
     res.status(500).json({ error: '实例化失败' });
+  }
+});
+
+// 收藏模板（toggle：已收藏则取消，否则收藏）
+router.post('/:id/star', requireAuth, async (req, res) => {
+  try {
+    const t = await dbGet('SELECT id FROM content_templates WHERE id = ?', [req.params.id]);
+    if (!t) return res.status(404).json({ error: '模板不存在' });
+    const existing = await dbGet('SELECT 1 FROM starred_templates WHERE user_id = ? AND template_id = ?', [req.userId, req.params.id]);
+    if (existing) {
+      await dbRun('DELETE FROM starred_templates WHERE user_id = ? AND template_id = ?', [req.userId, req.params.id]);
+      res.json({ starred: false });
+    } else {
+      await dbRun('INSERT INTO starred_templates (user_id, template_id) VALUES (?, ?)', [req.userId, req.params.id]);
+      res.json({ starred: true });
+    }
+  } catch (e) {
+    res.status(500).json({ error: '操作失败' });
+  }
+});
+
+// 下载模板内容为文件（HTML/MD）
+router.get('/:id/download', requireAuth, async (req, res) => {
+  try {
+    const t = await dbGet(
+      `SELECT ct.title, ct.content, ct.file_type FROM content_templates ct
+       LEFT JOIN template_market_categories c ON ct.category_id = c.id
+       WHERE ct.id = ? AND ${MARKET_VISIBLE_COND}`,
+      [req.params.id]
+    );
+    if (!t) return res.status(404).json({ error: '模板不存在或未上架' });
+    const ext = t.file_type === 'markdown' ? '.md' : '.html';
+    const safeName = (t.title || '模板').replace(/[\\/:*?"<>|]/g, '_').trim() || '模板';
+    const filename = encodeURIComponent(safeName + ext);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${filename}`);
+    res.setHeader('Content-Type', t.file_type === 'markdown' ? 'text/markdown; charset=utf-8' : 'text/html; charset=utf-8');
+    res.send(t.content);
+  } catch (e) {
+    res.status(500).json({ error: '下载失败' });
+  }
+});
+
+// 生成模板公开短链（返回 /t/:key 完整 URL）
+router.post('/:id/share', requireAuth, async (req, res) => {
+  try {
+    const t = await dbGet(
+      `SELECT ct.id, ct.share_key FROM content_templates ct
+       LEFT JOIN template_market_categories c ON ct.category_id = c.id
+       WHERE ct.id = ? AND ${MARKET_VISIBLE_COND}`,
+      [req.params.id]
+    );
+    if (!t) return res.status(404).json({ error: '模板不存在或未上架' });
+    // 已有 key 直接复用
+    if (t.share_key) return res.json({ key: t.share_key });
+    // 生成唯一 key（与 files 的 share_key 空间隔离：模板 key 存 content_templates）
+    let key;
+    for (let i = 0; i < 10; i++) {
+      const candidate = generateShareKey();
+      const clash = await dbGet('SELECT 1 FROM content_templates WHERE share_key = ?', [candidate]);
+      if (!clash) { key = candidate; break; }
+    }
+    if (!key) return res.status(500).json({ error: '生成短链失败' });
+    await dbRun('UPDATE content_templates SET share_key = ? WHERE id = ?', [key, req.params.id]);
+    logger.audit('content_template.share', { templateId: parseInt(req.params.id), ip: clientIp(req) });
+    res.json({ key });
+  } catch (e) {
+    logger.error({ type: 'app', msg: '生成模板短链失败', error: e.message });
+    res.status(500).json({ error: '生成短链失败' });
   }
 });
 

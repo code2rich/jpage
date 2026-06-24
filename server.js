@@ -272,6 +272,34 @@ app.post('/s/:key', shareKeyLimiter, async (req, res) => {
   }
 });
 
+// --- 模板公开短链 /t/:key ---
+// 与 /s/:key（文件短链）并列。匿名可访问，仅渲染 approved+visible 模板。
+// HTML 模板直接输出内容；Markdown 模板用 <pre> 输出原文（与市场卡片预览一致）。
+const TEMPLATE_VISIBLE_COND = "ct.status = 'approved' AND ct.visibility = 'visible' AND COALESCE(c.is_enabled, 0) = 1";
+app.get('/t/:key', async (req, res) => {
+  try {
+    const t = await dbGet(
+      `SELECT ct.title, ct.content, ct.file_type
+       FROM content_templates ct
+       LEFT JOIN template_market_categories c ON ct.category_id = c.id
+       WHERE ct.share_key = ? AND ${TEMPLATE_VISIBLE_COND}`,
+      [req.params.key]
+    );
+    if (!t) {
+      return res.status(404).send('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:sans-serif;text-align:center;padding:4em"><h1>404</h1><p>模板不存在或已下架</p><a href="/">返回首页</a></body></html>');
+    }
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    if (t.file_type === 'markdown') {
+      const escaped = String(t.content).replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+      return res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${t.title}</title></head><body><pre style="padding:24px;font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word;margin:0">${escaped}</pre></body></html>`);
+    }
+    res.send(t.content);
+  } catch (e) {
+    logger.error({ type: 'app', action: 'template_shortlink.get', error: e.message });
+    res.status(500).json({ error: '渲染失败' });
+  }
+});
+
 // --- MCP 端点 ---
 async function authenticateMcpToken(tokenValue) {
   // 旧 MCP_TOKEN

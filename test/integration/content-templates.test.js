@@ -456,3 +456,79 @@ test('instantiate：创建的文件内容 = 模板内容快照', async () => {
   assert.ok(raw.body.content.includes('快照验证_UNIQUE'), '实例化文件内容应与模板一致');
 });
 
+// ============================================================
+// 收藏 / 下载 / 公开短链
+// ============================================================
+
+test('收藏：toggle 收藏/取消，详情返回 starred 状态', async () => {
+  const id = await createPublishedTemplate(userAgent, '可收藏模板');
+  // 初始未收藏
+  const before = await userAgent.get(`/api/content-templates/market/${id}`);
+  assert.strictEqual(before.body.starred, false);
+  // 收藏
+  const starOn = await userAgent.post(`/api/content-templates/${id}/star`);
+  assert.strictEqual(starOn.status, 200);
+  assert.strictEqual(starOn.body.starred, true);
+  const after = await userAgent.get(`/api/content-templates/market/${id}`);
+  assert.strictEqual(after.body.starred, true);
+  // 取消收藏
+  const starOff = await userAgent.post(`/api/content-templates/${id}/star`);
+  assert.strictEqual(starOff.body.starred, false);
+});
+
+test('收藏：未登录 → 401', async () => {
+  const id = await createPublishedTemplate(userAgent, '未登录收藏');
+  const res = await request(env.app).post(`/api/content-templates/${id}/star`);
+  assert.strictEqual(res.status, 401);
+});
+
+test('收藏：不存在的模板 → 404', async () => {
+  const res = await userAgent.post('/api/content-templates/999999/star');
+  assert.strictEqual(res.status, 404);
+});
+
+test('下载：approved+visible → 返回文件内容，Content-Disposition 正确', async () => {
+  const id = await createPublishedTemplate(userAgent, '可下载模板');
+  const res = await userAgent.get(`/api/content-templates/${id}/download`);
+  assert.strictEqual(res.status, 200);
+  assert.ok(res.text.includes('实例化'), '下载内容应为模板内容');
+  assert.ok(res.headers['content-disposition'].includes('attachment'), '应为附件下载');
+  assert.ok(res.headers['content-disposition'].includes('.html'), 'html 模板扩展名应为 .html');
+});
+
+test('下载：未上架模板 → 404', async () => {
+  const submit = await userAgent.post('/api/content-templates').send({
+    title: '未上架下载', fileType: 'html', categoryId: 2, content: '<p>x</p>',
+  });
+  const res = await userAgent.get(`/api/content-templates/${submit.body.id}/download`);
+  assert.strictEqual(res.status, 404);
+});
+
+test('短链：生成 → 返回 key → /t/:key 匿名可访问渲染', async () => {
+  const id = await createPublishedTemplate(userAgent, '短链模板');
+  const share = await userAgent.post(`/api/content-templates/${id}/share`);
+  assert.strictEqual(share.status, 200);
+  assert.ok(share.body.key, '应返回短链 key');
+  // 再次生成应复用同一 key
+  const share2 = await userAgent.post(`/api/content-templates/${id}/share`);
+  assert.strictEqual(share2.body.key, share.body.key, '应复用已有 key');
+  // 匿名访问 /t/:key 渲染内容
+  const render = await request(env.app).get(`/t/${share.body.key}`);
+  assert.strictEqual(render.status, 200);
+  assert.ok(render.text.includes('实例化'), '短链应渲染模板内容');
+});
+
+test('短链：未上架模板 → 生成返回 404', async () => {
+  const submit = await userAgent.post('/api/content-templates').send({
+    title: '未上架短链', fileType: 'html', categoryId: 2, content: '<p>x</p>',
+  });
+  const res = await userAgent.post(`/api/content-templates/${submit.body.id}/share`);
+  assert.strictEqual(res.status, 404);
+});
+
+test('短链：不存在的 key → 404', async () => {
+  const res = await request(env.app).get('/t/nonexistent_key_12345');
+  assert.strictEqual(res.status, 404);
+});
+
+
