@@ -214,7 +214,7 @@ function renderHome(container) {
     settingsDropdown.querySelector('#menu-item-content-templates').addEventListener('click', () => {
       settingsDropdown.classList.remove('open');
       settingsBtn.setAttribute('aria-expanded', 'false');
-      navigate('#/market');
+      navigate('/market');
     });
     settingsDropdown.querySelector('#menu-item-mcp').addEventListener('click', () => {
       settingsDropdown.classList.remove('open');

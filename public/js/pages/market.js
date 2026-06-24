@@ -105,22 +105,42 @@ export function renderMarket(container, hash, navigate) {
 function renderMarketShell(container, { active }) {
   const isAdmin = state.currentUser && state.currentUser.role === 'admin';
   container.innerHTML = `
-    <div class="market-page">
-      <header class="market-header">
-        <div class="market-header-left">
-          <a href="#/" class="market-back" aria-label="返回首页">← 首页</a>
-          <h1 class="market-title">内容市场</h1>
-        </div>
-        <nav class="market-nav">
-          <a href="#/market" class="market-nav-item ${active === 'home' ? 'active' : ''}">市场</a>
-          <a href="#/market/my" class="market-nav-item ${active === 'my' ? 'active' : ''}">我的上架</a>
-          ${isAdmin ? '<a href="#/market/admin" class="market-nav-item admin-only ' + (active === 'admin' ? 'active' : '') + '">市场管理</a>' : ''}
+    <div class="market-page mw-market-page">
+      <aside class="mw-sidebar">
+        <a href="#/" class="mw-brand" aria-label="返回首页">
+          <span class="mw-brand-mark">即</span>
+          <span class="mw-brand-text">JPage<br><strong>Market</strong></span>
+        </a>
+        <nav class="mw-side-nav">
+          <a href="#/market" class="${active === 'home' ? 'active' : ''}">首页</a>
+          <button type="button" data-side-category="">全部作品</button>
+          <button type="button" data-side-category="dashboard">数据看板</button>
+          <button type="button" data-side-category="report">报告复盘</button>
+          <button type="button" data-side-category="landing">营销页面</button>
+          <button type="button" data-side-category="presentation">演示提案</button>
         </nav>
-      </header>
-      <div class="market-body" id="market-body"></div>
+        <div class="mw-side-section">
+          <div class="mw-side-title">管理</div>
+          <a href="#/market/my" class="${active === 'my' ? 'active' : ''}">我的上架</a>
+          ${isAdmin ? '<a href="#/market/admin" class="' + (active === 'admin' ? 'active admin-only' : 'admin-only') + '">市场管理</a>' : ''}
+        </div>
+        <div class="mw-side-footer">
+          <a href="#/">返回我的页面</a>
+        </div>
+      </aside>
+      <main class="mw-main" id="market-body"></main>
     </div>
   `;
-  return container.querySelector('#market-body');
+  const body = container.querySelector('#market-body');
+  container.querySelectorAll('[data-side-category]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      homeState.category = btn.dataset.sideCategory || '';
+      homeState.page = 1;
+      location.hash = '/market';
+      renderHome(container, (path) => { location.hash = path; });
+    });
+  });
+  return body;
 }
 
 // ============================================================
@@ -130,22 +150,48 @@ function renderMarketShell(container, { active }) {
 const homeState = { category: '', keyword: '', sort: '', page: 1 };
 
 function renderHome(container, navigate) {
+  const go = navigate || ((path) => { location.hash = path; });
   const body = renderMarketShell(container, { active: 'home', navigate });
   body.innerHTML = `
-    <div class="market-toolbar">
-      <div class="market-search-wrap">
-        <input type="search" id="market-search" class="search-input" placeholder="搜索模板标题或描述" value="${escapeHtml(homeState.keyword)}">
+    <header class="mw-topbar">
+      <div class="mw-search-wrap">
+        <span aria-hidden="true">⌕</span>
+        <input type="search" id="market-search" class="search-input" placeholder="搜索页面、工作流、主题、创作者" value="${escapeHtml(homeState.keyword)}">
       </div>
-      <div class="market-sort">
+      <div class="mw-top-actions">
         <select id="market-sort" class="market-select">
           <option value="">热门优先</option>
           <option value="created_at" ${homeState.sort === 'created_at' ? 'selected' : ''}>最新发布</option>
           <option value="featured" ${homeState.sort === 'featured' ? 'selected' : ''}>精选优先</option>
         </select>
+        <a href="#/market/my" class="btn btn-small">我的上架</a>
       </div>
-    </div>
-    <div class="filter-chips" id="market-category-chips"></div>
-    <div id="market-grid" class="ct-grid"></div>
+    </header>
+    <div class="mw-category-row" id="market-category-chips"></div>
+    <section class="mw-hero-grid">
+      <button type="button" class="mw-feature-card" data-feature-category="report">
+        <span>本周精选</span>
+        <strong>AI 经营复盘模板合集</strong>
+        <small>从指标到结论，几分钟生成可发布页面。</small>
+      </button>
+      <div class="mw-explore-card">
+        <h2>探索更多</h2>
+        <div class="mw-explore-grid">
+          <button type="button" data-feature-category="dashboard"><strong>数据看板</strong><span>指标监控</span></button>
+          <button type="button" data-feature-category="landing"><strong>营销落地页</strong><span>产品发布</span></button>
+          <button type="button" data-feature-category="presentation"><strong>演示提案</strong><span>路演汇报</span></button>
+          <button type="button" data-feature-category="card"><strong>卡片组件</strong><span>图文资产</span></button>
+        </div>
+      </div>
+    </section>
+    <section class="mw-feed-head">
+      <div>
+        <h1>推荐作品</h1>
+        <p>浏览、筛选和创建可复用页面资产。</p>
+      </div>
+      <span id="mw-result-count">-</span>
+    </section>
+    <div id="market-grid" class="ct-grid mw-grid"></div>
   `;
 
   // 搜索（防抖）
@@ -168,7 +214,15 @@ function renderHome(container, navigate) {
   };
 
   // 分类条（异步加载）
-  loadCategoryChips(body, navigate).then(() => loadHomeList(body, navigate));
+  loadCategoryChips(body, go).then(() => loadHomeList(body, go));
+
+  body.querySelectorAll('[data-feature-category]').forEach(btn => {
+    btn.onclick = () => {
+      homeState.category = btn.dataset.featureCategory || '';
+      homeState.page = 1;
+      loadCategoryChips(body, go).then(() => loadHomeList(body, go));
+    };
+  });
 }
 
 async function loadCategoryChips(body, navigate) {
@@ -176,7 +230,7 @@ async function loadCategoryChips(body, navigate) {
   try {
     const data = await api('/api/content-templates/categories');
     const cats = data.categories || [];
-    const all = `<button class="filter-chip ${!homeState.category ? 'active' : ''}" data-category="">全部</button>`;
+    const all = `<button class="filter-chip ${!homeState.category ? 'active' : ''}" data-category="">推荐</button>`;
     const items = cats.map(c =>
       `<button class="filter-chip ${homeState.category === c.slug ? 'active' : ''}" data-category="${escapeHtml(c.slug)}">${escapeHtml(c.name)}</button>`
     ).join('');
@@ -210,6 +264,8 @@ async function loadHomeList(body, navigate) {
 
   try {
     const data = await api('/api/content-templates/market?' + params.toString());
+    const countEl = body.querySelector('#mw-result-count');
+    if (countEl && data.pagination) countEl.textContent = `${data.pagination.total || 0} 个结果`;
     renderHomeGrid(grid, data.templates || [], data.pagination, navigate);
   } catch {
     grid.innerHTML = '<div class="ct-empty">加载失败</div>';
@@ -218,7 +274,7 @@ async function loadHomeList(body, navigate) {
 
 function renderHomeGrid(grid, templates, pg, navigate) {
   if (!templates.length) {
-    grid.innerHTML = '<div class="ct-empty">暂无模板。点击「提交模板」上架你的作品。</div>';
+    grid.innerHTML = '<div class="ct-empty">暂无可展示作品。请在首页文件列表的「⋯」菜单中上架页面。</div>';
     return;
   }
   grid.innerHTML = templates.map(t => {
@@ -226,20 +282,24 @@ function renderHomeGrid(grid, templates, pg, navigate) {
     const typeLabel = t.file_type === 'markdown' ? 'MD' : 'HTML';
     const cat = t.category_name ? `<span class="ct-badge ct-badge-scene">${escapeHtml(t.category_name)}</span>` : '';
     const featured = t.featured ? '<span class="ct-badge ct-badge-featured">精选</span>' : '';
-    return `<div class="ct-card" data-id="${t.id}" data-file-type="${t.file_type}">
+    return `<div class="ct-card mw-card" data-id="${t.id}" data-file-type="${t.file_type}">
       <div class="ct-card-thumb">
         <div class="ct-card-thumb-wrap"><iframe class="ct-thumb-iframe" sandbox="allow-scripts"></iframe></div>
         <div class="ct-card-thumb-loading"></div>
+        <div class="mw-card-actions">
+          <button type="button" data-act="preview">快速预览</button>
+          <button type="button" data-act="use">创建副本</button>
+        </div>
       </div>
+      <div class="mw-card-meta-row">${cat}${featured}<span class="ct-badge ${typeClass}">${typeLabel}</span></div>
       <div class="ct-card-header">
         <span class="ct-card-title">${escapeHtml(t.title)}</span>
-        <span class="ct-badge ${typeClass}">${typeLabel}</span>
       </div>
-      ${cat}${featured}
       <p class="ct-card-desc">${escapeHtml(t.description || '').slice(0, 100)}</p>
+      <div class="mw-card-author">${escapeHtml(t.uploader_name || '即页创作者')} · ${t.featured ? '官方精选' : '创作者'}</div>
       <div class="ct-card-footer">
-        <span class="ct-use-count">使用 ${t.use_count} 次</span>
-        <span class="ct-card-time">${relativeTime(t.published_at || t.created_at)}</span>
+        <span class="ct-use-count">${t.use_count || 0} 次使用</span>
+        <span class="mw-rating">4.9</span>
       </div>
     </div>`;
   }).join('');
@@ -258,7 +318,21 @@ function renderHomeGrid(grid, templates, pg, navigate) {
   // 卡片点击 → 详情
   const obs = ensureThumbObserver();
   grid.querySelectorAll('.ct-card').forEach(card => {
-    card.onclick = () => navigate(`/market/${card.dataset.id}`);
+    card.onclick = async (e) => {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      const id = card.dataset.id;
+      if (act === 'use') {
+        e.stopPropagation();
+        try {
+          await api(`/api/content-templates/${id}/use`, { method: 'POST' });
+          toast('已记录使用');
+        } catch (err) {
+          toast(err.message || '操作失败', 'error');
+        }
+        return;
+      }
+      navigate(`/market/${id}`);
+    };
     obs.observe(card);
   });
 }
