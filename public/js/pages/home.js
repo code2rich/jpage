@@ -244,7 +244,7 @@ function renderHome(container) {
     settingsDropdown.querySelector('#menu-item-market-admin')?.addEventListener('click', () => {
       settingsDropdown.classList.remove('open');
       settingsBtn.setAttribute('aria-expanded', 'false');
-      navigate('#/market/admin');
+      navigate('/market/admin');
     });
     settingsDropdown.querySelector('#menu-item-users')?.addEventListener('click', () => {
       settingsDropdown.classList.remove('open');

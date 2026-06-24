@@ -102,8 +102,9 @@ export function renderMarket(container, hash, navigate) {
 // 共享：市场头部导航（分类 Tabs 之外的顶部栏）
 // ============================================================
 
-function renderMarketShell(container, { active }) {
+function renderMarketShell(container, { active, navigate }) {
   const isAdmin = state.currentUser && state.currentUser.role === 'admin';
+  const go = typeof navigate === 'function' ? navigate : (path) => { location.hash = path; };
   container.innerHTML = `
     <div class="market-page mw-market-page">
       <aside class="mw-sidebar">
@@ -136,8 +137,7 @@ function renderMarketShell(container, { active }) {
     btn.addEventListener('click', () => {
       homeState.category = btn.dataset.sideCategory || '';
       homeState.page = 1;
-      location.hash = '/market';
-      renderHome(container, (path) => { location.hash = path; });
+      go('/market');
     });
   });
   return body;
@@ -202,7 +202,7 @@ function renderHome(container, navigate) {
     searchTimer = setTimeout(() => {
       homeState.keyword = searchInput.value.trim();
       homeState.page = 1;
-      loadHomeList(body, navigate);
+      loadHomeList(body, go);
     }, 300);
   };
 
@@ -210,7 +210,7 @@ function renderHome(container, navigate) {
   body.querySelector('#market-sort').onchange = (e) => {
     homeState.sort = e.target.value;
     homeState.page = 1;
-    loadHomeList(body, navigate);
+    loadHomeList(body, go);
   };
 
   // 分类条（异步加载）
@@ -274,7 +274,11 @@ async function loadHomeList(body, navigate) {
 
 function renderHomeGrid(grid, templates, pg, navigate) {
   if (!templates.length) {
-    grid.innerHTML = '<div class="ct-empty">暂无可展示作品。请在首页文件列表的「⋯」菜单中上架页面。</div>';
+    grid.innerHTML = `
+      <div class="ct-empty mw-empty">
+        <strong>当前没有已审核公开作品</strong>
+        <span>你可以回到首页文件列表，在文件的「⋯」菜单中选择「上架到市场」，审核通过后会展示在这里。</span>
+      </div>`;
     return;
   }
   grid.innerHTML = templates.map(t => {
@@ -287,8 +291,8 @@ function renderHomeGrid(grid, templates, pg, navigate) {
         <div class="ct-card-thumb-wrap"><iframe class="ct-thumb-iframe" sandbox="allow-scripts"></iframe></div>
         <div class="ct-card-thumb-loading"></div>
         <div class="mw-card-actions">
-          <button type="button" data-act="preview">快速预览</button>
-          <button type="button" data-act="use">创建副本</button>
+          <button type="button" data-act="preview">查看详情</button>
+          <button type="button" data-act="use">使用模板</button>
         </div>
       </div>
       <div class="mw-card-meta-row">${cat}${featured}<span class="ct-badge ${typeClass}">${typeLabel}</span></div>
@@ -329,6 +333,11 @@ function renderHomeGrid(grid, templates, pg, navigate) {
         } catch (err) {
           toast(err.message || '操作失败', 'error');
         }
+        return;
+      }
+      if (act === 'preview') {
+        e.stopPropagation();
+        navigate(`/market/${id}`);
         return;
       }
       navigate(`/market/${id}`);
@@ -465,7 +474,7 @@ async function loadMineList(body, navigate) {
 
 function renderMineList(list, templates, pg, navigate) {
   if (!templates.length) {
-    list.innerHTML = '<div class="ct-empty">暂无模板。点击「提交模板」上架你的作品。</div>';
+    list.innerHTML = '<div class="ct-empty mw-empty"><strong>暂无上架作品</strong><span>请回到首页文件列表，在文件「⋯」菜单中选择「上架到市场」。</span></div>';
     return;
   }
   list.innerHTML = templates.map(t => {
@@ -655,7 +664,7 @@ async function loadAdminList(body, navigate) {
 
 function renderAdminList(list, templates, pg, navigate, body) {
   if (!templates.length) {
-    list.innerHTML = '<div class="ct-empty">暂无模板</div>';
+    list.innerHTML = '<div class="ct-empty mw-empty"><strong>暂无待处理作品</strong><span>当前筛选条件下没有市场作品。</span></div>';
     return;
   }
   list.innerHTML = templates.map(t => {
