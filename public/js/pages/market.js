@@ -350,15 +350,13 @@ function renderDetail(container, id, navigate) {
   loadDetail(body, id, navigate);
 }
 
-async function loadDetail(body, id, navigate) {
+async function loadDetail(body, id, _navigate) {
   try {
     const [meta, contentData] = await Promise.all([
       api(`/api/content-templates/market/${id}`),
       api(`/api/content-templates/market/${id}/preview`),
     ]);
 
-    const isOwner = state.currentUser && (state.currentUser.id === meta.uploaded_by);
-    const isAdmin = state.currentUser && state.currentUser.role === 'admin';
     const typeLabel = meta.file_type === 'markdown' ? 'Markdown' : 'HTML';
     const cat = meta.category_name ? `<span class="ct-badge ct-badge-scene">${escapeHtml(meta.category_name)}</span>` : '';
     const featured = meta.featured ? '<span class="ct-badge ct-badge-featured">精选</span>' : '';
@@ -389,10 +387,6 @@ async function loadDetail(body, id, navigate) {
             <button class="mw-icon-btn" id="detail-copy-url" data-tip="复制公开链接" aria-label="复制公开链接">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.6 13.4a1 1 0 010-1.4l3-3a1 1 0 011.4 1.4l-1.3 1.3 1.4 1.4 1.3-1.3a3 3 0 10-4.2-4.2l-3 3a3 3 0 000 4.2 1 1 0 001.4-1.4zM13.4 10.6a1 1 0 010 1.4l-3 3a1 1 0 01-1.4-1.4l1.3-1.3-1.4-1.4-1.3 1.3a3 3 0 104.2 4.2l3-3a1 1 0 000-1.4 1 1 0 00-1.4 0z"/></svg>
             </button>
-            <button class="mw-icon-btn mw-icon-btn-primary" id="detail-use" data-tip="使用此模板" aria-label="使用此模板">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3a1 1 0 01.7 1.7L8.4 11H20a1 1 0 110 2H8.4l6.3 6.3A1 1 0 0114 21H4a1 1 0 01-1-1V10a1 1 0 011.7-.7L10 15.6V5a1 1 0 01.3-.7L13 1.6A1 1 0 0114 3z" transform="translate(0,0)"/><path d="M20 3a1 1 0 011 1v4a1 1 0 11-2 0V6.4l-7.3 7.3a1 1 0 01-1.4-1.4L17.6 5H15a1 1 0 110-2h5z"/></svg>
-            </button>
-            ${isOwner || isAdmin ? `<button class="mw-icon-btn" id="detail-edit" data-tip="编辑" aria-label="编辑"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>` : ''}
           </div>
         </aside>
       </div>
@@ -434,20 +428,6 @@ async function loadDetail(body, id, navigate) {
       }
     };
 
-    // 使用模板（实例化 → 跳转编辑器）
-    body.querySelector('#detail-use').onclick = async () => {
-      try {
-        const data = await api(`/api/content-templates/${id}/instantiate`, { method: 'POST' });
-        toast('已基于该模板创建文件，正在打开…');
-        navigate(`/view/${data.fileId}`);
-      } catch (e) {
-        toast(e.status === 401 ? '请先登录' : (e.message || '使用失败'), 'error');
-      }
-    };
-
-    if (isOwner || isAdmin) {
-      body.querySelector('#detail-edit').onclick = () => navigate('/market/my');
-    }
   } catch (e) {
     body.innerHTML = '<div class="ct-empty">加载失败或模板未上架</div>';
   }
