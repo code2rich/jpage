@@ -256,3 +256,96 @@ test('删除有模板的分类 → 改为停用而非物理删除', async () => 
   assert.ok(cat1);
   assert.strictEqual(cat1.is_enabled, 0);
 });
+
+// ============================================================
+// 从文件上架（from-file）主链路
+// ============================================================
+
+// 辅助：上传一个文件并返回 id
+async function uploadFile(agent, name, content) {
+  const res = await agent.post('/api/files/upload-json').set('X-Upload-Source', 'test').send({ name, content });
+  return res.body.id;
+}
+
+test('from-file：从文件上架 → pending，市场不展示', async () => {
+  const fileId = await uploadFile(userAgent, '路演.html', '<!doctype html><body><h1>路演</h1></body>');
+  assert.ok(fileId);
+  const res = await userAgent.post('/api/content-templates/from-file').send({
+    fileId, title: '商务路演', description: '融资演示', categoryId: 2,
+  });
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.status, 'pending');
+  assert.strictEqual(res.body.republished, false);
+  // 市场不展示
+  const market = await request(env.app).get('/api/content-templates/market');
+  assert.ok(!market.body.templates.some(t => t.id === res.body.id));
+});
+
+test('from-file：同文件再次上架 → 更新现有模板 + 重新审核', async () => {
+  const fileId = await uploadFile(userAgent, '重复上架.html', '<p>v1</p>');
+  const first = await userAgent.post('/api/content-templates/from-file').send({ fileId, categoryId: 2 });
+  const firstId = first.body.id;
+  // 审核通过让它变 approved
+  await adminAgent.post(`/api/content-templates/${firstId}/review`).send({ status: 'approved', visibility: 'visible' });
+  // 再次上架（更新）
+  const second = await userAgent.post('/api/content-templates/from-file').send({
+    fileId, title: '改过了', categoryId: 2, description: '更新版',
+  });
+  assert.strictEqual(second.status, 200);
+  assert.strictEqual(second.body.id, firstId, '应返回同一个 template id');
+  assert.strictEqual(second.body.republished, true);
+  assert.strictEqual(second.body.status, 'pending', '应回退 pending');
+  // 市场应已移除（回退 pending+hidden）
+  const market = await request(env.app).get('/api/content-templates/market');
+  assert.ok(!market.body.templates.some(t => t.id === firstId));
+});
+
+test('from-file：bundle 文件 → 400', async () => {
+  // 上传一个 zip bundle
+  const JSZip = require('jszip');
+  const zip = new JSZip();
+  zip.file('index.html', '<p>bundle</p>');
+  const buf = await zip.generateAsync({ type: 'nodebuffer' });
+  const upload = await userAgent.post('/api/files/upload')
+    .attach('file', buf, { filename: 'bundle.zip', contentType: 'application/zip' });
+  assert.strictEqual(upload.status, 200);
+  const fileId = upload.body.id;
+  const res = await userAgent.post('/api/content-templates/from-file').send({ fileId, categoryId: 2 });
+  assert.strictEqual(res.status, 400);
+});
+
+test('from-file：他人文件 → 403', async () => {
+  // admin 上传文件，普通用户尝试上架
+  const fileId = await uploadFile(adminAgent, 'admin的.html', '<p>admin</p>');
+  const res = await userAgent.post('/api/content-templates/from-file').send({ fileId, categoryId: 2 });
+  assert.strictEqual(res.status, 403);
+});
+
+test('from-file：缺分类 → 400', async () => {
+  const fileId = await uploadFile(userAgent, '无分类.html', '<p>x</p>');
+  const res = await userAgent.post('/api/content-templates/from-file').send({ fileId });
+  assert.strictEqual(res.status, 400);
+});
+
+test('GET /by-file/:fileId 返回正确上架状态', async () => {
+  const fileId = await uploadFile(userAgent, '状态查询.html', '<p>x</p>');
+  // 未上架
+  const before = await userAgent.get(`/api/content-templates/by-file/${fileId}`);
+  assert.strictEqual(before.status, 200);
+  assert.strictEqual(before.body.published, false);
+  // 上架
+  const pub = await userAgent.post('/api/content-templates/from-file').send({ fileId, categoryId: 2 });
+  const after = await userAgent.get(`/api/content-templates/by-file/${fileId}`);
+  assert.strictEqual(after.body.published, true);
+  assert.strictEqual(after.body.templateId, pub.body.id);
+  assert.strictEqual(after.body.status, 'pending');
+});
+
+test('mine 列表含 source_file_name', async () => {
+  const fileId = await uploadFile(userAgent, '来源追溯.html', '<p>x</p>');
+  await userAgent.post('/api/content-templates/from-file').send({ fileId, categoryId: 2 });
+  const mine = await userAgent.get('/api/content-templates/mine');
+  const found = mine.body.templates.find(t => t.source_file_id === fileId);
+  assert.ok(found, '应能通过 source_file_id 找到');
+  assert.strictEqual(found.source_file_name, '来源追溯.html');
+});

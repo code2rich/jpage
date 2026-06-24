@@ -5,9 +5,12 @@
 // 旧 scene 概念废弃；旧 is_public 字段保留但不再被市场逻辑依赖。
 
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const { dbGet, dbRun, dbAll } = require('../lib/db');
 const { requireAuth, requireAdmin } = require('../lib/middleware/auth');
 const { clientIp, now } = require('../lib/util');
+const { UPLOAD_DIR } = require('../lib/paths');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -160,9 +163,11 @@ router.get('/mine', requireAuth, async (req, res) => {
     const templates = await dbAll(
       `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.status, ct.visibility,
               ct.review_note, ct.use_count, ct.created_at, ct.submitted_at, ct.published_at,
-              ct.category_id, c.slug AS category_slug, c.name AS category_name
+              ct.category_id, ct.source_file_id, c.slug AS category_slug, c.name AS category_name,
+              sf.original_name AS source_file_name
        FROM content_templates ct
        LEFT JOIN template_market_categories c ON ct.category_id = c.id
+       LEFT JOIN files sf ON ct.source_file_id = sf.id
        ${where} ORDER BY ct.created_at DESC LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
@@ -198,6 +203,101 @@ router.get('/:id', requireAuth, async (req, res) => {
   } catch (e) {
     logger.error({ type: 'app', msg: '获取模板详情失败', error: e.message });
     res.status(500).json({ error: '获取模板详情失败' });
+  }
+});
+
+// 查询文件的上架状态（供文件列表「更多」菜单判断入口文案）
+router.get("/by-file/:fileId", requireAuth, async (req, res) => {
+  try {
+    const t = await dbGet(
+      `SELECT id, title, status, visibility, category_id FROM content_templates
+       WHERE source_file_id = ? ORDER BY id DESC LIMIT 1`,
+      [req.params.fileId]
+    );
+    if (!t) return res.json({ published: false });
+    res.json({
+      published: true, templateId: t.id, title: t.title,
+      status: t.status, visibility: t.visibility, categoryId: t.category_id,
+    });
+  } catch (e) {
+    res.status(500).json({ error: "查询上架状态失败" });
+  }
+});
+
+// 从文件上架到市场（快照文件当前内容到模板）
+// 一文件一模板：同文件再次上架=更新现有模板+重新审核
+router.post("/from-file", requireAuth, async (req, res) => {
+  const { fileId, title, description, categoryId } = req.body || {};
+  if (!fileId) return res.status(400).json({ error: "缺少 fileId" });
+
+  try {
+    // 1. 校验文件：存在、归属、非 bundle、类型合法
+    const file = await dbGet(
+      "SELECT id, original_name, stored_name, file_type, is_bundle, uploaded_by FROM files WHERE id = ?",
+      [fileId]
+    );
+    if (!file) return res.status(404).json({ error: "文件不存在" });
+    if (req.userRole !== "admin" && file.uploaded_by !== req.userId) {
+      return res.status(403).json({ error: "无权操作他人文件" });
+    }
+    if (file.is_bundle) return res.status(400).json({ error: "ZIP 包不支持上架" });
+    if (!FILE_TYPES.includes(file.file_type)) {
+      return res.status(400).json({ error: "仅支持 HTML / Markdown 文件" });
+    }
+
+    // 2. 校验分类
+    if (!categoryId) return res.status(400).json({ error: "请选择分类" });
+    const cat = await dbGet("SELECT id FROM template_market_categories WHERE id = ? AND is_enabled = 1", [categoryId]);
+    if (!cat) return res.status(400).json({ error: "分类不存在或已停用" });
+
+    // 3. 读文件内容做快照（ENOENT→文件已丢失）
+    let content;
+    try {
+      content = await fs.promises.readFile(path.join(UPLOAD_DIR, file.stored_name), "utf-8");
+    } catch (e) {
+      if (e.code === "ENOENT") return res.status(500).json({ error: "源文件已丢失，无法快照" });
+      throw e;
+    }
+    if (!content) return res.status(400).json({ error: "文件内容为空" });
+    if (Buffer.byteLength(content, "utf-8") > CONTENT_TEMPLATE_MAX_SIZE) {
+      return res.status(400).json({ error: "文件内容超过 500KB 上限" });
+    }
+
+    const finalTitle = (title && title.trim()) ? title.trim() : file.original_name;
+    const ts = now();
+
+    // 4. 防重：同文件已有模板→更新+重新审核；否则新建
+    const existing = await dbGet(
+      "SELECT id, status FROM content_templates WHERE source_file_id = ? ORDER BY id DESC LIMIT 1",
+      [fileId]
+    );
+
+    if (existing) {
+      // 更新现有模板：刷新内容/标题/分类，回退 pending 重新审核
+      await dbRun(
+        `UPDATE content_templates SET
+           title = ?, description = ?, content = ?, category_id = ?, file_type = ?,
+           status = "pending", visibility = "hidden", review_note = NULL,
+           submitted_at = ?, updated_at = datetime("now")
+         WHERE id = ?`,
+        [finalTitle, description || null, content, categoryId, file.file_type, ts, existing.id]
+      );
+      logger.audit("content_template.republish_from_file", { templateId: existing.id, fileId, ip: clientIp(req) });
+      return res.json({ id: existing.id, status: "pending", republished: true });
+    }
+
+    const result = await dbRun(
+      `INSERT INTO content_templates
+        (title, description, file_type, content, uploaded_by, category_id,
+         source_file_id, status, visibility, submitted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, "pending", "hidden", ?)`,
+      [finalTitle, description || null, file.file_type, content, req.userId, categoryId, fileId, ts]
+    );
+    logger.audit("content_template.publish_from_file", { templateId: result.lastID, fileId, ip: clientIp(req) });
+    res.json({ id: result.lastID, status: "pending", republished: false });
+  } catch (e) {
+    logger.error({ type: "app", msg: "从文件上架失败", error: e.message });
+    res.status(500).json({ error: "上架失败" });
   }
 });
 
@@ -367,13 +467,15 @@ router.get('/admin/list', requireAuth, requireAdmin, async (req, res) => {
       `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.status, ct.visibility,
               ct.review_note, ct.use_count, ct.featured, ct.sort_order,
               ct.created_at, ct.submitted_at, ct.published_at, ct.reviewed_at,
-              ct.category_id, ct.uploaded_by, ct.content IS NOT NULL AS has_content,
+              ct.category_id, ct.uploaded_by, ct.source_file_id, ct.content IS NOT NULL AS has_content,
               c.slug AS category_slug, c.name AS category_name,
-              u.username AS uploader_name, ru.username AS reviewer_name
+              u.username AS uploader_name, ru.username AS reviewer_name,
+              sf.original_name AS source_file_name
        FROM content_templates ct
        LEFT JOIN template_market_categories c ON ct.category_id = c.id
        LEFT JOIN users u ON ct.uploaded_by = u.id
        LEFT JOIN users ru ON ct.reviewed_by = ru.id
+       LEFT JOIN files sf ON ct.source_file_id = sf.id
        ${where} ORDER BY ct.created_at DESC LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );

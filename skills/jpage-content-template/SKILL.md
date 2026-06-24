@@ -51,19 +51,21 @@ description: 当用户要生成 HTML/Markdown 内容时，先从模板市场查�
 5. 如果用户选择直接生成，则不使用模板，正常生成
 ```
 
-## 场景三：提交样例到模板市场
+## 场景三：上架文件到模板市场
 
-用户有一段好看的 HTML/Markdown，想提交到市场供以后参考。
+用户有一个好看的 HTML/Markdown 文件，想上架到市场供以后参考。
+
+上架是文件的一个动作：在文件列表对文件点「⋯ → 上架到市场」，填写标题/分类/描述即可，模板内容直接从文件快照（不再单独粘贴维护）。
 
 ```
-1. 告知用户：提交后会进入审核，管理员审核通过且设为展示后才会出现在市场
-2. 调 POST /api/content-templates 提交模板
-   - title: 模板名称
-   - content: 完整的 HTML/Markdown 内容
-   - categoryId: 分类 ID（见下表，需先用 GET /api/content-templates/categories 获取可用分类）
+1. 告知用户：上架后会快照文件当前内容，进入审核，管理员审核通过且设为展示后才出现在市场
+2. 引导用户在文件列表操作（前端 UI 操作），或调 POST /api/content-templates/from-file
+   - fileId: 源文件 ID（必填）
+   - title: 模板名称（可选，默认用文件名）
+   - categoryId: 分类 ID（必填，见下表，需先用 GET /api/content-templates/categories 获取可用分类）
    - description: 风格描述（可选，建议包含：链接、风格关键词、适合内容、借鉴模块）
-   - fileType: html 或 markdown
-3. 告知用户模板已提交，等待审核
+3. 一文件一模板：同文件再次上架会更新现有模板并重新进入审核
+4. 告知用户已提交，等待审核
 ```
 
 # 分类与关键词对照

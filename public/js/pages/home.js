@@ -611,6 +611,7 @@ function renderFileList(container, list, files) {
             <button type="button" class="file-more-item btn-share-settings" data-id="${f.id}">分享设置</button>
             <button type="button" class="file-more-item btn-tags" data-id="${f.id}">编辑标签</button>
             <button type="button" class="file-more-item btn-category" data-id="${f.id}">移动分类</button>
+            ${!f.is_bundle ? `<button type="button" class="file-more-item btn-publish-market" data-id="${f.id}">上架到市场</button>` : ''}
             ${f.file_type === 'markdown' ? `<button type="button" class="file-more-item btn-template" data-id="${f.id}">切换模板</button>` : ''}
             <button type="button" class="file-more-item btn-rename" data-id="${f.id}">重命名</button>
             <button type="button" class="file-more-item btn-download" data-id="${f.id}">下载</button>
@@ -720,6 +721,14 @@ function renderFileList(container, list, files) {
       moreDropdown.classList.remove('open');
       openCategorySelect(container, f.id, f.category_id);
     });
+    const btnPubMarket = el.querySelector(".btn-publish-market");
+    if (btnPubMarket) {
+      btnPubMarket.addEventListener("click", e => {
+        e.stopPropagation();
+        moreDropdown.classList.remove("open");
+        openPublishMarket(container, f.id, f);
+      });
+    }
     const btnTpl = el.querySelector('.btn-template');
     if (btnTpl) {
       btnTpl.addEventListener('click', e => {
@@ -1738,6 +1747,100 @@ function closeTagEditor() {
   if (!modal) return;
   modal.hidden = true;
   modal.setAttribute('aria-hidden', 'true');
+}
+
+
+// 上架文件到内容市场：快照文件当前内容，填关键信息后提交审核。
+// 一文件一模板：同文件再次进入=编辑现有模板+重新审核。
+async function openPublishMarket(container, fileId, file) {
+  // 拉取当前上架状态 + 市场分类
+  let status, cats;
+  try {
+    [status, cats] = await Promise.all([
+      api(`/api/content-templates/by-file/${fileId}`),
+      api('/api/content-templates/categories').catch(() => ({ categories: [] })),
+    ]);
+  } catch (e) {
+    return toast(e.message || '加载失败', 'error');
+  }
+  const categories = cats.categories || [];
+  const isPublished = status.published;
+  const action = isPublished ? '更新并重新审核' : '提交审核';
+
+  const STATUS_LABEL = {
+    draft: '草稿', pending: '审核中', approved: '已通过',
+    rejected: '已拒绝', archived: '已归档',
+  };
+
+  // 动态构建模态 DOM（不依赖 index.html 静态结构，规避并发修改）
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.setAttribute('role', 'dialog');
+  backdrop.setAttribute('aria-modal', 'true');
+  backdrop.hidden = false;
+  backdrop.setAttribute('aria-hidden', 'false');
+  backdrop.innerHTML = `
+    <div class="modal-panel modal-panel-sm">
+      <div class="modal-header">
+        <h2>${isPublished ? '市场设置' : '上架到市场'}</h2>
+        <button type="button" class="btn btn-small modal-close" id="pub-close" aria-label="关闭">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="pub-source">源文件：<strong>${escapeHtml(file.original_name)}</strong></p>
+        ${isPublished ? `<p class="pub-current">当前状态：${escapeHtml(STATUS_LABEL[status.status] || status.status)}${status.status === 'rejected' && status.review_note ? '（' + escapeHtml(status.review_note) + '）' : ''}</p>` : ''}
+        <div class="market-form-row">
+          <label class="market-form-label">标题 *</label>
+          <input type="text" id="pub-title" class="market-input" value="${escapeHtml(status.title || file.original_name)}">
+        </div>
+        <div class="market-form-row">
+          <label class="market-form-label">分类 *</label>
+          <select id="pub-category" class="market-select">
+            <option value="">请选择分类</option>
+            ${categories.map(c => `<option value="${c.id}" ${status.categoryId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="market-form-row">
+          <label class="market-form-label">描述</label>
+          <textarea id="pub-desc" class="market-textarea" rows="3" placeholder="风格关键词、适合内容、借鉴模块…"></textarea>
+        </div>
+        <p class="market-form-hint">提交后快照文件当前内容，进入待审核状态，管理员审核通过并设为展示后才出现在市场。</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-small" id="pub-cancel">取消</button>
+        <button type="button" class="btn btn-small btn-primary" id="pub-submit">${action}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+
+  const close = () => backdrop.remove();
+  backdrop.querySelector('#pub-close').onclick = close;
+  backdrop.querySelector('#pub-cancel').onclick = close;
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+
+  backdrop.querySelector('#pub-submit').onclick = async () => {
+    const title = backdrop.querySelector('#pub-title').value.trim();
+    const categoryId = parseInt(backdrop.querySelector('#pub-category').value);
+    const description = backdrop.querySelector('#pub-desc').value.trim();
+    if (!title) return toast('请填写标题', 'error');
+    if (!categoryId) return toast('请选择分类', 'error');
+
+    const submitBtn = backdrop.querySelector('#pub-submit');
+    submitBtn.disabled = true;
+    submitBtn.textContent = '提交中…';
+    try {
+      await api('/api/content-templates/from-file', {
+        method: 'POST',
+        body: { fileId, title, description: description || undefined, categoryId },
+      });
+      toast(isPublished ? '已更新，重新进入审核' : '已提交，等待审核');
+      close();
+    } catch (e) {
+      toast(e.message || '操作失败', 'error');
+      submitBtn.disabled = false;
+      submitBtn.textContent = action;
+    }
+  };
 }
 
 function openCategorySelect(container, fileId, currentCategoryId) {

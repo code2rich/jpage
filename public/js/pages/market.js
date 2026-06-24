@@ -7,7 +7,6 @@ import { toast } from '../components/toast.js';
 import { dialogModal } from '../components/dialog.js';
 import { escapeHtml, relativeTime, copyToClipboard } from '../utils.js';
 
-const MAX_SIZE = 512000; // 500KB
 
 // 缩略图懒加载（从旧 content-templates.js 迁移，复用 .ct-thumb-iframe 容器）
 const loadedThumbs = new Set();
@@ -80,7 +79,11 @@ export function renderMarket(container, hash, navigate) {
     renderDetail(container, parseInt(detailMatch[1]), navigate);
     return;
   }
-  if (path === '/market/submit') { renderSubmit(container, null, navigate); return; }
+  if (path === '/market/submit') {
+    const body = renderMarketShell(container, { active: 'my', navigate });
+    body.innerHTML = '<div class="ct-empty">上架入口已移至文件列表。请在首页文件列表对某个文件点「⋯ → 上架到市场」。</div>';
+    return;
+  }
   if (path === '/market/my')     { renderMine(container, navigate); return; }
   if (path === '/market/admin') {
     if (!state.currentUser || state.currentUser.role !== 'admin') {
@@ -110,7 +113,6 @@ function renderMarketShell(container, { active }) {
         </div>
         <nav class="market-nav">
           <a href="#/market" class="market-nav-item ${active === 'home' ? 'active' : ''}">市场</a>
-          <a href="#/market/submit" class="market-nav-item ${active === 'submit' ? 'active' : ''}">提交模板</a>
           <a href="#/market/my" class="market-nav-item ${active === 'my' ? 'active' : ''}">我的上架</a>
           ${isAdmin ? '<a href="#/market/admin" class="market-nav-item admin-only ' + (active === 'admin' ? 'active' : '') + '">市场管理</a>' : ''}
         </nav>
@@ -339,115 +341,6 @@ async function loadDetail(body, id, navigate) {
 }
 
 // ============================================================
-// 提交页
-// ============================================================
-
-async function renderSubmit(container, prefill, navigate) {
-  const body = renderMarketShell(container, { active: 'submit', navigate });
-  // 加载分类
-  let cats = [];
-  try {
-    const data = await api('/api/content-templates/categories');
-    cats = data.categories || [];
-  } catch { /* ignore */ }
-
-  body.innerHTML = `
-    <div class="market-form">
-      <div class="market-form-row">
-        <label class="market-form-label">分类 *</label>
-        <select id="submit-category" class="market-select">
-          <option value="">请选择分类</option>
-          ${cats.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}
-        </select>
-      </div>
-      <div class="market-form-row">
-        <label class="market-form-label">文件类型 *</label>
-        <select id="submit-filetype" class="market-select">
-          <option value="html">HTML</option>
-          <option value="markdown">Markdown</option>
-        </select>
-      </div>
-      <div class="market-form-row">
-        <label class="market-form-label">标题 *</label>
-        <input type="text" id="submit-title" class="market-input" placeholder="如：商务路演 PPT">
-      </div>
-      <div class="market-form-row">
-        <label class="market-form-label">描述</label>
-        <textarea id="submit-desc" class="market-textarea" rows="3" placeholder="链接：...&#10;风格关键词：...&#10;适合内容：..."></textarea>
-      </div>
-      <div class="market-form-row">
-        <label class="market-form-label">内容 *</label>
-        <textarea id="submit-content" class="market-textarea market-textarea-code" rows="14" placeholder="粘贴 HTML 或 Markdown 内容"></textarea>
-      </div>
-      <div class="market-form-preview">
-        <label class="market-form-label">实时预览</label>
-        <iframe class="market-form-preview-iframe" id="submit-preview" sandbox="allow-scripts"></iframe>
-      </div>
-      <div class="market-form-actions">
-        <button class="btn" id="submit-cancel">取消</button>
-        <button class="btn btn-primary" id="submit-go">提交审核</button>
-      </div>
-      <p class="market-form-hint">提交后进入待审核状态，管理员审核通过并设为展示后才会出现在市场。</p>
-    </div>
-  `;
-
-  const titleEl = body.querySelector('#submit-title');
-  const descEl = body.querySelector('#submit-desc');
-  const contentEl = body.querySelector('#submit-content');
-  const filetypeEl = body.querySelector('#submit-filetype');
-  const previewIframe = body.querySelector('#submit-preview');
-
-  if (prefill) {
-    titleEl.value = prefill.title || '';
-    descEl.value = prefill.description || '';
-    contentEl.value = prefill.content || '';
-    filetypeEl.value = prefill.file_type || 'html';
-  }
-
-  // 实时预览
-  let previewTimer;
-  const updatePreview = () => {
-    const content = contentEl.value;
-    if (filetypeEl.value === 'markdown') {
-      previewIframe.srcdoc = `<pre style="padding:16px;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word;margin:0">${escapeHtml(content)}</pre>`;
-    } else {
-      previewIframe.srcdoc = content || '<div style="padding:24px;color:#999">预览区</div>';
-    }
-  };
-  contentEl.addEventListener('input', () => { clearTimeout(previewTimer); previewTimer = setTimeout(updatePreview, 400); });
-  filetypeEl.addEventListener('change', updatePreview);
-  updatePreview();
-
-  body.querySelector('#submit-cancel').onclick = () => navigate('/market');
-  body.querySelector('#submit-go').onclick = async () => {
-    const title = titleEl.value.trim();
-    const content = contentEl.value;
-    const categoryId = parseInt(body.querySelector('#submit-category').value);
-    if (!title) return toast('请填写标题', 'error');
-    if (!content) return toast('请填写内容', 'error');
-    if (!categoryId) return toast('请选择分类', 'error');
-    if (new TextEncoder().encode(content).length > MAX_SIZE) return toast('内容不能超过 500KB', 'error');
-
-    try {
-      await api('/api/content-templates', {
-        method: 'POST',
-        body: {
-          title,
-          description: descEl.value.trim() || undefined,
-          fileType: filetypeEl.value,
-          categoryId,
-          content,
-        },
-      });
-      toast('已提交，等待审核');
-      navigate('/market/my');
-    } catch (e) {
-      toast(e.message || '提交失败', 'error');
-    }
-  };
-}
-
-// ============================================================
 // 我的上架
 // ============================================================
 
@@ -507,10 +400,11 @@ function renderMineList(list, templates, pg, navigate) {
       ? `<div class="mine-review-note">审核意见：${escapeHtml(t.review_note)}</div>` : '';
     const cat = t.category_name ? `<span class="ct-badge ct-badge-scene">${escapeHtml(t.category_name)}</span>` : '';
     const typeLabel = t.file_type === 'markdown' ? 'MD' : 'HTML';
+    const source = t.source_file_id ? `<span class="mine-source-file">来自：<a href="#/view/${t.source_file_id}">${escapeHtml(t.source_file_name || '文件#' + t.source_file_id)}</a></span>` : '';
     return `<div class="mine-item" data-id="${t.id}">
       <div class="mine-item-main">
         <div class="mine-item-title">${escapeHtml(t.title)} ${statusBadge}</div>
-        <div class="mine-item-meta">${cat}<span class="ct-badge ${t.file_type === 'markdown' ? 'ct-badge-md' : 'ct-badge-html'}">${typeLabel}</span> · ${relativeTime(t.submitted_at || t.created_at)}</div>
+        <div class="mine-item-meta">${cat}<span class="ct-badge ${t.file_type === 'markdown' ? 'ct-badge-md' : 'ct-badge-html'}">${typeLabel}</span> · ${relativeTime(t.submitted_at || t.created_at)}${source ? ' · ' + source : ''}</div>
         ${reviewNote}
       </div>
       <div class="mine-item-actions">
@@ -694,10 +588,11 @@ function renderAdminList(list, templates, pg, navigate, body) {
     const statusBadge = STATUS_BADGE[t.status] || '';
     const cat = t.category_name ? escapeHtml(t.category_name) : '未分类';
     const reviewNote = t.review_note ? `<div class="mine-review-note">审核意见：${escapeHtml(t.review_note)}</div>` : '';
+    const source = t.source_file_id ? `<span class="mine-source-file">来自：<a href="#/view/${t.source_file_id}">${escapeHtml(t.source_file_name || '文件#' + t.source_file_id)}</a></span>` : '';
     return `<div class="mine-item admin-item" data-id="${t.id}">
       <div class="mine-item-main">
         <div class="mine-item-title">${escapeHtml(t.title)} ${statusBadge} ${t.featured ? '<span class="ct-badge ct-badge-featured">精选</span>' : ''}</div>
-        <div class="mine-item-meta">${cat} · 作者：${escapeHtml(t.uploader_name || '-')} · 使用 ${t.use_count} 次</div>
+        <div class="mine-item-meta">${cat} · 作者：${escapeHtml(t.uploader_name || '-')} · 使用 ${t.use_count} 次${source ? ' · ' + source : ''}</div>
         ${reviewNote}
       </div>
       <div class="mine-item-actions">

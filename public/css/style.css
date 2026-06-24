@@ -3334,3 +3334,11 @@ html:not(.light) {
 .market-cat-mgr-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .market-cat-add { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .market-cat-add .market-input { flex: 1; min-width: 140px; }
+
+/* 上架到市场弹窗 */
+.pub-source { margin: 0 0 8px; font-size: 13px; color: var(--text-secondary); }
+.pub-source strong { color: var(--text); }
+.pub-current { margin: 0 0 12px; font-size: 12px; color: var(--danger); background: rgba(220, 38, 38, 0.08); padding: 6px 10px; border-radius: 4px; }
+.mine-source-file { font-size: 12px; color: var(--text-secondary); }
+.mine-source-file a { color: var(--primary); text-decoration: none; }
+.mine-source-file a:hover { text-decoration: underline; }

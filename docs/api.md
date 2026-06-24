@@ -329,6 +329,8 @@ MCP 使用的 JSON 覆盖上传，自动版本备份。
 | `/api/content-templates/market/:id` | GET | 匿名 | 市场详情（仅 approved+visible） |
 | `/api/content-templates/market/:id/preview` | GET | 匿名 | 市场预览内容（iframe 缩略图/详情页） |
 | `/api/content-templates/categories` | GET | 匿名 | 启用中的分类列表 |
+| `/api/content-templates/by-file/:fileId` | GET | 登录 | 查询文件的上架状态（published/templateId/status），供文件列表判断入口文案 |
+| `/api/content-templates/from-file` | POST | 登录 | 从文件上架（快照文件当前内容到模板，进 pending）。Body: {fileId, title?, description?, categoryId}。一文件一模板，同文件再次调用=更新+重新审核 |
 | `/api/content-templates/mine` | GET | 登录 | 我的模板（所有状态）。支持 status/page/limit |
 | `/api/content-templates` | POST | 登录 | 提交模板（默认进入 pending 审核） |
 | `/api/content-templates/:id` | GET | 登录 | 模板详情（作者/管理员，或 approved+visible） |
