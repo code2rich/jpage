@@ -168,7 +168,7 @@ router.get('/mine', requireAuth, async (req, res) => {
        FROM content_templates ct
        LEFT JOIN template_market_categories c ON ct.category_id = c.id
        LEFT JOIN files sf ON ct.source_file_id = sf.id
-       ${where} ORDER BY ct.created_at DESC LIMIT ? OFFSET ?`,
+       ${where} ORDER BY ct.created_at DESC, ct.id DESC LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
     res.json({
@@ -476,7 +476,7 @@ router.get('/admin/list', requireAuth, requireAdmin, async (req, res) => {
        LEFT JOIN users u ON ct.uploaded_by = u.id
        LEFT JOIN users ru ON ct.reviewed_by = ru.id
        LEFT JOIN files sf ON ct.source_file_id = sf.id
-       ${where} ORDER BY ct.created_at DESC LIMIT ? OFFSET ?`,
+       ${where} ORDER BY ct.created_at DESC, ct.id DESC LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
     res.json({

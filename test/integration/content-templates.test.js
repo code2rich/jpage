@@ -165,7 +165,7 @@ test('approved 模板编辑后回退 pending', async () => {
   await adminAgent.post(`/api/content-templates/${id}/review`).send({ status: 'approved', visibility: 'visible' });
   // 作者编辑
   await userAgent.put(`/api/content-templates/${id}`).send({ title: '改过了' });
-  const mine = await userAgent.get('/api/content-templates/mine?status=pending');
+  const mine = await userAgent.get('/api/content-templates/mine?status=pending&limit=20');
   const found = mine.body.templates.find(t => t.id === id);
   assert.ok(found, '编辑后应回退到 pending');
   assert.strictEqual(found.status, 'pending');
@@ -343,9 +343,13 @@ test('GET /by-file/:fileId 返回正确上架状态', async () => {
 
 test('mine 列表含 source_file_name', async () => {
   const fileId = await uploadFile(userAgent, '来源追溯.html', '<p>x</p>');
-  await userAgent.post('/api/content-templates/from-file').send({ fileId, categoryId: 2 });
-  const mine = await userAgent.get('/api/content-templates/mine');
-  const found = mine.body.templates.find(t => t.source_file_id === fileId);
-  assert.ok(found, '应能通过 source_file_id 找到');
+  const pub = await userAgent.post('/api/content-templates/from-file').send({ fileId, categoryId: 2 });
+  assert.strictEqual(pub.status, 200, '上架应成功');
+  // 用 status=pending 缩小范围，避免分页把目标挤出第一页
+  const mine = await userAgent.get('/api/content-templates/mine?status=pending');
+  assert.ok(Array.isArray(mine.body.templates), 'mine 应返回 templates 数组');
+  const found = mine.body.templates.find(t => t.id === pub.body.id);
+  assert.ok(found, `应在 mine(pending) 中找到模板 id=${pub.body.id}，实际返回 ${mine.body.templates.length} 条`);
+  assert.strictEqual(found.source_file_id, fileId, 'source_file_id 应等于源文件 id');
   assert.strictEqual(found.source_file_name, '来源追溯.html');
 });
