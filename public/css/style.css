@@ -3384,13 +3384,8 @@ html:not(.light) {
 .mw-brand-mark {
   width: 34px;
   height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   border-radius: 8px;
-  background: #111827;
-  color: #fff;
-  font-weight: 800;
+  object-fit: contain;
 }
 
 .mw-side-nav,
