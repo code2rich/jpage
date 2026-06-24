@@ -3354,6 +3354,19 @@ html:not(.light) {
 .market-cat-add { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .market-cat-add .market-input { flex: 1; min-width: 140px; }
 
+/* 分类管理：拖拽排序 */
+.market-cat-hint { font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+.market-cat-head-actions { display: flex; gap: 8px; }
+.market-cat-list .cat-row { cursor: grab; align-items: center; }
+.market-cat-list .cat-row:active { cursor: grabbing; }
+.cat-drag-handle {
+  color: var(--text-secondary); font-size: 18px; line-height: 1;
+  cursor: grab; user-select: none; padding: 0 2px; flex-shrink: 0;
+}
+.cat-row.cat-dragging { opacity: 0.4; }
+.cat-row.cat-drag-over { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
+.login-field-inline { flex-direction: row; align-items: center; gap: 8px; }
+
 /* 上架到市场弹窗 */
 .pub-source { margin: 0 0 8px; font-size: 13px; color: var(--text-secondary); }
 .pub-source strong { color: var(--text); }
@@ -3934,3 +3947,25 @@ html:not(.light) {
     grid-template-columns: 1fr;
   }
 }
+
+/* 图标按钮文字提示气泡（比原生 title 更醒目、立即出现） */
+.mw-icon-btn[data-tip] { position: relative; }
+.mw-icon-btn[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute; bottom: calc(100% + 6px); left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap; padding: 4px 8px;
+  background: #111827; color: #fff;
+  font-size: 12px; line-height: 1.4; border-radius: 4px;
+  pointer-events: none; opacity: 0; transition: opacity .15s;
+  z-index: 10;
+}
+.mw-icon-btn[data-tip]::before {
+  content: ''; position: absolute; bottom: 100%; left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent; border-top-color: #111827;
+  pointer-events: none; opacity: 0; transition: opacity .15s;
+  margin-bottom: 2px;
+}
+.mw-icon-btn[data-tip]:hover::after,
+.mw-icon-btn[data-tip]:hover::before { opacity: 1; }

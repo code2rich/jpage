@@ -5,7 +5,7 @@ import { api } from '../api.js';
 import { state } from '../app.js';
 import { toast } from '../components/toast.js';
 import { dialogModal } from '../components/dialog.js';
-import { escapeHtml, relativeTime, copyToClipboard } from '../utils.js';
+import { escapeHtml, relativeTime, copyToClipboard, openModal, closeModal } from '../utils.js';
 
 
 // 缩略图懒加载（从旧 content-templates.js 迁移，复用 .ct-thumb-iframe 容器）
@@ -380,19 +380,19 @@ async function loadDetail(body, id, navigate) {
             作者：${escapeHtml(meta.uploader_name || '匿名')} · ${meta.instantiation_count || 0} 次使用 · ${relativeTime(meta.published_at || meta.created_at)}
           </div>
           <div class="market-detail-actions mw-icon-actions">
-            <button class="mw-icon-btn" id="detail-star" title="收藏" aria-label="收藏" data-starred="${meta.starred ? '1' : '0'}">
+            <button class="mw-icon-btn" id="detail-star" data-tip="收藏" aria-label="收藏" data-starred="${meta.starred ? '1' : '0'}">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 17.3 5.8 20.9l1.6-6.8L2.2 8.9l6.9-.6L12 2z"/></svg>
             </button>
-            <button class="mw-icon-btn" id="detail-download" title="下载" aria-label="下载">
+            <button class="mw-icon-btn" id="detail-download" data-tip="下载" aria-label="下载">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a1 1 0 011 1v9.6l3.3-3.3a1 1 0 011.4 1.4l-5 5a1 1 0 01-1.4 0l-5-5a1 1 0 111.4-1.4L11 13.6V4a1 1 0 011-1zM5 19a1 1 0 011-1h12a1 1 0 110 2H6a1 1 0 01-1-1z"/></svg>
             </button>
-            <button class="mw-icon-btn" id="detail-copy-url" title="复制公开链接" aria-label="复制公开链接">
+            <button class="mw-icon-btn" id="detail-copy-url" data-tip="复制公开链接" aria-label="复制公开链接">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.6 13.4a1 1 0 010-1.4l3-3a1 1 0 011.4 1.4l-1.3 1.3 1.4 1.4 1.3-1.3a3 3 0 10-4.2-4.2l-3 3a3 3 0 000 4.2 1 1 0 001.4-1.4zM13.4 10.6a1 1 0 010 1.4l-3 3a1 1 0 01-1.4-1.4l1.3-1.3-1.4-1.4-1.3 1.3a3 3 0 104.2 4.2l3-3a1 1 0 000-1.4 1 1 0 00-1.4 0z"/></svg>
             </button>
-            <button class="mw-icon-btn mw-icon-btn-primary" id="detail-use" title="使用此模板" aria-label="使用此模板">
+            <button class="mw-icon-btn mw-icon-btn-primary" id="detail-use" data-tip="使用此模板" aria-label="使用此模板">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3a1 1 0 01.7 1.7L8.4 11H20a1 1 0 110 2H8.4l6.3 6.3A1 1 0 0114 21H4a1 1 0 01-1-1V10a1 1 0 011.7-.7L10 15.6V5a1 1 0 01.3-.7L13 1.6A1 1 0 0114 3z" transform="translate(0,0)"/><path d="M20 3a1 1 0 011 1v4a1 1 0 11-2 0V6.4l-7.3 7.3a1 1 0 01-1.4-1.4L17.6 5H15a1 1 0 110-2h5z"/></svg>
             </button>
-            ${isOwner || isAdmin ? `<button class="mw-icon-btn" id="detail-edit" title="编辑" aria-label="编辑"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>` : ''}
+            ${isOwner || isAdmin ? `<button class="mw-icon-btn" id="detail-edit" data-tip="编辑" aria-label="编辑"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>` : ''}
           </div>
         </aside>
       </div>
@@ -773,7 +773,7 @@ function previewInDialog(data) {
   win.document.close();
 }
 
-// ---- 分类管理（内嵌面板） ----
+// ---- 分类管理（内嵌面板：列表 + 拖拽排序 + 弹窗新增/编辑） ----
 
 async function openCategoryManager(body, navigate) {
   let cats = [];
@@ -785,24 +785,23 @@ async function openCategoryManager(body, navigate) {
   body.innerHTML = `
     <div class="market-cat-mgr">
       <div class="market-cat-mgr-head">
-        <h3 class="market-form-title">分类管理</h3>
-        <button class="btn btn-small" id="cat-back">返回</button>
+        <h3 class="market-form-title">分类管理 <span class="market-cat-hint">（拖动行可排序）</span></h3>
+        <div class="market-cat-head-actions">
+          <button class="btn btn-primary btn-small" id="cat-add">+ 新增分类</button>
+          <button class="btn btn-small" id="cat-back">返回</button>
+        </div>
       </div>
-      <div class="market-cat-add">
-        <input type="text" id="cat-slug" class="market-input" placeholder="slug（如 html-doc）">
-        <input type="text" id="cat-name" class="market-input" placeholder="名称（如 HTML-DOC）">
-        <input type="number" id="cat-order" class="market-input market-input-narrow" placeholder="排序" value="0">
-        <button class="btn btn-primary btn-small" id="cat-add">新增</button>
-      </div>
-      <div id="cat-list" class="market-list">
-        ${cats.map(c => `
-          <div class="mine-item" data-id="${c.id}">
+      <div id="cat-list" class="market-list market-cat-list">
+        ${cats.length === 0 ? '<div class="ct-empty">暂无分类，点击「+ 新增分类」创建。</div>' : cats.map(c => `
+          <div class="mine-item cat-row" data-id="${c.id}" draggable="true">
+            <span class="cat-drag-handle" title="拖动排序" aria-hidden="true">⠿</span>
             <div class="mine-item-main">
               <div class="mine-item-title">${escapeHtml(c.name)} ${c.is_enabled ? '' : '<span class="ct-status-badge ct-status-archived">已停用</span>'}</div>
               <div class="mine-item-meta">slug: ${escapeHtml(c.slug)} · 排序 ${c.sort_order} · ${c.template_count} 个模板</div>
               ${c.description ? `<div class="mine-review-note">${escapeHtml(c.description)}</div>` : ''}
             </div>
             <div class="mine-item-actions">
+              <button class="btn btn-small" data-act="edit">编辑</button>
               <button class="btn btn-small" data-act="toggle">${c.is_enabled ? '停用' : '启用'}</button>
               <button class="btn btn-small btn-danger" data-act="del">删除</button>
             </div>
@@ -813,26 +812,18 @@ async function openCategoryManager(body, navigate) {
   `;
 
   body.querySelector('#cat-back').onclick = () => { adminState.status = adminState.status || 'pending'; navigate('/market/admin'); };
+  body.querySelector('#cat-add').onclick = () => openCatModal(null, body, navigate);
 
-  body.querySelector('#cat-add').onclick = async () => {
-    const slug = body.querySelector('#cat-slug').value.trim();
-    const name = body.querySelector('#cat-name').value.trim();
-    const sortOrder = parseInt(body.querySelector('#cat-order').value) || 0;
-    if (!slug || !name) return toast('slug 和名称必填', 'error');
-    try {
-      await api('/api/content-templates/admin/categories', { method: 'POST', body: { slug, name, sortOrder } });
-      toast('已新增');
-      openCategoryManager(body, navigate);
-    } catch (e) { toast(e.message || '新增失败', 'error'); }
-  };
-
-  body.querySelectorAll('#cat-list .mine-item').forEach(item => {
+  body.querySelectorAll('#cat-list .cat-row').forEach(item => {
     const id = item.dataset.id;
+    const cat = cats.find(c => String(c.id) === String(id)) || null;
     item.querySelectorAll('button[data-act]').forEach(btn => {
       btn.onclick = async () => {
         const act = btn.dataset.act;
         try {
-          if (act === 'toggle') {
+          if (act === 'edit') {
+            openCatModal(cat, body, navigate);
+          } else if (act === 'toggle') {
             const enable = btn.textContent.trim() === '启用';
             await api(`/api/content-templates/admin/categories/${id}`, { method: 'PUT', body: { isEnabled: enable } });
             toast(enable ? '已启用' : '已停用');
@@ -848,4 +839,119 @@ async function openCategoryManager(body, navigate) {
       };
     });
   });
+
+  // 拖拽排序（纯前端 DOM 移动 + 调 reorder API；每次 mutation 后 re-render 会重绑监听）
+  setupCategoryDragSort(body.querySelector('#cat-list'), body, navigate);
+}
+
+// 拖拽排序：拖动行到另一行上下方，松手后按新顺序批量写入 sort_order
+function setupCategoryDragSort(list, body, navigate) {
+  if (!list) return;
+  let dragSrc = null;
+  list.querySelectorAll('.cat-row').forEach(row => {
+    row.addEventListener('dragstart', e => {
+      dragSrc = row;
+      row.classList.add('cat-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      // Firefox 需要 setData 才能触发 dragover
+      try { e.dataTransfer.setData('text/plain', row.dataset.id); } catch (_) { /* ignore */ }
+    });
+    row.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (dragSrc && dragSrc !== row) row.classList.add('cat-drag-over');
+    });
+    row.addEventListener('dragleave', () => row.classList.remove('cat-drag-over'));
+    row.addEventListener('drop', async e => {
+      e.preventDefault();
+      row.classList.remove('cat-drag-over');
+      if (!dragSrc || dragSrc === row) return;
+      // 按光标在目标行的上/下半区决定插入位置
+      const rect = row.getBoundingClientRect();
+      if (e.clientY > rect.top + rect.height / 2) row.after(dragSrc);
+      else row.before(dragSrc);
+      const ids = [...list.querySelectorAll('.cat-row')].map(r => parseInt(r.dataset.id));
+      try {
+        await api('/api/content-templates/admin/categories/reorder', { method: 'PUT', body: { order: ids } });
+        toast('排序已更新');
+      } catch (err) {
+        toast(err.message || '排序失败', 'error');
+      } finally {
+        // re-render 同步 sort_order 显示 & 重绑监听（失败则回滚到服务端真实顺序）
+        openCategoryManager(body, navigate);
+      }
+    });
+    row.addEventListener('dragend', () => {
+      list.querySelectorAll('.cat-drag-over').forEach(r => r.classList.remove('cat-drag-over'));
+      if (dragSrc) dragSrc.classList.remove('cat-dragging');
+      dragSrc = null;
+    });
+  });
+}
+
+// 新增/编辑分类弹窗（cat=null → 新增；cat=对象 → 编辑）
+function openCatModal(cat, body, navigate) {
+  const modal = document.getElementById('market-cat-modal');
+  const isEdit = !!cat;
+  document.getElementById('market-cat-modal-title').textContent = isEdit ? '编辑分类' : '新增分类';
+  const slugEl = document.getElementById('market-cat-slug');
+  const nameEl = document.getElementById('market-cat-name');
+  const descEl = document.getElementById('market-cat-desc');
+  const orderEl = document.getElementById('market-cat-order');
+  const enabledEl = document.getElementById('market-cat-enabled');
+  const errorEl = document.getElementById('market-cat-error');
+  errorEl.hidden = true;
+
+  // 填充：新增用默认值；编辑用现有数据
+  slugEl.value = isEdit ? cat.slug : '';
+  slugEl.readOnly = isEdit;          // slug 是唯一键，编辑时只读
+  slugEl.placeholder = isEdit ? '（slug 创建后不可修改）' : 'html-doc（小写字母/数字/连字符）';
+  nameEl.value = isEdit ? cat.name : '';
+  descEl.value = isEdit ? (cat.description || '') : '';
+  orderEl.value = isEdit ? cat.sort_order : 0;
+  enabledEl.checked = isEdit ? !!cat.is_enabled : true;
+
+  openModal(modal);
+
+  const closeBtn = document.getElementById('market-cat-modal-close');
+  const cancelBtn = document.getElementById('market-cat-modal-cancel');
+  const submitBtn = document.getElementById('market-cat-modal-submit');
+  const close = () => closeModal(modal);
+  closeBtn.onclick = close;
+  cancelBtn.onclick = close;
+  submitBtn.onclick = async () => {
+    const name = nameEl.value.trim();
+    const description = descEl.value.trim();
+    const sortOrder = parseInt(orderEl.value) || 0;
+    const isEnabled = enabledEl.checked;
+    if (!name) { errorEl.textContent = '分类名称不能为空'; errorEl.hidden = false; return; }
+    if (!isEdit) {
+      const slug = slugEl.value.trim();
+      if (!slug) { errorEl.textContent = 'slug 不能为空'; errorEl.hidden = false; return; }
+      if (!/^[a-z0-9-]+$/.test(slug)) { errorEl.textContent = 'slug 只能包含小写字母、数字和连字符'; errorEl.hidden = false; return; }
+    }
+    try {
+      if (isEdit) {
+        await api(`/api/content-templates/admin/categories/${cat.id}`, {
+          method: 'PUT', body: { name, description: description || null, sortOrder, isEnabled },
+        });
+        toast('已保存');
+      } else {
+        await api('/api/content-templates/admin/categories', {
+          method: 'POST', body: { slug: slugEl.value.trim(), name, description: description || null, sortOrder },
+        });
+        toast('已新增');
+      }
+      closeModal(modal);
+      openCategoryManager(body, navigate);
+    } catch (e) {
+      errorEl.textContent = e.message || '保存失败';
+      errorEl.hidden = false;
+    }
+  };
+  if (!modal.dataset.bound) {
+    modal.dataset.bound = '1';
+    modal.addEventListener('click', e => { if (e.target === modal) closeModal(modal); });
+  }
+  setTimeout(() => nameEl.focus(), 0);
 }
