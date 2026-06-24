@@ -765,6 +765,38 @@ router.post('/admin/categories', requireAuth, requireAdmin, async (req, res) => 
   }
 });
 
+// 批量重排序：body.order = [id, id, ...]，按数组下标写入 sort_order。
+// 必须注册在 PUT /admin/categories/:id 之前，否则字面量 reorder 会被 :id 捕获。
+router.put('/admin/categories/reorder', requireAuth, requireAdmin, async (req, res) => {
+  const { order } = req.body || {};
+  if (!Array.isArray(order) || order.length === 0) {
+    return res.status(400).json({ error: '缺少排序数组' });
+  }
+  const ids = order.map(x => parseInt(x));
+  if (ids.some(x => !Number.isInteger(x))) {
+    return res.status(400).json({ error: '存在非法 ID' });
+  }
+  try {
+    // 校验所有 ID 都真实存在，避免越权写入不存在的行
+    const ph = ids.map(() => '?').join(',');
+    const found = await dbAll(`SELECT id FROM template_market_categories WHERE id IN (${ph})`, ids);
+    if (found.length !== ids.length) return res.status(400).json({ error: '存在无效分类' });
+
+    // 逐条 UPDATE sort_order；admin 低频操作，reorder 幂等可重试
+    for (let i = 0; i < ids.length; i++) {
+      await dbRun(
+        `UPDATE template_market_categories SET sort_order = ?, updated_at = datetime('now') WHERE id = ?`,
+        [i, ids[i]]
+      );
+    }
+    logger.audit('content_template.category_reorder', { count: ids.length, ip: clientIp(req) });
+    res.json({ success: true });
+  } catch (e) {
+    logger.error({ type: 'app', msg: '分类排序失败', error: e.message });
+    res.status(500).json({ error: '排序失败' });
+  }
+});
+
 router.put('/admin/categories/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
     const existing = await dbGet('SELECT id FROM template_market_categories WHERE id = ?', [req.params.id]);

@@ -257,6 +257,48 @@ test('删除有模板的分类 → 改为停用而非物理删除', async () => 
   assert.strictEqual(cat1.is_enabled, 0);
 });
 
+test('管理员可重命名分类', async () => {
+  const create = await adminAgent.post('/api/content-templates/admin/categories').send({
+    slug: 't-rename', name: '原名', sortOrder: 9,
+  });
+  assert.strictEqual(create.status, 200);
+  const catId = create.body.id;
+  const upd = await adminAgent.put(`/api/content-templates/admin/categories/${catId}`).send({ name: '新名' });
+  assert.strictEqual(upd.status, 200);
+  const adminCats = await adminAgent.get('/api/content-templates/admin/categories');
+  const row = adminCats.body.categories.find(c => c.id === catId);
+  assert.ok(row);
+  assert.strictEqual(row.name, '新名');
+});
+
+test('管理员可批量重排分类顺序', async () => {
+  const a = await adminAgent.post('/api/content-templates/admin/categories').send({ slug: 't-a', name: 'A' });
+  const b = await adminAgent.post('/api/content-templates/admin/categories').send({ slug: 't-b', name: 'B' });
+  // 倒序重排：B 在 A 之前
+  const res = await adminAgent.put('/api/content-templates/admin/categories/reorder').send({ order: [b.body.id, a.body.id] });
+  assert.strictEqual(res.status, 200);
+  const cats = await adminAgent.get('/api/content-templates/admin/categories');
+  const ra = cats.body.categories.find(c => c.id === a.body.id);
+  const rb = cats.body.categories.find(c => c.id === b.body.id);
+  assert.ok(rb && ra);
+  assert.ok(rb.sort_order < ra.sort_order, 'B 排序应小于 A');
+});
+
+test('reorder 非法 ID → 400', async () => {
+  const res = await adminAgent.put('/api/content-templates/admin/categories/reorder').send({ order: [999999] });
+  assert.strictEqual(res.status, 400);
+});
+
+test('reorder 缺少数组 → 400', async () => {
+  const res = await adminAgent.put('/api/content-templates/admin/categories/reorder').send({ order: [] });
+  assert.strictEqual(res.status, 400);
+});
+
+test('reorder 非管理员 → 403', async () => {
+  const res = await userAgent.put('/api/content-templates/admin/categories/reorder').send({ order: [1] });
+  assert.strictEqual(res.status, 403);
+});
+
 // ============================================================
 // 从文件上架（from-file）主链路
 // ============================================================

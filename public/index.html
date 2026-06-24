@@ -642,6 +642,43 @@ CLI 工具
 </div>
 </div>
 
+<!-- 市场分类 新增/编辑弹窗 -->
+<div class="modal-backdrop" id="market-cat-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="market-cat-modal-title">
+<div class="modal-panel modal-panel-sm">
+<div class="modal-header">
+<h2 id="market-cat-modal-title">分类</h2>
+<button type="button" class="btn btn-small modal-close" id="market-cat-modal-close" aria-label="关闭">×</button>
+</div>
+<div class="modal-body">
+<label class="login-field">
+<span>slug</span>
+<input type="text" id="market-cat-slug" autocomplete="off" placeholder="html-doc（小写字母/数字/连字符）">
+</label>
+<label class="login-field">
+<span>名称 *</span>
+<input type="text" id="market-cat-name" autocomplete="off">
+</label>
+<label class="login-field">
+<span>描述（可选）</span>
+<input type="text" id="market-cat-desc" autocomplete="off">
+</label>
+<label class="login-field">
+<span>排序序号</span>
+<input type="number" id="market-cat-order" value="0">
+</label>
+<label class="login-field login-field-inline">
+<input type="checkbox" id="market-cat-enabled" checked>
+<span>启用</span>
+</label>
+<div class="login-error" id="market-cat-error" role="alert" hidden></div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn btn-small" id="market-cat-modal-cancel">取消</button>
+<button type="button" class="btn btn-primary" id="market-cat-modal-submit">保存</button>
+</div>
+</div>
+</div>
+
 <!-- 令牌明文查看弹窗 -->
 <div class="modal-backdrop" id="token-reveal-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="token-reveal-modal-title">
 <div class="modal-panel modal-panel-sm">

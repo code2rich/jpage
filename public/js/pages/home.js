@@ -75,12 +75,24 @@ function loadCardThumb(card) {
   const thumb = card.querySelector('.file-card-thumb');
   // 已有 iframe（正在加载或已加载）则跳过，防止同一卡片重复挂载
   if (!thumb || thumb.querySelector('.file-card-thumb-iframe')) return Promise.resolve();
-  thumb.innerHTML = '<div class="file-card-thumb-wrap"><iframe class="file-card-thumb-iframe" loading="lazy" title="预览"></iframe></div>';
+  // 注意：不加 loading="lazy" —— 懒加载已由上面的 IntersectionObserver 负责。
+  // 浏览器对 lazy iframe 的判定依赖 iframe 的显式 width/height，而本卡片 iframe 只有 CSS 尺寸，
+  // 导致首屏卡片也被判定为"折叠以下"而延迟拉取 /render，iframe 的 load 事件迟迟不触发，
+  // .file-card-thumb-loading 灰色脉冲占位一直盖在上面（用户报告的"卡片首次打开渲染异常"）。
+  thumb.innerHTML = '<div class="file-card-thumb-wrap"><iframe class="file-card-thumb-iframe" title="预览"></iframe></div>';
   const wrap = thumb.querySelector('.file-card-thumb-wrap');
   const iframe = thumb.querySelector('.file-card-thumb-iframe');
+  let timer = null;
   return new Promise(resolve => {
-    iframe.addEventListener('load', () => { wrap.classList.add('loaded'); resolve(); }, { once: true });
-    iframe.addEventListener('error', () => resolve(), { once: true });
+    const finish = () => {
+      clearTimeout(timer);
+      wrap.classList.add('loaded');
+      resolve();
+    };
+    // 兜底超时：即使 load 事件因任何原因未触发（如缓存/被中断），8s 后也揭开占位，避免永久卡灰
+    timer = setTimeout(finish, 8000);
+    iframe.addEventListener('load', finish, { once: true });
+    iframe.addEventListener('error', finish, { once: true });
     iframe.src = API_BASE + '/api/files/' + card.dataset.fileId + '/render';
   });
 }
