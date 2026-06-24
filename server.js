@@ -325,10 +325,10 @@ function getIndexHtml() {
   // 注入哈希路径
   let html = fs.readFileSync(INDEX_HTML_PATH, 'utf8');
   if (manifest['style.css']) {
-    html = html.replace(/\/css\/style\.css\?v=[\d.]+/g, '/dist/' + manifest['style.css']);
+    html = html.replace(/\/css\/style\.css\?v=[^"']+/g, '/dist/' + manifest['style.css']);
   }
   if (manifest['app.js']) {
-    html = html.replace(/\/js\/app\.js\?v=[\d.]+/g, '/dist/' + manifest['app.js']);
+    html = html.replace(/\/js\/app\.js\?v=[^"']+/g, '/dist/' + manifest['app.js']);
   }
   _indexHtmlCache = { html, manifestMtime, manifest };
   return html;
