@@ -353,3 +353,106 @@ test('mine 列表含 source_file_name', async () => {
   assert.strictEqual(found.source_file_id, fileId, 'source_file_id 应等于源文件 id');
   assert.strictEqual(found.source_file_name, '来源追溯.html');
 });
+
+// ============================================================
+// 实例化（instantiate）主链路：使用模板 → 创建真实文件 + 追溯
+// ============================================================
+
+// 辅助：创建一个 approved+visible 模板，返回 id。
+// 用 categoryId:2（html-book）——分类 1 会被前置的「删除分类」测试停用。
+async function createPublishedTemplate(agent, title) {
+  const submit = await agent.post('/api/content-templates').send({
+    title: title || '实例化测试模板', fileType: 'html', categoryId: 2, content: '<!doctype html><body><h1>实例化</h1></body>',
+  });
+  assert.ok(submit.body.id, `模板应创建成功，实际 status=${submit.status} body=${JSON.stringify(submit.body)}`);
+  await adminAgent.post(`/api/content-templates/${submit.body.id}/review`).send({ status: 'approved', visibility: 'visible' });
+  return submit.body.id;
+}
+
+test('instantiate：approved+visible → 创建文件 + 记录 installs + use_count+1', async () => {
+  const id = await createPublishedTemplate(userAgent, '可实例化模板');
+
+  // 实例化前 use_count=0
+  const metaBefore = await request(env.app).get(`/api/content-templates/market/${id}`);
+  assert.strictEqual(metaBefore.body.use_count, 0);
+
+  const res = await userAgent.post(`/api/content-templates/${id}/instantiate`);
+  assert.strictEqual(res.status, 200);
+  assert.ok(res.body.fileId, '应返回新建文件 id');
+  assert.strictEqual(res.body.templateId, id);
+
+  // 验证文件确实创建了（upload_source='market' 标记来自实例化）
+  const fileRes = await userAgent.get(`/api/files/${res.body.fileId}`);
+  assert.strictEqual(fileRes.status, 200);
+  assert.strictEqual(fileRes.body.upload_source, 'market', '实例化产生的文件 upload_source 应为 market');
+
+  // use_count +1
+  const metaAfter = await request(env.app).get(`/api/content-templates/market/${id}`);
+  assert.strictEqual(metaAfter.body.use_count, 1);
+
+  // instantiation_count = 1
+  assert.strictEqual(metaAfter.body.instantiation_count, 1);
+});
+
+test('instantiate：未登录 → 401', async () => {
+  const id = await createPublishedTemplate(userAgent, '未登录实例化');
+  const res = await request(env.app).post(`/api/content-templates/${id}/instantiate`);
+  assert.strictEqual(res.status, 401);
+});
+
+test('instantiate：未上架模板（pending）→ 400', async () => {
+  const submit = await userAgent.post('/api/content-templates').send({
+    title: '未上架', fileType: 'html', categoryId: 2, content: '<p>x</p>',
+  });
+  const res = await userAgent.post(`/api/content-templates/${submit.body.id}/instantiate`);
+  assert.strictEqual(res.status, 404, 'pending+hidden 模板不在市场可见范围，应 404');
+});
+
+test('instantiate：不存在的模板 id → 404', async () => {
+  const res = await userAgent.post('/api/content-templates/999999/instantiate');
+  assert.strictEqual(res.status, 404);
+});
+
+test('instantiate：同用户再次实例化同模板 → 刷新 installs 记录（非报错）', async () => {
+  const id = await createPublishedTemplate(userAgent, '重复实例化');
+  const first = await userAgent.post(`/api/content-templates/${id}/instantiate`);
+  const second = await userAgent.post(`/api/content-templates/${id}/instantiate`);
+  assert.strictEqual(second.status, 200, 'UNIQUE(template_id,user_id) 应走 ON CONFLICT 更新而非报错');
+  assert.ok(second.body.fileId !== first.body.fileId, '每次实例化应创建新文件');
+  // instantiation_count 仍为 1（同用户的 install 记录被更新，而非新增）
+  const meta = await request(env.app).get(`/api/content-templates/market/${id}`);
+  assert.strictEqual(meta.body.instantiation_count, 1, '同用户去重，install 记录数不变');
+  assert.strictEqual(meta.body.use_count, 2, '但热度计数 use_count 每次 +1');
+});
+
+test('instantiate：不同用户实例化 → instantiation_count 累加', async () => {
+  const id = await createPublishedTemplate(adminAgent, '多用户实例化');
+  await adminAgent.post(`/api/content-templates/${id}/instantiate`);
+  await userAgent.post(`/api/content-templates/${id}/instantiate`);
+  const meta = await request(env.app).get(`/api/content-templates/market/${id}`);
+  assert.strictEqual(meta.body.instantiation_count, 2, '两个不同用户应各记一条 install');
+});
+
+test('GET /market 列表项含 instantiation_count 字段', async () => {
+  const id = await createPublishedTemplate(userAgent, '列表字段');
+  const market = await request(env.app).get('/api/content-templates/market');
+  const found = market.body.templates.find(t => t.id === id);
+  assert.ok(found, '模板应在市场列表中');
+  assert.strictEqual(typeof found.instantiation_count, 'number', '列表项应含 instantiation_count');
+});
+
+test('instantiate：创建的文件内容 = 模板内容快照', async () => {
+  const uniqueContent = '<!doctype html><body><h1>快照验证_UNIQUE</h1></body>';
+  const submit = await userAgent.post('/api/content-templates').send({
+    title: '内容快照', fileType: 'html', categoryId: 2, content: uniqueContent,
+  });
+  const id = submit.body.id;
+  await adminAgent.post(`/api/content-templates/${id}/review`).send({ status: 'approved', visibility: 'visible' });
+
+  const res = await userAgent.post(`/api/content-templates/${id}/instantiate`);
+  // 读文件原文，验证内容与模板一致
+  const raw = await userAgent.get(`/api/files/${res.body.fileId}/content`);
+  assert.strictEqual(raw.status, 200);
+  assert.ok(raw.body.content.includes('快照验证_UNIQUE'), '实例化文件内容应与模板一致');
+});
+

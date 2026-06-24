@@ -9,8 +9,10 @@ const fs = require('fs');
 const path = require('path');
 const { dbGet, dbRun, dbAll } = require('../lib/db');
 const { requireAuth, requireAdmin } = require('../lib/middleware/auth');
-const { clientIp, now } = require('../lib/util');
+const { clientIp, now, generateShareKey } = require('../lib/util');
 const { UPLOAD_DIR } = require('../lib/paths');
+const { generateStoredName } = require('./files/_shared');
+const { isFtsIndexable, indexFileContent } = require('../lib/fts');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -85,7 +87,8 @@ router.get('/market', async (req, res) => {
     const templates = await dbAll(
       `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.use_count, ct.featured,
               ct.created_at, ct.published_at, ct.category_id, c.slug AS category_slug, c.name AS category_name,
-              u.username AS uploader_name
+              u.username AS uploader_name,
+              (SELECT COUNT(*) FROM content_template_installs i WHERE i.template_id = ct.id) AS instantiation_count
        FROM content_templates ct
        LEFT JOIN template_market_categories c ON ct.category_id = c.id
        LEFT JOIN users u ON ct.uploaded_by = u.id
@@ -109,7 +112,8 @@ router.get('/market/:id', async (req, res) => {
       `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.use_count, ct.featured,
               ct.created_at, ct.published_at, ct.category_id,
               c.slug AS category_slug, c.name AS category_name,
-              u.username AS uploader_name
+              u.username AS uploader_name,
+              (SELECT COUNT(*) FROM content_template_installs i WHERE i.template_id = ct.id) AS instantiation_count
        FROM content_templates ct
        LEFT JOIN template_market_categories c ON ct.category_id = c.id
        LEFT JOIN users u ON ct.uploaded_by = u.id
@@ -435,6 +439,82 @@ router.post('/:id/use', requireAuth, async (req, res) => {
     res.json({ success: true, use_count: updated ? updated.use_count : 0 });
   } catch (e) {
     res.status(500).json({ error: '记录使用失败' });
+  }
+});
+
+// 实例化模板 → 在用户文件列表创建一个新文件（基于模板内容），并记录追溯。
+// 语义：「使用模板」= 用户真正得到一个可编辑的文件，而非空计数。
+// 仅对 approved+visible 模板生效；同用户对同模板可多次实例化（每次得到新文件）。
+// 复用 upload-json 的文件创建模式：generateStoredName + writeFile + INSERT files。
+router.post('/:id/instantiate', requireAuth, async (req, res) => {
+  try {
+    const t = await dbGet(
+      `SELECT ct.id, ct.title, ct.content, ct.file_type
+       FROM content_templates ct
+       LEFT JOIN template_market_categories c ON ct.category_id = c.id
+       WHERE ct.id = ? AND ${MARKET_VISIBLE_COND}`,
+      [req.params.id]
+    );
+    if (!t) return res.status(404).json({ error: '模板不存在或未上架' });
+    if (!t.content) return res.status(400).json({ error: '模板内容为空' });
+
+    // 文件名：模板标题 + 类型扩展名（剔除非法字符，避免路径问题）
+    const ext = t.file_type === 'markdown' ? '.md' : '.html';
+    const safeTitle = (t.title || '模板').replace(/[\\/:*?"<>|]/g, '_').trim() || '模板';
+    const originalName = safeTitle + ext;
+    const storedName = generateStoredName(ext);
+    const content = t.content;
+    const size = Buffer.byteLength(content, 'utf-8');
+    const filePath = path.join(UPLOAD_DIR, storedName);
+
+    try {
+      await fs.promises.writeFile(filePath, content, 'utf-8');
+    } catch (e) {
+      logger.error({ type: 'app', msg: '实例化写入文件失败', error: e.message });
+      return res.status(500).json({ error: '创建文件失败' });
+    }
+
+    const ts = now();
+    let fileId;
+    try {
+      const result = await dbRun(
+        `INSERT INTO files
+          (original_name, stored_name, file_type, size, is_public, uploaded_by,
+           share_key, upload_source, source_asset_id, created_from, updated_at)
+         VALUES (?, ?, ?, ?, 0, ?, ?, 'market', ?, 'market', ?)`,
+        [originalName, storedName, t.file_type, size, req.userId, generateShareKey(), req.params.id, ts]
+      );
+      fileId = result.lastID;
+    } catch (e) {
+      // 写库失败需回滚磁盘文件
+      fs.promises.unlink(filePath).catch(() => {});
+      logger.error({ type: 'app', msg: '实例化建文件记录失败', error: e.message });
+      return res.status(500).json({ error: '创建文件失败' });
+    }
+
+    // FTS 索引同步
+    if (isFtsIndexable(t.file_type, storedName)) {
+      indexFileContent(fileId, storedName);
+    }
+
+    // 记录实例化追溯（UNIQUE(template_id, user_id)：同用户重复实例化时刷新为最新文件）
+    await dbRun(
+      `INSERT INTO content_template_installs (template_id, user_id, file_id, source_version)
+       VALUES (?, ?, ?, (SELECT version FROM content_templates WHERE id = ?))
+       ON CONFLICT(template_id, user_id) DO UPDATE SET file_id = excluded.file_id, source_version = excluded.source_version, created_at = datetime('now')`,
+      [req.params.id, req.userId, fileId, req.params.id]
+    );
+
+    // 模板热度 +1（保留市场排序信号）
+    await dbRun('UPDATE content_templates SET use_count = use_count + 1 WHERE id = ?', [req.params.id]);
+
+    logger.audit('content_template.instantiate', {
+      templateId: parseInt(req.params.id), fileId, userId: req.userId, ip: clientIp(req)
+    });
+    res.json({ success: true, fileId, templateId: parseInt(req.params.id) });
+  } catch (e) {
+    logger.error({ type: 'app', msg: '实例化模板失败', error: e.message });
+    res.status(500).json({ error: '实例化失败' });
   }
 });
 

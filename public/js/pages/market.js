@@ -114,11 +114,7 @@ function renderMarketShell(container, { active, navigate }) {
         </a>
         <nav class="mw-side-nav">
           <a href="#/market" class="${active === 'home' ? 'active' : ''}">首页</a>
-          <button type="button" data-side-category="">全部作品</button>
-          <button type="button" data-side-category="dashboard">数据看板</button>
-          <button type="button" data-side-category="report">报告复盘</button>
-          <button type="button" data-side-category="landing">营销页面</button>
-          <button type="button" data-side-category="presentation">演示提案</button>
+          <div id="mw-side-cats"></div>
         </nav>
         <div class="mw-side-section">
           <div class="mw-side-title">管理</div>
@@ -133,14 +129,35 @@ function renderMarketShell(container, { active, navigate }) {
     </div>
   `;
   const body = container.querySelector('#market-body');
-  container.querySelectorAll('[data-side-category]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      homeState.category = btn.dataset.sideCategory || '';
-      homeState.page = 1;
-      go('/market');
-    });
-  });
+  // 侧边栏分类异步加载（数据驱动，不再写死）
+  loadSideCategories(container, go);
   return body;
+}
+
+// 侧边栏分类：从 /categories 拉取真实分类，点击设筛选并回到首页。
+// 当前选中分类用 homeState.category 高亮，与首页顶部分类 chips 共享状态。
+async function loadSideCategories(container, go) {
+  const wrap = container.querySelector('#mw-side-cats');
+  if (!wrap) return;
+  try {
+    const data = await api('/api/content-templates/categories');
+    const cats = data.categories || [];
+    const all = `<button type="button" class="${!homeState.category ? 'active' : ''}" data-side-category="">全部作品</button>`;
+    const items = cats.map(c =>
+      `<button type="button" class="${homeState.category === c.slug ? 'active' : ''}" data-side-category="${escapeHtml(c.slug)}">${escapeHtml(c.name)}</button>`
+    ).join('');
+    wrap.innerHTML = all + items;
+    wrap.querySelectorAll('[data-side-category]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        homeState.category = btn.dataset.sideCategory || '';
+        homeState.page = 1;
+        go('/market');
+      });
+    });
+  } catch {
+    // 拉取失败仅置空，不阻塞页面（首页顶部分类条仍可独立加载）
+    wrap.innerHTML = '';
+  }
 }
 
 // ============================================================
@@ -168,22 +185,6 @@ function renderHome(container, navigate) {
       </div>
     </header>
     <div class="mw-category-row" id="market-category-chips"></div>
-    <section class="mw-hero-grid">
-      <button type="button" class="mw-feature-card" data-feature-category="report">
-        <span>本周精选</span>
-        <strong>AI 经营复盘模板合集</strong>
-        <small>从指标到结论，几分钟生成可发布页面。</small>
-      </button>
-      <div class="mw-explore-card">
-        <h2>探索更多</h2>
-        <div class="mw-explore-grid">
-          <button type="button" data-feature-category="dashboard"><strong>数据看板</strong><span>指标监控</span></button>
-          <button type="button" data-feature-category="landing"><strong>营销落地页</strong><span>产品发布</span></button>
-          <button type="button" data-feature-category="presentation"><strong>演示提案</strong><span>路演汇报</span></button>
-          <button type="button" data-feature-category="card"><strong>卡片组件</strong><span>图文资产</span></button>
-        </div>
-      </div>
-    </section>
     <section class="mw-feed-head">
       <div>
         <h1>推荐作品</h1>
@@ -215,14 +216,6 @@ function renderHome(container, navigate) {
 
   // 分类条（异步加载）
   loadCategoryChips(body, go).then(() => loadHomeList(body, go));
-
-  body.querySelectorAll('[data-feature-category]').forEach(btn => {
-    btn.onclick = () => {
-      homeState.category = btn.dataset.featureCategory || '';
-      homeState.page = 1;
-      loadCategoryChips(body, go).then(() => loadHomeList(body, go));
-    };
-  });
 }
 
 async function loadCategoryChips(body, navigate) {
@@ -300,10 +293,9 @@ function renderHomeGrid(grid, templates, pg, navigate) {
         <span class="ct-card-title">${escapeHtml(t.title)}</span>
       </div>
       <p class="ct-card-desc">${escapeHtml(t.description || '').slice(0, 100)}</p>
-      <div class="mw-card-author">${escapeHtml(t.uploader_name || '即页创作者')} · ${t.featured ? '官方精选' : '创作者'}</div>
+      <div class="mw-card-author">${escapeHtml(t.uploader_name || '匿名创作者')}</div>
       <div class="ct-card-footer">
-        <span class="ct-use-count">${t.use_count || 0} 次使用</span>
-        <span class="mw-rating">4.9</span>
+        <span class="ct-use-count">${t.instantiation_count || 0} 次使用</span>
       </div>
     </div>`;
   }).join('');
@@ -328,10 +320,11 @@ function renderHomeGrid(grid, templates, pg, navigate) {
       if (act === 'use') {
         e.stopPropagation();
         try {
-          await api(`/api/content-templates/${id}/use`, { method: 'POST' });
-          toast('已记录使用');
+          const data = await api(`/api/content-templates/${id}/instantiate`, { method: 'POST' });
+          toast('已基于该模板创建文件，正在打开…');
+          navigate(`/view/${data.fileId}`);
         } catch (err) {
-          toast(err.message || '操作失败', 'error');
+          toast(err.message || '使用失败，请先登录', 'error');
         }
         return;
       }
@@ -384,7 +377,7 @@ async function loadDetail(body, id, navigate) {
           </div>
           ${meta.description ? `<p class="ct-desc">${escapeHtml(meta.description)}</p>` : ''}
           <div class="ct-meta-info">
-            作者：${escapeHtml(meta.uploader_name || '匿名')} · 使用 ${meta.use_count} 次 · ${relativeTime(meta.published_at || meta.created_at)}
+            作者：${escapeHtml(meta.uploader_name || '匿名')} · ${meta.instantiation_count || 0} 次使用 · ${relativeTime(meta.published_at || meta.created_at)}
           </div>
           <div class="market-detail-actions">
             <button class="btn btn-primary" id="detail-copy">复制内容</button>
@@ -408,11 +401,11 @@ async function loadDetail(body, id, navigate) {
     };
     body.querySelector('#detail-use').onclick = async () => {
       try {
-        await api(`/api/content-templates/${id}/use`, { method: 'POST' });
-        toast('已记录使用');
-        loadDetail(body, id, navigate);
+        const data = await api(`/api/content-templates/${id}/instantiate`, { method: 'POST' });
+        toast('已基于该模板创建文件，正在打开…');
+        navigate(`/view/${data.fileId}`);
       } catch (e) {
-        toast(e.message || '操作失败', 'error');
+        toast(e.message || '使用失败，请先登录', 'error');
       }
     };
     if (isOwner || isAdmin) {
@@ -569,7 +562,6 @@ async function editExisting(body, data, navigate) {
     </div>
   `;
 
-  body.querySelector('#edit-cancel').onclick = () => renderMine(body.closest('#app').querySelector('#market-body') || body, navigate);
   body.querySelector('#edit-cancel').onclick = () => { navigate('/market/my'); };
   body.querySelector('#edit-save').onclick = async () => {
     const title = body.querySelector('#edit-title').value.trim();
@@ -783,7 +775,6 @@ async function openCategoryManager(body, navigate) {
     </div>
   `;
 
-  body.querySelector('#cat-back').onclick = () => renderAdmin(body.closest('#app').querySelector('#market-body') || body, navigate);
   body.querySelector('#cat-back').onclick = () => { adminState.status = adminState.status || 'pending'; navigate('/market/admin'); };
 
   body.querySelector('#cat-add').onclick = async () => {
