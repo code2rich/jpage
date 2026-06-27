@@ -29,7 +29,6 @@ function renderLogin(container, openTab) {
 
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
-      switchTab(tab.dataset.tab);
       location.hash = '/' + tab.dataset.tab;
     });
   });

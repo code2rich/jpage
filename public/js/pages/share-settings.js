@@ -25,6 +25,19 @@ async function openShareSettings(fileId, current, onUpdated) {
   const aliasInput = el('share-alias-input');
   const expiresInput = el('share-expires-input');
   const passwordInput = el('share-password-input');
+  const passwordToggle = el('share-password-toggle');
+
+  // 密码显隐切换
+  if (passwordToggle) {
+    passwordToggle.addEventListener('click', () => {
+      const isPassword = passwordInput.type === 'password';
+      passwordInput.type = isPassword ? 'text' : 'password';
+      passwordToggle.querySelector('.icon-eye').style.display = isPassword ? 'none' : '';
+      passwordToggle.querySelector('.icon-eye-off').style.display = isPassword ? '' : 'none';
+      passwordToggle.setAttribute('aria-label', isPassword ? '隐藏密码' : '显示密码');
+      passwordToggle.title = isPassword ? '隐藏密码' : '显示密码';
+    });
+  }
 
   // 把本地快照刷新到界面（链接、状态徽标、别名输入框回显、过期时间回显）
   function refresh() {
@@ -72,9 +85,14 @@ async function openShareSettings(fileId, current, onUpdated) {
 
   // 保存自定义别名（或清空回到随机）
   el('share-alias-save').onclick = async () => {
+    const alias = aliasInput.value.trim();
+    if (alias && !/^[a-zA-Z0-9_-]{3,32}$/.test(alias)) {
+      toast('别名仅支持字母、数字、下划线、连字符，3~32 位', 'error');
+      return;
+    }
     try {
       const data = await api(`/api/files/${fileId}/share`, {
-        method: 'PUT', body: { alias: aliasInput.value.trim() }
+        method: 'PUT', body: { alias }
       });
       snap.share_key = data.share_key;
       snap.share_expires_at = data.share_expires_at;

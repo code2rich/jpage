@@ -393,11 +393,11 @@ CLI 工具
 </div>
 <main class="main">
 <div class="toolbar">
-<div class="upload-area" id="upload-area" role="button" tabindex="0" aria-label="选择或拖入 HTML、Markdown 文件上传">
-<input type="file" id="file-input" accept=".html,.htm,.md,.markdown,.zip" hidden aria-label="选择要上传的文件">
+<div class="upload-area" id="upload-area" role="button" tabindex="0" aria-label="选择或拖入 HTML、Markdown 文件上传，支持多选">
+<input type="file" id="file-input" accept=".html,.htm,.md,.markdown,.zip" multiple hidden aria-label="选择要上传的文件，支持多选">
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
 <p class="upload-title">点击或拖拽上传</p>
-<span class="upload-hint">支持 .html .htm .md .markdown .zip，单文件最大 50MB</span>
+<span class="upload-hint">支持 .html .htm .md .markdown .zip，可多选，单文件最大 50MB</span>
 </div>
 <label class="upload-privacy">
 <input type="checkbox" id="upload-is-public" checked>

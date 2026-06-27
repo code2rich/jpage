@@ -9,7 +9,8 @@ import { closeTemplateSelect } from './home.js';
 import { openShareSettings } from './share-settings.js';
 
 // ---------- Preview Header State ----------
-const PREVIEW_HEADER_COLLAPSED_KEY = 'htmlwebsite_preview_header_collapsed';
+let previewAbortController = null;
+const PREVIEW_HEADER_COLLAPSED_KEY = 'jpage_preview_header_collapsed';
 
 function syncPreviewHeaderState(layout, expandFloatingBtn, toggleHeaderBtn) {
   const collapsed = layout.classList.contains('preview-header-collapsed');
@@ -343,6 +344,10 @@ async function openTemplateSelectForPreview(container, fileId, currentTemplateId
 
 // ---------- Preview Page ----------
 function renderPreview(container, hash) {
+  if (previewAbortController) previewAbortController.abort();
+  previewAbortController = new AbortController();
+  const signal = previewAbortController.signal;
+
   const id = hash.split('/').pop();
   if (!id) return navigate('/');
 
@@ -557,11 +562,11 @@ function renderPreview(container, hash) {
   }
 
   // Escape key closes version panel
-  document.addEventListener('keydown', function versionEscHandler(e) {
+  document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && versionPanel && !versionPanel.hidden && versionPanel.classList.contains('open')) {
       closeVersionPanel(container);
     }
-  });
+  }, { signal });
 
   // More dropdown: toggle + menu item delegation
   function closeMoreDropdown() {
@@ -579,9 +584,9 @@ function renderPreview(container, hash) {
     if (menuUploadVersion) menuUploadVersion.addEventListener('click', () => { closeMoreDropdown(); container.querySelector('#version-file-input')?.click(); });
     if (menuVersionHistory && !menuVersionHistory._bound) { menuVersionHistory._bound = true; } // already bound above
     // Close on outside click
-    document.addEventListener('click', function moreOutsideHandler(e) {
+    document.addEventListener('click', e => {
       if (moreDropdown && !moreDropdown.contains(e.target)) closeMoreDropdown();
-    });
+    }, { signal });
   }
 
   // ---------- Bundle 文件树 ----------

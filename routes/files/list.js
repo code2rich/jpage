@@ -31,6 +31,9 @@ function registerList(router) {
       const keyword = (req.query.keyword || '').trim();
       const categoryId = req.query.category || null;
       const tagId = req.query.tag || null;
+      const fileType = req.query.file_type || null;
+      const isPublic = req.query.is_public;
+      const starred = req.query.starred === '1';
 
       // 构建 WHERE 条件
       const conditions = [];
@@ -53,6 +56,18 @@ function registerList(router) {
       if (tagId) {
         conditions.push(`EXISTS (SELECT 1 FROM file_tags ft WHERE ft.file_id = f.id AND ft.tag_id = ?)`);
         params.push(parseInt(tagId));
+      }
+      if (fileType === 'html' || fileType === 'markdown') {
+        conditions.push(`f.file_type = ?`);
+        params.push(fileType);
+      }
+      if (isPublic === '1' || isPublic === '0') {
+        conditions.push(`f.is_public = ?`);
+        params.push(parseInt(isPublic));
+      }
+      if (starred) {
+        conditions.push(`EXISTS (SELECT 1 FROM starred_files sf WHERE sf.file_id = f.id AND sf.user_id = ?)`);
+        params.push(userId);
       }
 
       const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';

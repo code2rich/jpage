@@ -19,6 +19,7 @@ const selectedFileIds = new Set();
 let lastCheckedIndex = -1;
 let skillModalCurrent = null;
 let searchResults = null;
+let homeAbortController = null;
 
 // ---------- 视图模式（列表 / 卡片） ----------
 const FILE_VIEW_KEY = 'jpage-file-view';
@@ -99,6 +100,10 @@ function loadCardThumb(card) {
 
 // ---------- Home Page ----------
 function renderHome(container) {
+  if (homeAbortController) homeAbortController.abort();
+  homeAbortController = new AbortController();
+  const signal = homeAbortController.signal;
+
   const tmpl = document.getElementById('home-template');
   container.innerHTML = '';
   container.appendChild(tmpl.content.cloneNode(true));
@@ -212,8 +217,33 @@ function renderHome(container) {
       const isOpen = settingsDropdown.classList.toggle('open');
       settingsBtn.setAttribute('aria-expanded', String(isOpen));
       if (isOpen) {
-        const firstItem = settingsMenu.querySelector('.settings-menu-item');
+        const firstItem = settingsMenu.querySelector('.settings-menu-item:not([style*="display: none"])');
         if (firstItem) firstItem.focus();
+      }
+    });
+
+    // 键盘导航：ArrowDown/ArrowUp 移动焦点，Escape 关闭，Home/End 跳首尾
+    settingsMenu.addEventListener('keydown', e => {
+      const items = [...settingsMenu.querySelectorAll('.settings-menu-item')].filter(
+        el => el.offsetParent !== null
+      );
+      const idx = items.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        items[(idx + 1) % items.length]?.focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        items[(idx - 1 + items.length) % items.length]?.focus();
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        items[0]?.focus();
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        items[items.length - 1]?.focus();
+      } else if (e.key === 'Escape') {
+        settingsDropdown.classList.remove('open');
+        settingsBtn.setAttribute('aria-expanded', 'false');
+        settingsBtn.focus();
       }
     });
 
@@ -289,7 +319,15 @@ function renderHome(container) {
         if (t) t.setAttribute('aria-expanded', 'false');
       }
     });
-  });
+  }, { signal });
+
+  // 快捷键 / 聚焦搜索框
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+      e.preventDefault();
+      container.querySelector('#search-input')?.focus();
+    }
+  }, { signal });
 }
 
 // ---------- Upload ----------
@@ -309,7 +347,10 @@ function setupUpload(container) {
   area.addEventListener('drop', e => {
     e.preventDefault();
     area.classList.remove('dragover');
-    if (e.dataTransfer.files.length) uploadFile(container, e.dataTransfer.files[0]);
+    if (e.dataTransfer.files.length) {
+      if (e.dataTransfer.files.length > 1) toast('仅上传第一个文件，如需批量请使用 ZIP 打包');
+      uploadFile(container, e.dataTransfer.files[0]);
+    }
   });
   input.addEventListener('change', () => {
     if (input.files.length) uploadFile(container, input.files[0]);
@@ -428,6 +469,10 @@ async function loadFiles(container, page) {
       const params = new URLSearchParams({ page: pagination.page, limit: pagination.limit });
       if (filterState.categoryId) params.set('category', filterState.categoryId);
       if (filterState.tagId) params.set('tag', filterState.tagId);
+      if (filterState.filter === 'html' || filterState.filter === 'markdown') params.set('file_type', filterState.filter);
+      if (filterState.filter === 'public') params.set('is_public', '1');
+      if (filterState.filter === 'private') params.set('is_public', '0');
+      if (filterState.filter === 'starred') params.set('starred', '1');
       data = await api('/api/files?' + params.toString());
       allFiles = data.files;
     }
@@ -455,20 +500,7 @@ function applyFilters(container) {
   const empty = container.querySelector('#empty-state');
   const countEl = container.querySelector('#file-count');
 
-  let filtered = searchResults || allFiles;
-
-  if (filterState.filter === 'html') {
-    filtered = filtered.filter(f => f.file_type === 'html');
-  } else if (filterState.filter === 'markdown') {
-    filtered = filtered.filter(f => f.file_type === 'markdown');
-  } else if (filterState.filter === 'public') {
-    filtered = filtered.filter(f => f.is_public === 1);
-  } else if (filterState.filter === 'private') {
-    filtered = filtered.filter(f => f.is_public === 0);
-  } else if (filterState.filter === 'starred') {
-    filtered = filtered.filter(f => f.starred === true);
-  }
-
+  const filtered = searchResults || allFiles;
   const hasFilter = filterState.query || filterState.filter !== 'all' || filterState.tagId || filterState.categoryId;
   countEl.textContent = hasFilter
     ? `${filtered.length} / ${pagination.total} 个文件`
@@ -712,6 +744,8 @@ function renderFileList(container, list, files) {
     });
     el.querySelector('.btn-star').addEventListener('click', async e => {
       e.stopPropagation();
+      const btn = e.currentTarget;
+      btn.disabled = true;
       await toggleStar(f.id, f.starred);
       loadFiles(container);
     });
@@ -757,12 +791,27 @@ function renderFileList(container, list, files) {
 function renderCardList(container, list, files) {
   // 切换容器为网格布局
   list.classList.add('view-card');
-  // 卡片视图不支持全选（空间小），隐藏表头的全选 checkbox
+  // 卡片视图也支持全选
   const selectAllCb = container.querySelector('#select-all-checkbox');
-  if (selectAllCb) selectAllCb.checked = false;
+  if (selectAllCb) {
+    selectAllCb.checked = false;
+    selectAllCb.onchange = () => {
+      const checked = selectAllCb.checked;
+      files.forEach(f => {
+        const card = list.querySelector(`.file-card[data-file-id="${f.id}"]`);
+        if (card) {
+          const cb = card.querySelector('.file-checkbox');
+          if (cb) {
+            cb.checked = checked;
+            toggleFileCheckbox(f.id, card, checked);
+          }
+        }
+      });
+    };
+  }
   const observer = ensureCardThumbObserver();
 
-  files.forEach((f) => {
+  files.forEach((f, index) => {
     const el = document.createElement('div');
     el.className = 'file-card';
     el.dataset.fileId = f.id;
@@ -781,22 +830,65 @@ function renderCardList(container, list, files) {
     const timeStr = relativeTime(f.updated_at || f.created_at);
 
     el.innerHTML = `
+      <label class="file-checkbox-wrap file-card-checkbox">
+        <input type="checkbox" class="file-checkbox" data-id="${f.id}" data-index="${index}">
+        <span class="file-checkbox-visual"></span>
+      </label>
       <div class="file-card-thumb" aria-hidden="true">
         <div class="file-card-thumb-loading"></div>
       </div>
       <button type="button" class="file-card-icon-btn file-card-star ${f.starred ? 'starred' : ''}" data-id="${f.id}" aria-label="收藏" title="收藏">${f.starred ? '★' : '☆'}</button>
       <button type="button" class="file-card-icon-btn file-card-copy" data-id="${f.id}" aria-label="复制链接" title="复制链接"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button>
+      <div class="file-card-more-dropdown">
+        <button type="button" class="file-card-icon-btn file-card-more-trigger" title="更多操作" aria-label="更多操作">⋯</button>
+        <div class="file-card-more-menu">
+          <button type="button" class="file-more-item btn-privacy" data-id="${f.id}" data-public="${isPublic}">${isPublic ? '设为私有' : '设为公开'}</button>
+          <button type="button" class="file-more-item btn-share-settings" data-id="${f.id}">分享设置</button>
+          <button type="button" class="file-more-item btn-tags" data-id="${f.id}">编辑标签</button>
+          <button type="button" class="file-more-item btn-category" data-id="${f.id}">移动分类</button>
+          ${!f.is_bundle ? `<button type="button" class="file-more-item btn-publish-market" data-id="${f.id}">上架到市场</button>` : ''}
+          ${f.file_type === 'markdown' ? `<button type="button" class="file-more-item btn-template" data-id="${f.id}">切换模板</button>` : ''}
+          <button type="button" class="file-more-item btn-rename" data-id="${f.id}">重命名</button>
+          <button type="button" class="file-more-item btn-download" data-id="${f.id}">下载</button>
+          <hr class="file-more-divider">
+          <button type="button" class="file-more-item file-more-danger btn-delete" data-id="${f.id}">删除</button>
+        </div>
+      </div>
       <div class="file-card-name" title="${safeName}">${safeName}</div>
       <div class="file-card-badges"><span class="file-badge file-badge-type">${iconText}</span>${privacyBadge}${versionBadge}${tagBadges}${sourceBadge(f.upload_source)}${uploaderBadge(f.uploader_name)}</div>
       <div class="file-card-footer"><span>${size}</span><span>${timeStr}</span></div>
     `;
+
+    // checkbox 事件（含 Shift 连选）
+    const cb = el.querySelector('.file-checkbox');
+    cb.addEventListener('click', e => e.stopPropagation());
+    cb.addEventListener('change', e => {
+      if (e.shiftKey && lastCheckedIndex >= 0) {
+        const start = Math.min(lastCheckedIndex, index);
+        const end = Math.max(lastCheckedIndex, index);
+        for (let i = start; i <= end; i++) {
+          const targetCb = list.querySelector(`.file-checkbox[data-index="${i}"]`);
+          if (targetCb) {
+            targetCb.checked = cb.checked;
+            toggleFileCheckbox(parseInt(targetCb.dataset.id), targetCb.closest('.file-card'), cb.checked);
+          }
+        }
+      } else {
+        toggleFileCheckbox(f.id, el, cb.checked);
+      }
+      if (cb.checked) lastCheckedIndex = index;
+    });
+
     el.setAttribute('role', 'button');
     el.setAttribute('tabindex', '0');
     el.setAttribute('aria-label', `打开 ${f.original_name}`);
 
-    // 整张卡片点击 → 预览（星标按钮单独拦截）
+    // 整张卡片点击 → 预览（按钮单独拦截）
     const openPreview = () => navigate('/view/' + f.id);
-    el.addEventListener('click', openPreview);
+    el.addEventListener('click', e => {
+      if (e.target.closest('.file-card-icon-btn, .file-card-more-dropdown, .file-checkbox-wrap')) return;
+      openPreview();
+    });
     el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPreview(); } });
     el.querySelector('.file-card-star').addEventListener('click', async e => {
       e.stopPropagation();
@@ -807,6 +899,69 @@ function renderCardList(container, list, files) {
       e.stopPropagation();
       doCopyLink(f.share_key);
     });
+
+    // 更多菜单
+    const moreDropdown = el.querySelector('.file-card-more-dropdown');
+    const moreTrigger = el.querySelector('.file-card-more-trigger');
+    moreTrigger.addEventListener('click', e => {
+      e.stopPropagation();
+      document.querySelectorAll('.file-card-more-dropdown.open').forEach(d => {
+        if (d !== moreDropdown) d.classList.remove('open');
+      });
+      moreDropdown.classList.toggle('open');
+    });
+
+    el.querySelector('.btn-privacy').addEventListener('click', e => {
+      e.stopPropagation();
+      moreDropdown.classList.remove('open');
+      doSetPrivacy(container, f.id, isPublic);
+    });
+    el.querySelector('.btn-share-settings').addEventListener('click', e => {
+      e.stopPropagation();
+      moreDropdown.classList.remove('open');
+      openShareSettings(f.id, f, () => loadFiles(container));
+    });
+    el.querySelector('.btn-rename').addEventListener('click', e => {
+      e.stopPropagation();
+      moreDropdown.classList.remove('open');
+      doRename(container, f.id, f.original_name);
+    });
+    el.querySelector('.btn-download').addEventListener('click', e => {
+      e.stopPropagation();
+      moreDropdown.classList.remove('open');
+      window.open(API_BASE + '/api/files/' + f.id + '/download', '_blank');
+    });
+    el.querySelector('.btn-delete').addEventListener('click', e => {
+      e.stopPropagation();
+      moreDropdown.classList.remove('open');
+      doDelete(container, f.id, f.original_name);
+    });
+    el.querySelector('.btn-tags').addEventListener('click', e => {
+      e.stopPropagation();
+      moreDropdown.classList.remove('open');
+      openTagEditor(container, f.id, f.tags);
+    });
+    el.querySelector('.btn-category').addEventListener('click', e => {
+      e.stopPropagation();
+      moreDropdown.classList.remove('open');
+      openCategorySelect(container, f.id, f.category_id);
+    });
+    const btnPubMarket = el.querySelector('.btn-publish-market');
+    if (btnPubMarket) {
+      btnPubMarket.addEventListener('click', e => {
+        e.stopPropagation();
+        moreDropdown.classList.remove('open');
+        openPublishMarket(container, f.id, f);
+      });
+    }
+    const btnTpl = el.querySelector('.btn-template');
+    if (btnTpl) {
+      btnTpl.addEventListener('click', e => {
+        e.stopPropagation();
+        moreDropdown.classList.remove('open');
+        openTemplateSelect(container, f.id, f.template_id);
+      });
+    }
     el.querySelectorAll('.file-badge-tag').forEach(badge => {
       badge.addEventListener('click', e => {
         e.stopPropagation();
@@ -891,11 +1046,8 @@ function buildPageNumbers(current, total) {
 
 function setupViewToggle(container) {
   const buttons = container.querySelectorAll('.view-toggle-btn');
-  const selectAllWrap = container.querySelector('.select-all-wrap'); // 卡片视图无单卡 checkbox，隐藏全选
-  const syncAllSelect = () => { if (selectAllWrap) selectAllWrap.hidden = (viewMode === 'card'); };
   // 根据 viewMode 同步按钮的 active 态（首次进入 / 刷新后恢复持久化选择）
   buttons.forEach(b => b.classList.toggle('active', b.dataset.view === viewMode));
-  syncAllSelect();
   buttons.forEach(btn => {
     btn.addEventListener('click', () => {
       if (viewMode === btn.dataset.view) return;
@@ -905,7 +1057,6 @@ function setupViewToggle(container) {
       cardThumbActive = 0;
       setViewMode(btn.dataset.view);
       buttons.forEach(b => b.classList.toggle('active', b === btn));
-      syncAllSelect();
       applyFilters(container); // 复用现有重渲染流，重建列表/卡片
     });
   });
@@ -965,7 +1116,7 @@ function setupFileFilter(container) {
         filterState.tagId = null;
         filterState.categoryId = null;
       }
-      applyFilters(container);
+      loadFiles(container, 1);
     });
   });
 
@@ -980,12 +1131,6 @@ function setupFileFilter(container) {
     }
   });
 
-  document.addEventListener('keydown', e => {
-    if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
-      e.preventDefault();
-      searchInput.focus();
-    }
-  });
 }
 
 async function doCopyLink(shareKey) {
