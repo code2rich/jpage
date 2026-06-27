@@ -53,17 +53,9 @@ async function loadThumb(card) {
   const loadingEl = card.querySelector('.ct-card-thumb-loading');
   const iframe = card.querySelector('.ct-thumb-iframe');
   if (!iframe) return;
-  try {
-    const data = await api(`/api/content-templates/market/${id}/preview`);
-    if (data.file_type === 'markdown') {
-      iframe.srcdoc = `<pre style="padding:24px;font-size:14px;white-space:pre-wrap;word-break:break-word;margin:0">${escapeHtml(data.content)}</pre>`;
-    } else {
-      iframe.srcdoc = data.content;
-    }
-    iframe.onload = () => { if (loadingEl) loadingEl.remove(); };
-  } catch {
-    if (loadingEl) loadingEl.remove();
-  }
+  iframe.onload = () => { if (loadingEl) loadingEl.remove(); };
+  iframe.onerror = () => { if (loadingEl) loadingEl.remove(); };
+  iframe.src = `/api/content-templates/market/${id}/preview-html`;
 }
 
 // ============================================================
@@ -765,10 +757,7 @@ function renderDetail(container, id, navigate) {
 
 async function loadDetail(body, id, _navigate) {
   try {
-    const [meta, contentData] = await Promise.all([
-      api(`/api/content-templates/market/${id}`),
-      api(`/api/content-templates/market/${id}/preview`),
-    ]);
+    const meta = await api(`/api/content-templates/market/${id}`);
 
     const typeLabel = meta.file_type === 'markdown' ? 'Markdown' : 'HTML';
     const cat = meta.category_name ? `<span class="ct-badge ct-badge-scene">${escapeHtml(meta.category_name)}</span>` : '';
@@ -810,11 +799,7 @@ async function loadDetail(body, id, _navigate) {
     `;
 
     const iframe = body.querySelector('.market-detail-iframe');
-    if (contentData.file_type === 'markdown') {
-      iframe.srcdoc = `<pre style="padding:24px;font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word;margin:0">${escapeHtml(contentData.content)}</pre>`;
-    } else {
-      iframe.srcdoc = contentData.content;
-    }
+    iframe.src = `/api/content-templates/market/${id}/preview-html`;
 
     // 使用此模板
     body.querySelector('#detail-use-template').onclick = async () => {

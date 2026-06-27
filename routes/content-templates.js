@@ -14,6 +14,7 @@ const { UPLOAD_DIR } = require('../lib/paths');
 const { generateStoredName } = require('./files/_shared');
 const { isFtsIndexable, indexFileContent } = require('../lib/fts');
 const { addUserStorage } = require('../lib/usage');
+const { renderTemplateContent } = require('../lib/render');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -152,6 +153,24 @@ router.get('/market/:id/preview', async (req, res) => {
     res.json({ id: t.id, title: t.title, file_type: t.file_type, content: t.content });
   } catch (e) {
     res.status(500).json({ error: '获取模板预览失败' });
+  }
+});
+
+// 市场预览 HTML（用于 iframe src，避免 srcdoc 继承父页严格 CSP 导致内联脚本被拦截）
+router.get('/market/:id/preview-html', async (req, res) => {
+  try {
+    const t = await dbGet(
+      `SELECT ct.title, ct.file_type, ct.content
+       FROM content_templates ct
+       LEFT JOIN template_market_categories c ON ct.category_id = c.id
+       WHERE ct.id = ? AND ${MARKET_VISIBLE_COND}`,
+      [req.params.id]
+    );
+    if (!t) return res.status(404).json({ error: '模板不存在或未上架' });
+    return await renderTemplateContent(res, t);
+  } catch (e) {
+    logger.error({ type: 'app', msg: '获取市场预览 HTML 失败', error: e.message });
+    res.status(500).json({ error: '渲染预览失败' });
   }
 });
 
