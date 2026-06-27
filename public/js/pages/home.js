@@ -347,98 +347,114 @@ function setupUpload(container) {
   area.addEventListener('drop', e => {
     e.preventDefault();
     area.classList.remove('dragover');
-    if (e.dataTransfer.files.length) {
-      if (e.dataTransfer.files.length > 1) toast('仅上传第一个文件，如需批量请使用 ZIP 打包');
-      uploadFile(container, e.dataTransfer.files[0]);
-    }
+    if (e.dataTransfer.files.length) uploadFiles(container, e.dataTransfer.files);
   });
   input.addEventListener('change', () => {
-    if (input.files.length) uploadFile(container, input.files[0]);
+    if (input.files.length) uploadFiles(container, input.files);
   });
 }
 
-async function uploadFile(container, file) {
+async function uploadFiles(container, fileList) {
+  const files = Array.from(fileList);
   const allowed = ['.html', '.htm', '.md', '.markdown', '.zip'];
-  const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
-  if (!allowed.includes(ext)) {
-    toast('仅支持 HTML、Markdown 和 ZIP 文件', 'error');
-    return;
+  const validFiles = files.filter(f => {
+    const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
+    return allowed.includes(ext);
+  });
+  const skipped = files.length - validFiles.length;
+  if (skipped > 0) {
+    toast(`跳过 ${skipped} 个不支持的文件`, 'error');
   }
-  const area = container.querySelector('#upload-area');
-  const prevPointer = area.style.pointerEvents;
-  area.style.pointerEvents = 'none';
+  if (!validFiles.length) return;
 
+  const area = container.querySelector('#upload-area');
   const progressEl = container.querySelector('#upload-progress');
   const progressBar = container.querySelector('#upload-progress-bar');
   const progressText = container.querySelector('#upload-progress-text');
+  const prevPointer = area.style.pointerEvents;
+  area.style.pointerEvents = 'none';
   if (progressEl) progressEl.style.display = 'block';
-  if (progressBar) progressBar.style.width = '0%';
-  if (progressText) progressText.textContent = '0%';
 
-  const fd = new FormData();
-  fd.append('file', file);
   const isPublicEl = container.querySelector('#upload-is-public');
-  fd.append('isPublic', isPublicEl && isPublicEl.checked ? 'true' : 'false');
+  const isPublic = !!(isPublicEl && isPublicEl.checked);
 
-  return new Promise((resolve) => {
+  let successCount = 0;
+  let overwriteCount = 0;
+  const failed = [];
+
+  function updateProgress(current, total, filePct = 100) {
+    const pct = total === 0 ? 0 : Math.round(((current - 1 + filePct / 100) / total) * 100);
+    if (progressBar) progressBar.style.width = pct + '%';
+    if (progressText) progressText.textContent = total > 1 ? `${current}/${total}` : `${pct}%`;
+  }
+
+  for (let i = 0; i < validFiles.length; i++) {
+    updateProgress(i + 1, validFiles.length, 0);
+    try {
+      const data = await uploadOneFile(validFiles[i], isPublic, (filePct) => {
+        updateProgress(i + 1, validFiles.length, filePct);
+      });
+      successCount++;
+      if (data.overwritten) overwriteCount++;
+    } catch (e) {
+      failed.push({ name: validFiles[i].name, error: e.message || '上传失败' });
+    }
+  }
+
+  area.style.pointerEvents = prevPointer;
+  if (progressBar) progressBar.style.width = '100%';
+  setTimeout(() => {
+    if (progressEl) progressEl.style.display = 'none';
+  }, 400);
+
+  container.querySelector('#file-input').value = '';
+  loadFiles(container);
+
+  if (failed.length > 0) {
+    const rows = failed.map(f =>
+      `<li class="batch-result-item batch-result-fail">
+        <span class="batch-result-name">${escapeHtml(f.name)}</span>
+        <span class="batch-result-error">${escapeHtml(f.error)}</span>
+      </li>`
+    ).join('');
+    dialogModal.alert({
+      title: '上传完成',
+      message: `<p>成功 ${successCount} 个${overwriteCount > 0 ? `（其中 ${overwriteCount} 个覆盖旧版本）` : ''}，失败 ${failed.length} 个。</p>
+                <ul class="batch-result-list">${rows}</ul>`,
+      confirmText: '知道了',
+    });
+  } else if (validFiles.length > 1) {
+    toast(`上传成功 ${successCount} 个文件${overwriteCount > 0 ? `，${overwriteCount} 个已覆盖旧版本` : ''}`);
+  } else if (overwriteCount > 0) {
+    toast('已更新为最新版本');
+  } else {
+    toast('上传成功');
+  }
+}
+
+function uploadOneFile(file, isPublic, onProgress) {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('isPublic', isPublic ? 'true' : 'false');
+
     const xhr = new XMLHttpRequest();
     xhr.open('POST', API_BASE + '/api/files/upload');
     xhr.withCredentials = true;
     xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        const pct = Math.round((e.loaded / e.total) * 100);
-        if (progressBar) progressBar.style.width = pct + '%';
-        if (progressText) progressText.textContent = pct + '%';
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
       }
     };
     xhr.onload = () => {
       const data = JSON.parse(xhr.responseText || '{}');
       if (xhr.status >= 200 && xhr.status < 300) {
-        if (data.overwritten) {
-          toast(`已更新为第 ${data.version} 版`);
-        } else if (data.type === 'batch') {
-          const failed = Array.isArray(data.failed) ? data.failed : [];
-          if (failed.length > 0) {
-            // 有失败项：弹窗列出每个文件的成功/失败明细
-            const rows = failed.map(f =>
-              `<li class="batch-result-item batch-result-fail">
-                <span class="batch-result-name">${escapeHtml(f.name)}</span>
-                <span class="batch-result-error">${escapeHtml(f.error || '失败')}</span>
-              </li>`
-            ).join('');
-            dialogModal.alert({
-              title: '批量上传完成',
-              message: `<p>成功 ${data.count} 个，失败 ${failed.length} 个。</p>
-                        <ul class="batch-result-list">${rows}</ul>`,
-              confirmText: '知道了',
-            });
-          } else {
-            toast('批量上传成功，共 ' + data.count + ' 个文件');
-          }
-        } else if (data.type === 'bundle') {
-          toast('网站包上传成功');
-        } else {
-          toast('上传成功');
-        }
-        container.querySelector('#file-input').value = '';
-        loadFiles(container);
+        resolve(data);
       } else {
-        toast(data.error || `HTTP ${xhr.status}`, 'error');
+        reject(new Error(data.error || `HTTP ${xhr.status}`));
       }
-      finish();
     };
-    xhr.onerror = () => {
-      toast('上传失败，请检查网络', 'error');
-      finish();
-    };
-    function finish() {
-      area.style.pointerEvents = prevPointer;
-      if (progressBar) progressBar.style.width = '100%';
-      setTimeout(() => {
-        if (progressEl) progressEl.style.display = 'none';
-      }, 400);
-      resolve();
-    }
+    xhr.onerror = () => reject(new Error('上传失败，请检查网络'));
     xhr.send(fd);
   });
 }
