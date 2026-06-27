@@ -262,6 +262,9 @@ html.light .theme-toggle .icon-sun { display: block; }
   background: var(--bg);
   color: var(--text);
   border: 1px solid var(--border);
+  width: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .btn-small:hover { background: var(--border); }
 .btn-small.active {
@@ -269,6 +272,8 @@ html.light .theme-toggle .icon-sun { display: block; }
   color: #fff;
   border-color: var(--primary);
 }
+/* 组合按钮（如 .btn-small.btn-danger）保持不收折 */
+.btn-small.btn-danger { white-space: nowrap; }
 /* 图标按钮（btn-small 内仅放 SVG）：方形、与星标/更多按钮视觉一致 */
 .btn-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; color: var(--text-secondary); }
 .btn-icon svg { width: 16px; height: 16px; }
