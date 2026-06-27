@@ -62,7 +62,7 @@ function registerContentTemplateTools(server, { api }) {
         title: data.title,
         file_type: data.file_type,
         content: data.content,
-        hint: '请学习此样例的风格和结构，生成风格一致但内容全新的作品。不要复制样例的具体文字内容。',
+        hint: '请学习此样例的风格和结构，生成风格一致但内容全新的作品。不要复制样例的具体文字内容。生成 HTML 时保持单一自包含文件（CSS/JS 内联、图片 data URI 或在线 URL），不要拆成多文件再打包。',
       });
     }
   );

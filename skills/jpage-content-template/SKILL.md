@@ -93,6 +93,8 @@ AI 拿到样例后应学习的维度（按优先级）：
 
 **重要**：学习风格，不复制内容。生成的必须是全新的原创内容，仅保持视觉风格一致。
 
+**生成产物要求**：除幻灯片外，HTML 一律输出**单个自包含文件**（CSS/JS 内联、图片用 data URI 或在线 URL），不要拆成多文件再打包。完整规范见 `jpage-upload` 的「内容生成规范」。
+
 # MCP 工具
 
 - `list_content_templates` — 查询模板列表（支持 scene/keyword/fileType 筛选）
