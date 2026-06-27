@@ -113,6 +113,22 @@ test('管理员审核通过+展示 → 出现在市场', async () => {
   assert.ok(preview.body.content.includes('路演'));
 });
 
+test('市场搜索支持按创作者用户名查找', async () => {
+  const submit = await userAgent.post('/api/content-templates').send({
+    title: '创作者搜索测试', description: '标题和描述里不含 regular', fileType: 'html', categoryId: 1, content: SAMPLE_HTML,
+  });
+  const id = submit.body.id;
+  await adminAgent.post(`/api/content-templates/${id}/review`).send({ status: 'approved', visibility: 'visible' });
+
+  // 按创作者用户名 regular 搜索应命中
+  const market = await request(env.app).get('/api/content-templates/market?keyword=regular');
+  assert.ok(market.body.templates.some(t => t.id === id));
+
+  // 不应命中无关关键词
+  const empty = await request(env.app).get('/api/content-templates/market?keyword=维尔的命');
+  assert.ok(!empty.body.templates.some(t => t.id === id));
+});
+
 test('管理员通过但隐藏 → 不出现在市场', async () => {
   const submit = await userAgent.post('/api/content-templates').send({
     title: '通过但隐藏', fileType: 'html', categoryId: 1, content: '<p>hidden</p>',

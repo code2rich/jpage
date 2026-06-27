@@ -61,7 +61,7 @@ function removeCfg(key) {
 // ---------------------------------------------------------------------------
 
 function getBase() {
-  let base = (getCfg(DB_KEYS.base, '') || '').trim();
+  let base = (getCfg(DB_KEYS.base, 'https://www.jpage.cn') || '').trim();
   if (base.endsWith('/')) base = base.slice(0, -1);
   return base;
 }
@@ -415,6 +415,13 @@ const jpage = {
   },
   clearBase() {
     removeCfg(DB_KEYS.base);
+  },
+  clearCache() {
+    removeCfg(DB_KEYS.base);
+    removeCfg(DB_KEYS.account);
+    removeCfg(DB_KEYS.cookies);
+    removeCfg(DB_KEYS.user);
+    return { success: true };
   },
   getTheme() {
     return getCfg(DB_KEYS.theme, 'auto');

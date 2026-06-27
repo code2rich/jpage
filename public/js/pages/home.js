@@ -45,7 +45,7 @@ function uploaderBadge(name) {
 // 去重改为按「该卡片是否已有 iframe」判断，避免切回已访问过的页时缩略图卡在灰色占位。
 let cardThumbObserver = null;
 let cardThumbActive = 0;
-const CARD_THUMB_MAX = 3;
+const CARD_THUMB_MAX = 2;
 const cardThumbQueue = [];
 function ensureCardThumbObserver() {
   if (cardThumbObserver) return cardThumbObserver;
@@ -56,7 +56,7 @@ function ensureCardThumbObserver() {
       cardThumbObserver.unobserve(card);
       enqueueCardThumb(card);
     });
-  }, { rootMargin: '200px' });
+  }, { rootMargin: '100px' });
   return cardThumbObserver;
 }
 function enqueueCardThumb(card) {
@@ -76,18 +76,20 @@ function loadCardThumb(card) {
   const thumb = card.querySelector('.file-card-thumb');
   // 已有 iframe（正在加载或已加载）则跳过，防止同一卡片重复挂载
   if (!thumb || thumb.querySelector('.file-card-thumb-iframe')) return Promise.resolve();
-  // 注意：不加 loading="lazy" —— 懒加载已由上面的 IntersectionObserver 负责。
-  // 浏览器对 lazy iframe 的判定依赖 iframe 的显式 width/height，而本卡片 iframe 只有 CSS 尺寸，
-  // 导致首屏卡片也被判定为"折叠以下"而延迟拉取 /render，iframe 的 load 事件迟迟不触发，
-  // .file-card-thumb-loading 灰色脉冲占位一直盖在上面（用户报告的"卡片首次打开渲染异常"）。
-  thumb.innerHTML = '<div class="file-card-thumb-wrap"><iframe class="file-card-thumb-iframe" title="预览"></iframe></div>';
-  const wrap = thumb.querySelector('.file-card-thumb-wrap');
-  const iframe = thumb.querySelector('.file-card-thumb-iframe');
+
+  const wrap = document.createElement('div');
+  wrap.className = 'file-card-thumb-wrap';
+  wrap.innerHTML = '<iframe class="file-card-thumb-iframe" width="1024" height="640" loading="lazy" title="预览"></iframe>';
+  thumb.appendChild(wrap);
+  const iframe = wrap.querySelector('iframe');
+  const loadingEl = thumb.querySelector('.file-card-thumb-loading');
+
   let timer = null;
   return new Promise(resolve => {
     const finish = () => {
       clearTimeout(timer);
       wrap.classList.add('loaded');
+      if (loadingEl) loadingEl.remove();
       resolve();
     };
     // 兜底超时：即使 load 事件因任何原因未触发（如缓存/被中断），8s 后也揭开占位，避免永久卡灰
@@ -466,6 +468,8 @@ async function loadFiles(container, page) {
   const countEl = container.querySelector('#file-count');
 
   if (page) pagination.page = page;
+  // 卡片视图下同时渲染大量 iframe 预览会给浏览器/服务端造成较大压力，减少每页数量
+  pagination.limit = viewMode === 'card' ? 12 : 20;
 
   list.setAttribute('aria-busy', 'true');
   list.classList.add('is-loading');

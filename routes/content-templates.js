@@ -65,8 +65,8 @@ router.get('/market', async (req, res) => {
     }
     if (fileType) { conditions.push('ct.file_type = ?'); params.push(fileType); }
     if (keyword) {
-      conditions.push('(ct.title LIKE ? OR ct.description LIKE ?)');
-      params.push(`%${keyword}%`, `%${keyword}%`);
+      conditions.push('(ct.title LIKE ? OR ct.description LIKE ? OR u.username LIKE ?)');
+      params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
     }
     const where = 'WHERE ' + conditions.join(' AND ');
 
@@ -81,12 +81,15 @@ router.get('/market', async (req, res) => {
     }
 
     const total = await dbGet(
-      `SELECT COUNT(*) as count FROM content_templates ct LEFT JOIN template_market_categories c ON ct.category_id = c.id ${where}`,
+      `SELECT COUNT(*) as count FROM content_templates ct
+       LEFT JOIN template_market_categories c ON ct.category_id = c.id
+       LEFT JOIN users u ON ct.uploaded_by = u.id ${where}`,
       params
     );
     const templates = await dbAll(
       `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.use_count, ct.featured,
-              ct.created_at, ct.published_at, ct.category_id, c.slug AS category_slug, c.name AS category_name,
+              ct.created_at, ct.published_at, ct.category_id, ct.share_key,
+              c.slug AS category_slug, c.name AS category_name,
               u.username AS uploader_name,
               (SELECT COUNT(*) FROM content_template_installs i WHERE i.template_id = ct.id) AS instantiation_count
        FROM content_templates ct
@@ -608,14 +611,15 @@ router.get('/admin/list', requireAuth, requireAdmin, async (req, res) => {
     if (visibility && VISIBILITY_VALUES.includes(visibility)) { conditions.push('ct.visibility = ?'); params.push(visibility); }
     if (categoryId) { conditions.push('ct.category_id = ?'); params.push(categoryId); }
     if (keyword) {
-      conditions.push('(ct.title LIKE ? OR ct.description LIKE ?)');
-      params.push(`%${keyword}%`, `%${keyword}%`);
+      conditions.push('(ct.title LIKE ? OR ct.description LIKE ? OR u.username LIKE ?)');
+      params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
     }
     if (uploaderId) { conditions.push('ct.uploaded_by = ?'); params.push(uploaderId); }
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
     const total = await dbGet(
-      `SELECT COUNT(*) as count FROM content_templates ct ${where}`, params
+      `SELECT COUNT(*) as count FROM content_templates ct
+       LEFT JOIN users u ON ct.uploaded_by = u.id ${where}`, params
     );
     const templates = await dbAll(
       `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.status, ct.visibility,

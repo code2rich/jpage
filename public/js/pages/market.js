@@ -509,7 +509,7 @@ function createTemplateCard(t) {
   const cat = t.category_name ? `<span class="ct-badge ct-badge-scene">${escapeHtml(t.category_name)}</span>` : '';
   const featured = t.featured ? '<span class="ct-badge ct-badge-featured">精选</span>' : '';
   const isLoggedIn = !!state.currentUser;
-  return `<div class="ct-card mw-card" data-id="${t.id}" data-file-type="${t.file_type}" data-title="${escapeHtml(t.title)}" tabindex="0">
+  return `<div class="ct-card mw-card" data-id="${t.id}" data-file-type="${t.file_type}" data-title="${escapeHtml(t.title)}" data-share-key="${escapeHtml(t.share_key || '')}" tabindex="0">
     <div class="ct-card-thumb">
       <div class="ct-card-thumb-wrap"><iframe class="ct-thumb-iframe" sandbox="allow-scripts"></iframe></div>
       <div class="ct-card-thumb-loading"></div>
@@ -535,6 +535,51 @@ function createTemplateCard(t) {
   </div>`;
 }
 
+function showUseTemplatePrompt({ title, shareKey, fileType }) {
+  const url = `${location.origin}/t/${shareKey}`;
+  const typeLabel = fileType === 'markdown' ? 'Markdown' : 'HTML';
+  const promptText = `请参考以下即页模板的风格、结构和排版，为我创作一个新的内容：
+
+模板链接：${url}
+
+要求：
+1. 访问模板链接，了解其整体视觉风格、布局和交互方式。
+2. 根据我提供的新主题或需求，创作一个结构相似、风格一致的内容。
+3. 输出结果应为 ${typeLabel} 格式。
+4. 保持简洁、专业，并适合在即页平台上展示。`;
+
+  dialogModal.alert({
+    title: `使用《${title}》`,
+    message: `
+      <div class="use-template-dialog">
+        <p class="use-template-tip">复制以下提示词发给 AI，让 AI 参考该模板风格生成内容。</p>
+        <div class="use-template-field">
+          <label>提示词</label>
+          <textarea id="use-template-prompt" class="use-template-textarea" readonly>${escapeHtml(promptText)}</textarea>
+          <button type="button" id="btn-copy-use-prompt" class="btn btn-small btn-primary">复制提示词</button>
+        </div>
+        <p class="use-template-link">模板链接：<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a></p>
+      </div>
+    `,
+    confirmText: '关闭'
+  });
+
+  // 弹窗渲染后绑定复制事件
+  setTimeout(() => {
+    const btn = document.getElementById('btn-copy-use-prompt');
+    const ta = document.getElementById('use-template-prompt');
+    if (btn) {
+      btn.addEventListener('click', async () => {
+        const ok = await copyToClipboard(promptText);
+        toast(ok ? '提示词已复制' : '复制失败', ok ? 'success' : 'error');
+      });
+    }
+    if (ta) {
+      ta.addEventListener('focus', () => ta.select());
+    }
+  }, 0);
+}
+
 function setupCardInteractions(grid, navigate) {
   grid.addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-act]');
@@ -549,15 +594,14 @@ function setupCardInteractions(grid, navigate) {
           toast('请先登录后使用模板', 'error');
           return;
         }
-        btn.classList.add('is-loading');
         try {
-          const data = await api(`/api/content-templates/${id}/instantiate`, { method: 'POST' });
-          toast(`已基于《${title}》创建文件`);
-          navigate(`/view/${data.fileId}`);
+          const [shareData] = await Promise.all([
+            api(`/api/content-templates/${id}/share`, { method: 'POST' }),
+            api(`/api/content-templates/${id}/use`, { method: 'POST' }).catch(() => {}),
+          ]);
+          showUseTemplatePrompt({ title, shareKey: shareData.key, fileType: card.dataset.fileType });
         } catch (err) {
-          toast(err.message || `使用《${title}》失败`, 'error');
-        } finally {
-          btn.classList.remove('is-loading');
+          toast(err.message || '获取模板链接失败', 'error');
         }
         return;
       }

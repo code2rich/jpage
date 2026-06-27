@@ -12,6 +12,7 @@ window.Login = (function () {
     els.errorBox = document.getElementById('login-error');
     els.subtitle = document.getElementById('login-subtitle');
     els.linkTest = document.getElementById('link-test');
+    els.linkClear = document.getElementById('link-clear');
   }
 
   function showError(msg) {
@@ -32,7 +33,7 @@ window.Login = (function () {
       return;
     }
     const cfg = window.jpage.getConfig();
-    if (cfg.base) els.serverUrl.value = cfg.base;
+    els.serverUrl.value = cfg.base || 'https://www.jpage.cn';
     if (cfg.account) els.account.value = cfg.account;
     if (cfg.user) {
       els.subtitle.textContent = `当前账户：${cfg.user.username}（会话已保存，直接登录或重连）`;
@@ -93,6 +94,21 @@ window.Login = (function () {
     }
   }
 
+  function handleClear() {
+    clearError();
+    if (!confirm('确定要清空本地缓存吗？\n将清除服务器地址、账号和登录状态。')) return;
+    try {
+      window.jpage.clearCache();
+      els.serverUrl.value = 'https://www.jpage.cn';
+      els.account.value = '';
+      els.password.value = '';
+      els.subtitle.textContent = '登录你的即页账户';
+      JP.toast('✅ 已清空本地缓存');
+    } catch (err) {
+      showError(err.message || '清空失败');
+    }
+  }
+
   function show() {
     const main = document.getElementById('main-view');
     main.classList.add('hidden');
@@ -116,6 +132,7 @@ window.Login = (function () {
     prefill();
     els.btnLogin.addEventListener('click', handleLogin);
     els.linkTest.addEventListener('click', handleTest);
+    els.linkClear.addEventListener('click', handleClear);
     // 回车登录
     [els.serverUrl, els.account, els.password].forEach((el) =>
       el.addEventListener('keydown', (e) => {

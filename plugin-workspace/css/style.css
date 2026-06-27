@@ -255,6 +255,10 @@ select {
 .login-switch a:hover {
   text-decoration: underline;
 }
+.login-switch-sep {
+  margin: 0 8px;
+  color: var(--text-mute);
+}
 .login-error {
   background: var(--danger-soft);
   color: var(--danger);

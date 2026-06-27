@@ -4594,6 +4594,45 @@ html:not(.light) .btn-danger-soft {
   vertical-align: middle;
 }
 
+/* 使用模板弹窗：复制链接 + AI 提示词 */
+.use-template-dialog { text-align: left; }
+.use-template-tip {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+.use-template-field { display: flex; flex-direction: column; gap: 8px; }
+.use-template-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.use-template-textarea {
+  width: 100%;
+  min-height: 160px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.use-template-link {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+.use-template-link a {
+  color: var(--primary);
+  text-decoration: none;
+}
+.use-template-link a:hover { text-decoration: underline; }
+
 /* 加载更多 / 到底提示 */
 .mw-load-more-wrap {
   display: flex;
