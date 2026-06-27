@@ -9,11 +9,14 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=${PORT:-8858}
+      - JPAGE_DATA_DIR=${JPAGE_DATA_DIR:-/app/data}
       - ADMIN_USER=${ADMIN_USER:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - SESSION_SECRET=${SESSION_SECRET:-}
+      - COOKIE_SECURE=${COOKIE_SECURE:-false}
       - MCP_TOKEN=${MCP_TOKEN:-}
       - MCP_IP=${MCP_IP:-localhost}
+      - MCP_PROTOCOL=${MCP_PROTOCOL:-http}
       - TOKEN_ENCRYPTION_KEY=${TOKEN_ENCRYPTION_KEY:-}
       - SMTP_HOST=${SMTP_HOST:-}
       - SMTP_PORT=${SMTP_PORT:-}
@@ -23,4 +26,7 @@ services:
       - SMTP_FROM=${SMTP_FROM:-}
       - APP_URL=${APP_URL:-}
       - ALLOW_REGISTRATION=${ALLOW_REGISTRATION:-false}
+      - MAX_FILE_VERSIONS=${MAX_FILE_VERSIONS:-20}
+      - BACKUP_CRON=${BACKUP_CRON:-}
+      - BACKUP_DIR=${BACKUP_DIR:-}
     restart: unless-stopped

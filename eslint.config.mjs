@@ -80,11 +80,8 @@ const browserGlobals = {
   MutationObserver: 'readonly',
   XMLHttpRequest: 'readonly',
   IntersectionObserver: 'readonly',
+  requestAnimationFrame: 'readonly',
   CSS: 'readonly', // CSS.escape 用于 bundle 文件树选择器转义
-  // 注意：preview.js 里用到 authFetch（template-select-modal）但全仓未定义 ——
-  // 这是一个已知前端 bug（模板选择会抛 ReferenceError）。此处声明为 global 仅让 lint
-  // 通过，不静默修复行为；修复见后续 issue。
-  authFetch: 'readonly',
 };
 
 export default [

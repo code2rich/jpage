@@ -8,7 +8,7 @@ const multer = require('multer');
 const archiver = require('archiver');
 const JSZip = require('jszip');
 const sqlite3 = require('sqlite3').verbose();
-const { getDb, dbGet, configureDatabase } = require('../lib/db');
+const { getDb, dbGet, configureDatabase, resetDb } = require('../lib/db');
 const { DATA_DIR, UPLOAD_DIR } = require('../lib/paths');
 const { requireAuth, requireAdmin } = require('../lib/middleware/auth');
 const { clientIp } = require('../lib/util');
@@ -75,7 +75,11 @@ router.post('/import', requireAuth, requireAdmin, adminUpload.single('file'), as
     const backupDir = path.join(path.dirname(DATA_DIR), `data-backup-${backupDate}`);
     fs.cpSync(DATA_DIR, backupDir, { recursive: true });
     logger.info({ type: 'app', message: '导入前备份已创建', backupDir });
+    // 清理业务数据与上传目录，保留会话库与 token 加密密钥，
+    // 避免 express-session 的 SQLiteStore 因文件被删而只读报错。
+    const keepEntries = new Set(['sessions.sqlite', 'token-key.key']);
     for (const entry of fs.readdirSync(DATA_DIR)) {
+      if (keepEntries.has(entry)) continue;
       fs.rmSync(path.join(DATA_DIR, entry), { recursive: true, force: true });
     }
     for (const [relPath, entry] of Object.entries(zip.files)) {
@@ -89,15 +93,10 @@ router.post('/import', requireAuth, requireAdmin, adminUpload.single('file'), as
       }
     }
     if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-    // 导入替换数据库连接：在同一个 db 实例上替换方法，使所有持有该引用的模块继续生效
-    const db = getDb();
-    db.close();
+    // 导入替换数据库连接：通过 lib/db 的 resetDb 安全切换，
+    // Proxy 保证所有已持有 getDb() 引用的模块继续使用新连接。
     const newDb = new sqlite3.Database(path.join(DATA_DIR, 'database.sqlite'));
-    db.run = newDb.run.bind(newDb);
-    db.get = newDb.get.bind(newDb);
-    db.all = newDb.all.bind(newDb);
-    db.close = newDb.close.bind(newDb);
-    db.exec = newDb.exec.bind(newDb);
+    await resetDb(newDb);
     // 导入替换了连接：重新应用性能 PRAGMA 与刷新分类缓存
     await configureDatabase();
     await loadTemplateNameMap();

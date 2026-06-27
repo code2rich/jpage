@@ -67,6 +67,32 @@ async function loadThumb(card) {
 }
 
 // ============================================================
+// 通用 UI：加载 / 空态 / 错误（带重试）
+// ============================================================
+
+function renderLoading(container, { overlay = false, list = false } = {}) {
+  if (overlay) {
+    const el = document.createElement('div');
+    el.className = 'ct-loading-overlay';
+    return el;
+  }
+  const cls = list ? 'ct-list-loading' : 'ct-loading';
+  container.innerHTML = `<div class="${cls}">加载中…</div>`;
+}
+
+function renderEmpty(container, { title, desc = '', actionHtml = '', list = false } = {}) {
+  const cls = list ? 'ct-list-empty' : 'ct-empty';
+  container.innerHTML = `<div class="${cls}"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(desc)}</span>${actionHtml}</div>`;
+}
+
+function renderError(container, { message, retry, list = false } = {}) {
+  const cls = list ? 'ct-list-error' : 'ct-error';
+  const id = 'ct-retry-' + Math.random().toString(36).slice(2, 8);
+  container.innerHTML = `<div class="${cls}"><strong>${escapeHtml(message || '加载失败')}</strong><span>请检查网络后重试</span><div class="${list ? 'ct-list-empty-action' : 'ct-empty-action'}"><button class="btn btn-small" id="${id}">重试</button></div></div>`;
+  container.querySelector('#' + id)?.addEventListener('click', retry);
+}
+
+// ============================================================
 // 入口：根据子路由分发
 // ============================================================
 
@@ -151,6 +177,7 @@ async function loadSideCategories(container, go) {
       btn.addEventListener('click', () => {
         homeState.category = btn.dataset.sideCategory || '';
         homeState.page = 1;
+        saveHomeState();
         go('/market');
       });
     });
@@ -166,7 +193,22 @@ async function loadSideCategories(container, go) {
 
 const homeState = { category: '', keyword: '', sort: '', page: 1 };
 
+function saveHomeState() {
+  try { sessionStorage.setItem('marketHomeState', JSON.stringify(homeState)); } catch (_) {}
+}
+
+function restoreHomeState() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('marketHomeState') || '{}');
+    if (saved.category !== undefined) homeState.category = saved.category;
+    if (saved.keyword !== undefined) homeState.keyword = saved.keyword;
+    if (saved.sort !== undefined) homeState.sort = saved.sort;
+    if (saved.page !== undefined) homeState.page = saved.page;
+  } catch (_) {}
+}
+
 function renderHome(container, navigate) {
+  restoreHomeState();
   const go = navigate || ((path) => { location.hash = path; });
   const body = renderMarketShell(container, { active: 'home', navigate });
   body.innerHTML = `
@@ -203,6 +245,7 @@ function renderHome(container, navigate) {
     searchTimer = setTimeout(() => {
       homeState.keyword = searchInput.value.trim();
       homeState.page = 1;
+      saveHomeState();
       loadHomeList(body, go);
     }, 300);
   };
@@ -211,6 +254,7 @@ function renderHome(container, navigate) {
   body.querySelector('#market-sort').onchange = (e) => {
     homeState.sort = e.target.value;
     homeState.page = 1;
+    saveHomeState();
     loadHomeList(body, go);
   };
 
@@ -234,6 +278,7 @@ async function loadCategoryChips(body, navigate) {
         homeState.page = 1;
         chipsEl.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
         chip.classList.add('active');
+        saveHomeState();
         loadHomeList(body, navigate);
       };
     });
@@ -246,7 +291,17 @@ async function loadHomeList(body, navigate) {
   const grid = body.querySelector('#market-grid');
   if (!grid) return;
   resetThumbCache();
-  grid.innerHTML = '<div class="ct-loading">加载中...</div>';
+
+  // 首次加载或列表为空时显示全屏 loading；有内容时叠加局部 loading
+  const hasContent = grid.querySelectorAll('.ct-card').length > 0;
+  let overlay = null;
+  if (hasContent) {
+    grid.style.position = 'relative';
+    overlay = renderLoading(grid, { overlay: true });
+    grid.appendChild(overlay);
+  } else {
+    renderLoading(grid);
+  }
 
   const params = new URLSearchParams();
   params.set('page', homeState.page);
@@ -260,18 +315,47 @@ async function loadHomeList(body, navigate) {
     const countEl = body.querySelector('#mw-result-count');
     if (countEl && data.pagination) countEl.textContent = `${data.pagination.total || 0} 个结果`;
     renderHomeGrid(grid, data.templates || [], data.pagination, navigate);
-  } catch {
-    grid.innerHTML = '<div class="ct-empty">加载失败</div>';
+  } catch (e) {
+    const title = homeState.keyword
+      ? `搜索「${homeState.keyword}」失败`
+      : (homeState.category ? '分类加载失败' : '加载失败');
+    renderError(grid, {
+      message: e.message || title,
+      retry: () => loadHomeList(body, navigate),
+    });
+  } finally {
+    if (overlay) overlay.remove();
   }
 }
 
 function renderHomeGrid(grid, templates, pg, navigate) {
   if (!templates.length) {
-    grid.innerHTML = `
-      <div class="ct-empty mw-empty">
-        <strong>当前没有已审核公开作品</strong>
-        <span>你可以回到首页文件列表，在文件的「⋯」菜单中选择「上架到市场」，审核通过后会展示在这里。</span>
-      </div>`;
+    let title = '当前没有已审核公开作品';
+    let desc = '你可以回到首页文件列表，在文件的「⋯」菜单中选择「上架到市场」，审核通过后会展示在这里。';
+    if (homeState.keyword) {
+      title = `未找到「${homeState.keyword}」相关模板`;
+      desc = '换个关键词试试，或清除搜索条件浏览全部作品。';
+    } else if (homeState.category) {
+      title = '该分类下暂无作品';
+      desc = '看看其他分类，或成为第一个上传该分类作品的创作者。';
+    } else if (homeState.sort === 'featured') {
+      title = '暂无精选作品';
+      desc = '管理员标记精选后，这里会展示优质模板。';
+    }
+    const actionHtml = homeState.keyword || homeState.category || homeState.sort
+      ? '<div class="ct-empty-action"><button class="btn btn-small" id="ct-clear-filter">清除筛选</button></div>'
+      : '';
+    renderEmpty(grid, { title, desc, actionHtml });
+    grid.querySelector('#ct-clear-filter')?.addEventListener('click', () => {
+      homeState.keyword = '';
+      homeState.category = '';
+      homeState.sort = '';
+      homeState.page = 1;
+      saveHomeState();
+      const searchInput = grid.closest('#market-body')?.querySelector('#market-search');
+      if (searchInput) searchInput.value = '';
+      loadHomeList(grid.closest('#market-body'), navigate);
+    });
     return;
   }
   grid.innerHTML = templates.map(t => {
@@ -279,7 +363,7 @@ function renderHomeGrid(grid, templates, pg, navigate) {
     const typeLabel = t.file_type === 'markdown' ? 'MD' : 'HTML';
     const cat = t.category_name ? `<span class="ct-badge ct-badge-scene">${escapeHtml(t.category_name)}</span>` : '';
     const featured = t.featured ? '<span class="ct-badge ct-badge-featured">精选</span>' : '';
-    return `<div class="ct-card mw-card" data-id="${t.id}" data-file-type="${t.file_type}">
+    return `<div class="ct-card mw-card" data-id="${t.id}" data-file-type="${t.file_type}" data-title="${escapeHtml(t.title)}">
       <div class="ct-card-thumb">
         <div class="ct-card-thumb-wrap"><iframe class="ct-thumb-iframe" sandbox="allow-scripts"></iframe></div>
         <div class="ct-card-thumb-loading"></div>
@@ -307,8 +391,8 @@ function renderHomeGrid(grid, templates, pg, navigate) {
       <span class="ct-page-info">${pg.page} / ${pg.totalPages}</span>
       <button class="btn btn-small" id="ct-next" ${pg.page >= pg.totalPages ? 'disabled' : ''}>下一页</button>
     </div>`;
-    grid.querySelector('#ct-prev')?.addEventListener('click', () => { homeState.page = Math.max(1, homeState.page - 1); loadHomeList(grid.closest('#market-body'), navigate); });
-    grid.querySelector('#ct-next')?.addEventListener('click', () => { homeState.page = Math.min(pg.totalPages, homeState.page + 1); loadHomeList(grid.closest('#market-body'), navigate); });
+    grid.querySelector('#ct-prev')?.addEventListener('click', () => { homeState.page = Math.max(1, homeState.page - 1); saveHomeState(); loadHomeList(grid.closest('#market-body'), navigate); });
+    grid.querySelector('#ct-next')?.addEventListener('click', () => { homeState.page = Math.min(pg.totalPages, homeState.page + 1); saveHomeState(); loadHomeList(grid.closest('#market-body'), navigate); });
   }
 
   // 卡片点击 → 详情
@@ -319,24 +403,32 @@ function renderHomeGrid(grid, templates, pg, navigate) {
       const id = card.dataset.id;
       if (act === 'use') {
         e.stopPropagation();
+        const title = card.dataset.title || '该模板';
         try {
           const data = await api(`/api/content-templates/${id}/instantiate`, { method: 'POST' });
-          toast('已基于该模板创建文件，正在打开…');
+          toast(`已基于《${title}》创建文件，正在打开…`);
           navigate(`/view/${data.fileId}`);
         } catch (err) {
-          toast(err.message || '使用失败，请先登录', 'error');
+          toast(err.message || `使用《${title}》失败，请先登录`, 'error');
         }
         return;
       }
-      if (act === 'preview') {
+      if (act === 'preview' || !act) {
         e.stopPropagation();
+        try { sessionStorage.setItem('marketScrollY', String(window.scrollY)); } catch (_) {}
         navigate(`/market/${id}`);
         return;
       }
-      navigate(`/market/${id}`);
     };
     obs.observe(card);
   });
+
+  // 从详情页返回时恢复滚动位置
+  const savedY = (() => { try { return sessionStorage.getItem('marketScrollY'); } catch { return null; } })();
+  if (savedY) {
+    try { sessionStorage.removeItem('marketScrollY'); } catch (_) {}
+    requestAnimationFrame(() => { window.scrollTo(0, parseInt(savedY, 10) || 0); });
+  }
 }
 
 // ============================================================
@@ -405,7 +497,8 @@ async function loadDetail(body, id, _navigate) {
         const data = await api(`/api/content-templates/${id}/star`, { method: 'POST' });
         const btn = body.querySelector('#detail-star');
         btn.dataset.starred = data.starred ? '1' : '0';
-        toast(data.starred ? '已收藏' : '已取消收藏');
+        const prefix = meta.title ? `《${meta.title}》` : '该模板';
+        toast(data.starred ? `已收藏 ${prefix}` : `已取消收藏 ${prefix}`);
       } catch (e) {
         toast(e.status === 401 ? '请先登录' : (e.message || '操作失败'), 'error');
       }
@@ -468,7 +561,15 @@ function renderMine(container, navigate) {
 async function loadMineList(body, navigate) {
   const list = body.querySelector('#mine-list');
   if (!list) return;
-  list.innerHTML = '<div class="ct-loading">加载中...</div>';
+  const hasContent = list.querySelectorAll('.mine-item').length > 0;
+  let overlay = null;
+  if (hasContent) {
+    list.style.position = 'relative';
+    overlay = renderLoading(list, { overlay: true });
+    list.appendChild(overlay);
+  } else {
+    renderLoading(list, { list: true });
+  }
 
   const params = new URLSearchParams();
   params.set('page', mineState.page);
@@ -478,7 +579,9 @@ async function loadMineList(body, navigate) {
     const data = await api('/api/content-templates/mine?' + params.toString());
     renderMineList(list, data.templates || [], data.pagination, navigate);
   } catch (e) {
-    list.innerHTML = '<div class="ct-empty">加载失败</div>';
+    renderError(list, { message: e.message || '加载失败', retry: () => loadMineList(body, navigate), list: true });
+  } finally {
+    if (overlay) overlay.remove();
   }
 }
 
@@ -494,7 +597,7 @@ function renderMineList(list, templates, pg, navigate) {
     const cat = t.category_name ? `<span class="ct-badge ct-badge-scene">${escapeHtml(t.category_name)}</span>` : '';
     const typeLabel = t.file_type === 'markdown' ? 'MD' : 'HTML';
     const source = t.source_file_id ? `<span class="mine-source-file">来自：<a href="#/view/${t.source_file_id}">${escapeHtml(t.source_file_name || '文件#' + t.source_file_id)}</a></span>` : '';
-    return `<div class="mine-item" data-id="${t.id}">
+    return `<div class="mine-item" data-id="${t.id}" data-title="${escapeHtml(t.title)}">
       <div class="mine-item-main">
         <div class="mine-item-title">${escapeHtml(t.title)} ${statusBadge}</div>
         <div class="mine-item-meta">${cat}<span class="ct-badge ${t.file_type === 'markdown' ? 'ct-badge-md' : 'ct-badge-html'}">${typeLabel}</span> · ${relativeTime(t.submitted_at || t.created_at)}${source ? ' · ' + source : ''}</div>
@@ -509,15 +612,16 @@ function renderMineList(list, templates, pg, navigate) {
 
   list.querySelectorAll('.mine-item').forEach(item => {
     const id = parseInt(item.dataset.id);
+    const title = item.dataset.title || '该模板';
     item.querySelectorAll('button[data-act]').forEach(btn => {
       btn.onclick = async () => {
         const act = btn.dataset.act;
         if (act === 'archive') {
-          const ok = await dialogModal.confirm({ message: '确定归档此模板？归档后将从市场移除。', confirmText: '归档', danger: true });
+          const ok = await dialogModal.confirm({ message: `确定归档《${title}》？归档后将从市场移除。`, confirmText: '归档', danger: true });
           if (!ok) return;
           try {
             await api(`/api/content-templates/${id}`, { method: 'DELETE' });
-            toast('已归档');
+            toast(`《${title}》已归档`);
             loadMineList(list.closest('#market-body'), navigate);
           } catch (e) { toast(e.message || '操作失败', 'error'); }
         } else if (act === 'edit') {
@@ -598,7 +702,7 @@ async function editExisting(body, data, navigate) {
           content,
         },
       });
-      toast('已保存，重新进入审核');
+      toast(`《${title}》已保存，重新进入审核`);
       navigate('/market/my');
     } catch (e) {
       toast(e.message || '保存失败', 'error');
@@ -656,7 +760,15 @@ function renderAdmin(container, navigate) {
 async function loadAdminList(body, navigate) {
   const list = body.querySelector('#admin-list');
   if (!list) return;
-  list.innerHTML = '<div class="ct-loading">加载中...</div>';
+  const hasContent = list.querySelectorAll('.admin-item').length > 0;
+  let overlay = null;
+  if (hasContent) {
+    list.style.position = 'relative';
+    overlay = renderLoading(list, { overlay: true });
+    list.appendChild(overlay);
+  } else {
+    renderLoading(list, { list: true });
+  }
 
   const params = new URLSearchParams();
   params.set('page', adminState.page);
@@ -667,7 +779,9 @@ async function loadAdminList(body, navigate) {
     const data = await api('/api/content-templates/admin/list?' + params.toString());
     renderAdminList(list, data.templates || [], data.pagination, navigate, body);
   } catch (e) {
-    list.innerHTML = '<div class="ct-empty">加载失败</div>';
+    renderError(list, { message: e.message || '加载失败', retry: () => loadAdminList(body, navigate), list: true });
+  } finally {
+    if (overlay) overlay.remove();
   }
 }
 
@@ -681,7 +795,7 @@ function renderAdminList(list, templates, pg, navigate, body) {
     const cat = t.category_name ? escapeHtml(t.category_name) : '未分类';
     const reviewNote = t.review_note ? `<div class="mine-review-note">审核意见：${escapeHtml(t.review_note)}</div>` : '';
     const source = t.source_file_id ? `<span class="mine-source-file">来自：<a href="#/view/${t.source_file_id}">${escapeHtml(t.source_file_name || '文件#' + t.source_file_id)}</a></span>` : '';
-    return `<div class="mine-item admin-item" data-id="${t.id}">
+    return `<div class="mine-item admin-item" data-id="${t.id}" data-title="${escapeHtml(t.title)}">
       <div class="mine-item-main">
         <div class="mine-item-title">${escapeHtml(t.title)} ${statusBadge} ${t.featured ? '<span class="ct-badge ct-badge-featured">精选</span>' : ''}</div>
         <div class="mine-item-meta">${cat} · 作者：${escapeHtml(t.uploader_name || '-')} · 使用 ${t.use_count} 次${source ? ' · ' + source : ''}</div>
@@ -699,6 +813,7 @@ function renderAdminList(list, templates, pg, navigate, body) {
 
   list.querySelectorAll('.admin-item').forEach(item => {
     const id = parseInt(item.dataset.id);
+    const title = item.dataset.title || '该模板';
     item.querySelectorAll('button[data-act]').forEach(btn => {
       btn.onclick = async () => {
         const act = btn.dataset.act;
@@ -707,31 +822,35 @@ function renderAdminList(list, templates, pg, navigate, body) {
             const data = await api(`/api/content-templates/admin/${id}/content`);
             previewInDialog(data);
           } else if (act === 'approve') {
-            const vis = await dialogModal.confirm({ message: '通过后是否展示到市场？', confirmText: '展示', cancelText: '通过但不展示' });
+            const vis = await dialogModal.confirm({ message: `《${title}》：通过后是否展示到市场？`, confirmText: '展示', cancelText: '通过但不展示' });
             // confirm=true → 展示；cancel(=false) → 通过但隐藏
             await api(`/api/content-templates/${id}/review`, {
               method: 'POST',
               body: { status: 'approved', visibility: vis ? 'visible' : 'hidden', reviewNote: '审核通过' },
             });
-            toast(vis ? '已通过并展示' : '已通过（隐藏）');
+            toast(vis ? `《${title}》已通过并展示` : `《${title}》已通过（隐藏）`);
             loadAdminList(body, navigate);
           } else if (act === 'reject') {
-            const note = await dialogModal.prompt({ message: '请填写拒绝原因', label: '审核意见', confirmText: '拒绝' });
+            const note = await dialogModal.prompt({ message: `拒绝《${title}》：请填写拒绝原因`, label: '审核意见', confirmText: '拒绝' });
             if (note === null) return;
+            if (!note.trim()) {
+              toast('请填写拒绝原因', 'error');
+              return;
+            }
             await api(`/api/content-templates/${id}/review`, {
-              method: 'POST', body: { status: 'rejected', reviewNote: note || '未通过' },
+              method: 'POST', body: { status: 'rejected', reviewNote: note.trim() },
             });
-            toast('已拒绝');
+            toast(`《${title}》已拒绝`);
             loadAdminList(body, navigate);
           } else if (act === 'toggle-vis') {
             const vis = btn.textContent.trim() === '隐藏' ? 'hidden' : 'visible';
             await api(`/api/content-templates/${id}/admin`, { method: 'PATCH', body: { visibility: vis } });
-            toast(vis === 'hidden' ? '已隐藏' : '已展示');
+            toast(vis === 'hidden' ? `《${title}》已隐藏` : `《${title}》已展示`);
             loadAdminList(body, navigate);
           } else if (act === 'feature') {
             const featured = btn.textContent.includes('取消精选');
             await api(`/api/content-templates/${id}/admin`, { method: 'PATCH', body: { featured: !featured } });
-            toast(!featured ? '已设为精选' : '已取消精选');
+            toast(!featured ? `《${title}》已设为精选` : `《${title}》已取消精选`);
             loadAdminList(body, navigate);
           }
         } catch (e) {
@@ -806,13 +925,13 @@ async function openCategoryManager(body, navigate) {
           } else if (act === 'toggle') {
             const enable = btn.textContent.trim() === '启用';
             await api(`/api/content-templates/admin/categories/${id}`, { method: 'PUT', body: { isEnabled: enable } });
-            toast(enable ? '已启用' : '已停用');
+            toast(enable ? `分类「${cat.name}」已启用` : `分类「${cat.name}」已停用`);
             openCategoryManager(body, navigate);
           } else if (act === 'del') {
-            const ok = await dialogModal.confirm({ message: '确定删除此分类？若分类下有模板将改为停用。', confirmText: '删除', danger: true });
+            const ok = await dialogModal.confirm({ message: `确定删除分类「${cat.name}」？若分类下有模板将改为停用。`, confirmText: '删除', danger: true });
             if (!ok) return;
             const res = await api(`/api/content-templates/admin/categories/${id}`, { method: 'DELETE' });
-            toast(res.disabled ? '分类下有模板，已停用' : '已删除');
+            toast(res.disabled ? `分类「${cat.name}」下有模板，已停用` : `分类「${cat.name}」已删除`);
             openCategoryManager(body, navigate);
           }
         } catch (e) { toast(e.message || '操作失败', 'error'); }

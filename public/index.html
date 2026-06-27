@@ -7,7 +7,7 @@
 <title>即页 — 拖入文件，即刻成页</title>
 <link rel="icon" type="image/png" href="/jpage_logo/jpage_favicon_white.png">
 <link rel="apple-touch-icon" href="/jpage_logo/jpage_favicon_white.png">
-<link rel="stylesheet" href="/css/style.css?v=1.5.2-market-ui2">
+<link rel="stylesheet" href="/css/style.css?v=1.5.2">
 </head>
 <body>
 <div id="app"></div>
@@ -853,38 +853,85 @@ CLI 工具
 <div class="modal-backdrop" id="share-settings-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="share-settings-title">
 <div class="modal-panel modal-panel-sm">
 <div class="modal-header">
+<div class="modal-header-title">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
 <h2 id="share-settings-title">分享设置</h2>
+</div>
 <button type="button" class="btn btn-small modal-close" id="share-settings-close" aria-label="关闭">×</button>
 </div>
 <div class="modal-body">
 <div class="share-status" id="share-status-badges"></div>
+
+<div class="share-link-card">
+<div class="share-link-card-header">
+<span class="share-link-card-label">分享链接</span>
+</div>
 <div class="share-link-row">
 <input type="text" id="share-link-input" readonly>
-<button type="button" class="btn btn-small" id="share-link-copy">复制</button>
+<button type="button" class="btn btn-small btn-share-copy" id="share-link-copy">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+复制
+</button>
 </div>
+</div>
+
+<div class="share-sections">
 <div class="share-section">
-<label class="share-label" for="share-alias-input">自定义短链别名</label>
+<div class="share-section-header">
+<div class="share-section-icon">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+</div>
+<div class="share-section-title">自定义别名</div>
+</div>
+<div class="share-section-body">
+<div class="share-input-group">
 <input type="text" id="share-alias-input" placeholder="留空则用随机短链" autocomplete="off">
+<button type="button" class="btn btn-small" id="share-alias-save">保存</button>
+</div>
 <div class="share-hint">仅字母、数字、下划线、连字符，3~32 位</div>
-<button type="button" class="btn btn-small" id="share-alias-save">保存别名</button>
-<button type="button" class="btn btn-small btn-danger-soft" id="share-regenerate">重新生成链接</button>
 </div>
+<div class="share-section-footer">
+<button type="button" class="btn btn-small btn-danger-soft" id="share-regenerate">
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+重新生成链接
+</button>
+</div>
+</div>
+
 <div class="share-section">
-<label class="share-label" for="share-expires-input">过期时间</label>
+<div class="share-section-header">
+<div class="share-section-icon">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+</div>
+<div class="share-section-title">过期时间</div>
+</div>
+<div class="share-section-body">
 <input type="datetime-local" id="share-expires-input">
-<div class="share-hint">留空表示永不过期（UTC 时间存储，按本地时区显示）</div>
-<div class="share-btn-row">
-<button type="button" class="btn btn-small" id="share-expires-save">保存过期时间</button>
-<button type="button" class="btn btn-small" id="share-expires-clear">永不过期</button>
+<div class="share-hint">留空表示永不过期（UTC 存储，本地时区显示）</div>
+</div>
+<div class="share-section-footer">
+<button type="button" class="btn btn-small" id="share-expires-save">保存</button>
+<button type="button" class="btn btn-small btn-ghost" id="share-expires-clear">永不过期</button>
 </div>
 </div>
+
 <div class="share-section">
-<label class="share-label" for="share-password-input">访问密码</label>
+<div class="share-section-header">
+<div class="share-section-icon">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+</div>
+<div class="share-section-title">访问密码</div>
+</div>
+<div class="share-section-body">
+<div class="share-input-group">
 <input type="password" id="share-password-input" placeholder="设置后访问需输入密码" autocomplete="new-password">
+<button type="button" class="btn btn-small" id="share-password-save">保存</button>
+</div>
 <div class="share-hint">留空保存表示清除密码</div>
-<div class="share-btn-row">
-<button type="button" class="btn btn-small" id="share-password-save">保存密码</button>
+</div>
+<div class="share-section-footer">
 <button type="button" class="btn btn-small btn-danger-soft" id="share-password-clear">清除密码</button>
+</div>
 </div>
 </div>
 </div>
@@ -894,6 +941,6 @@ CLI 工具
 </div>
 </div>
 
-<script type="module" src="/js/app.js?v=1.5.2-market-ui2"></script>
+<script type="module" src="/js/app.js?v=1.5.2"></script>
 </body>
 </html>

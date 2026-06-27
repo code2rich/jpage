@@ -2844,7 +2844,17 @@ html:not(.light) {
 .ct-card-footer { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-secondary); margin-top: auto; }
 .ct-use-count { color: var(--primary); font-weight: 500; }
 .ct-owner-mark { color: var(--success, #10b981); font-weight: 500; }
-.ct-loading, .ct-empty { text-align: center; padding: 40px; color: var(--text-secondary); font-size: 14px; grid-column: 1 / -1; }
+.ct-loading, .ct-empty, .ct-error { text-align: center; padding: 40px; color: var(--text-secondary); font-size: 14px; grid-column: 1 / -1; }
+.ct-error strong { display: block; color: var(--danger, #cf222e); margin-bottom: 8px; }
+.ct-empty strong { display: block; color: var(--text); margin-bottom: 6px; font-weight: 600; }
+.ct-empty-action, .ct-error-action { margin-top: 14px; }
+.ct-loading-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 5; }
+.ct-loading-overlay::before { content: ''; position: absolute; inset: 0; background: var(--bg); opacity: 0.85; }
+.ct-loading-overlay::after { content: '加载中…'; position: relative; color: var(--text-secondary); font-size: 14px; }
+.ct-list-loading, .ct-list-error, .ct-list-empty { text-align: center; padding: 40px; color: var(--text-secondary); font-size: 14px; }
+.ct-list-empty strong, .ct-list-error strong { display: block; margin-bottom: 6px; }
+.ct-list-error strong { color: var(--danger, #cf222e); }
+.ct-list-empty strong { color: var(--text); font-weight: 600; }
 .ct-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; grid-column: 1 / -1; padding: 12px 0; }
 .ct-page-info { font-size: 13px; color: var(--text-secondary); }
 .ct-detail-meta { margin-bottom: 16px; }
