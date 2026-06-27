@@ -337,7 +337,7 @@ MCP 使用的 JSON 覆盖上传，自动版本备份。
 | `/api/content-templates/:id` | GET | 登录 | 模板详情（作者/管理员，或 approved+visible） |
 | `/api/content-templates/:id/content` | GET | 登录 | 模板原文（作者/管理员，或 approved+visible） |
 | `/api/content-templates/:id` | PUT | 登录 | 编辑模板（作者；approved/rejected 编辑后回退 pending） |
-| `/api/content-templates/:id` | DELETE | 登录 | 归档模板（软删除为 archived，作者或管理员） |
+| `/api/content-templates/:id` | DELETE | 登录 | 删除模板（软删除为 archived，作者或管理员） |
 | `/api/content-templates/:id/use` | POST | 登录 | 使用计数（仅 approved+visible 生效） |
 | `/api/content-templates/:id/review` | POST | admin | 审核（status=approved/rejected + 可选 visibility + reviewNote） |
 | `/api/content-templates/:id/admin` | PATCH | admin | 运营配置（categoryId/visibility/featured/sortOrder） |
@@ -346,7 +346,7 @@ MCP 使用的 JSON 覆盖上传，自动版本备份。
 | `/api/content-templates/admin/categories` | GET/POST | admin | 分类列表（含禁用）/ 新增分类 |
 | `/api/content-templates/admin/categories/:id` | PUT/DELETE | admin | 编辑分类 / 删除（有模板则改为停用） |
 
-模板状态：`draft` / `pending`（待审核）/ `approved`（通过）/ `rejected`（拒绝）/ `archived`（归档）。
+模板状态：`draft` / `pending`（待审核）/ `approved`（通过）/ `rejected`（拒绝）/ `archived`（已删除）。
 市场展示条件：`status='approved' AND visibility='visible' AND 分类 is_enabled=1`。
 
 > 另有 `GET /api/templates`（样式模板，渲染皮肤），区别于本内容模板市场。

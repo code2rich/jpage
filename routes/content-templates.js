@@ -372,7 +372,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     const t = await dbGet('SELECT id, uploaded_by, status FROM content_templates WHERE id = ?', [req.params.id]);
     if (!t) return res.status(404).json({ error: '模板不存在' });
     if (req.userRole !== 'admin' && t.uploaded_by !== req.userId) return res.status(403).json({ error: '无权操作' });
-    if (t.status === 'archived') return res.status(400).json({ error: '已归档模板不可编辑' });
+    if (t.status === 'archived') return res.status(400).json({ error: '已删除模板不可编辑' });
 
     const { title, description, fileType, categoryId, content } = req.body || {};
     const sets = [];
@@ -418,7 +418,7 @@ router.put('/:id', requireAuth, async (req, res) => {
   }
 });
 
-// 软删除（归档）
+// 软删除
 router.delete('/:id', requireAuth, async (req, res) => {
   try {
     const t = await dbGet('SELECT id, uploaded_by FROM content_templates WHERE id = ?', [req.params.id]);
@@ -431,8 +431,8 @@ router.delete('/:id', requireAuth, async (req, res) => {
     logger.audit('content_template.archive', { templateId: parseInt(req.params.id), ip: clientIp(req) });
     res.json({ success: true });
   } catch (e) {
-    logger.error({ type: 'app', msg: '归档内容模板失败', error: e.message });
-    res.status(500).json({ error: '归档内容模板失败' });
+    logger.error({ type: 'app', msg: '删除内容模板失败', error: e.message });
+    res.status(500).json({ error: '删除内容模板失败' });
   }
 });
 

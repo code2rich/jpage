@@ -1,34 +1,54 @@
-# 即页计费体系设计文档
+# 即页计费与积分消费体系设计文档
 
-> 版本：v2.0 | 日期：2026-06-10 | 状态：设计中
+> 版本：v3.0 | 日期：2026-06-27 | 状态：设计中
+>
+> v3.0 变更：在原有激活码 + 套餐配额体系基础上，引入 **积分（Credits）消费机制**，形成「配额制为主、积分制为辅」的混合计费模型。解决模板下载、超额使用、高级 MCP 调用等一次性行为的灵活定价问题。
 >
 > v2.0 变更：移除在线支付集成，改为激活码（赞助解锁）模式。零资质门槛，验证付费需求后再接入正式支付。
 
+---
+
 ## 1. 概述
 
-为即页引入多层级套餐体系，通过 **存储容量、文件数量、API 调用量、功能权限** 等维度区分 Free / Pro / Max 三个套餐。当前采用 **激活码** 模式——管理员生成激活码，用户输入后解锁对应套餐，以此验证付费需求，后续再接入在线支付。
+为即页引入多层级套餐体系与积分消费体系，通过 **存储容量、文件数量、API 调用量、功能权限、积分余额** 等维度区分 Free / Pro / Max 三个套餐。当前采用 **激活码** 模式——管理员生成激活码，用户输入后解锁对应套餐或获得积分，以此验证付费需求，后续再接入在线支付。
 
 ### 1.1 设计目标
 
 - **零资质门槛**：激活码模式无需商户资质，立刻可用
 - **验证需求**：通过激活码分发数量观察真实付费意愿
 - **低门槛体验**：Free 版足够个人体验，降低获客成本
-- **渐进演进**：激活码模式的数据结构和配额检查机制可无缝迁移到在线支付
+- **灵活计费**：配额处理周期性资源，积分处理一次性/溢价行为
+- **渐进演进**：激活码模式的数据结构、配额检查与积分流水机制可无缝迁移到在线支付
 
 ### 1.2 名词定义
 
 | 术语 | 含义 |
 |------|------|
-| Plan（套餐） | Free / Pro / Max 三档，定义各类配额上限 |
-| Activation Code（激活码） | 管理员生成的一次性兑换码，用户输入后升级套餐 |
-| Quota（配额） | 某维度的使用量上限（如存储 50MB） |
+| Plan（套餐） | Free / Pro / Max 三档，定义各类配额上限与每月赠送积分 |
+| Activation Code（激活码） | 管理员生成的一次性兑换码，可兑换套餐或积分 |
+| Quota（配额） | 某维度的使用量上限（如存储 50MB），通常按周期重置 |
 | Usage（用量） | 用户在某周期内的实际消耗量 |
+| Credits（积分） | 账户余额，用于一次性消费或超额抵扣 |
+| Credit Transaction（积分流水） | 积分的充值、赠送、消费、退款记录 |
 
 ---
 
-## 2. 套餐定义
+## 2. 计费模型：配额 + 积分混合
 
-### 2.1 价格（参考价，激活码模式不实际收费）
+### 2.1 为什么采用混合模型
+
+jpage 的资源天然分为两类：
+
+| 资源类型 | 特点 | 适合模型 |
+|---|---|---|
+| 存储空间、每月上传次数、API 调用次数、文件数 | 持续累积、周期性重置、和成本直接挂钩 | **配额制（Quota）** |
+| 模板市场下载、大文件上传、版本恢复、超额 API 调用、高级 MCP 调用 | 一次性、价值不均匀、可灵活定价 | **积分制（Credits）** |
+
+如果全部用积分，存储和流量这类持续消耗的资源会难以计价；如果全部用配额，模板下载、版本恢复等一次性高价值行为又无法灵活收费。混合模型兼顾两者优势。
+
+### 2.2 套餐定义
+
+#### 2.2.1 价格（参考价，激活码模式不实际收费）
 
 | 套餐 | 参考月价 | 参考年价（约 8 折） | 说明 |
 |------|---------|-------------------|------|
@@ -36,7 +56,7 @@
 | **Pro** | ¥9/月 | ¥86/年 | 激活码兑换，有效期按码设定 |
 | **Max** | ¥29/月 | ¥278/年 | 激活码兑换，有效期按码设定 |
 
-### 2.2 配额对比
+#### 2.2.2 配额对比
 
 | 维度 | Free | Pro | Max |
 |------|------|-----|-----|
@@ -50,8 +70,9 @@
 | 批量操作（单次上限） | 不支持 | 20 个 | 100 个 |
 | ZIP 上传 | 不支持 | 支持 | 支持 |
 | 全文搜索 | 不支持 | 支持 | 支持 |
+| 每月赠送积分 | 0 | 100 | 500 |
 
-### 2.3 功能对比
+#### 2.2.3 功能对比
 
 | 功能 | Free | Pro | Max |
 |------|------|-----|-----|
@@ -62,7 +83,7 @@
 | 在线编辑 + 实时预览 | ✓ | ✓ | ✓ |
 | Markdown 渲染增强（代码高亮 / KaTeX / Mermaid） | ✓ | ✓ | ✓ |
 | 渲染模板 | 仅 default | 4 种内置模板 | 内置 + 自定义上传模板 |
-| 内容模板市场 | 只读使用 | 可上传私有模板 | 可上传 + 市场管理 |
+| 内容模板市场 | 只读使用（部分需积分） | 可上传私有模板 | 可上传 + 市场管理 |
 | 分享链接有效期 | 永久 | 可设过期时间 | 可设过期时间 + 密码保护 |
 | 自定义域名 | ✗ | ✗ | ✓ |
 | 数据备份 / 恢复 | ✗ | 导出自己的文件 | 全量备份 / 恢复 |
@@ -93,6 +114,7 @@ CREATE TABLE IF NOT EXISTS plans (
   max_upload_rate       INTEGER NOT NULL,               -- 15 min 上传次数上限
   max_tokens            INTEGER NOT NULL,               -- API Token 数上限
   max_batch_ops         INTEGER NOT NULL DEFAULT 0,     -- 批量操作上限（0 = 不支持）
+  monthly_credits       INTEGER NOT NULL DEFAULT 0,     -- 每月赠送积分
   allow_zip             INTEGER NOT NULL DEFAULT 0,     -- ZIP 上传
   allow_search          INTEGER NOT NULL DEFAULT 0,     -- 全文搜索
   allow_custom_template INTEGER NOT NULL DEFAULT 0,     -- 自定义渲染模板
@@ -113,26 +135,26 @@ CREATE TABLE IF NOT EXISTS plans (
 ```sql
 INSERT INTO plans (name, display_name, price_monthly, price_yearly,
   storage_mb, max_files, max_file_size_mb, max_versions,
-  max_api_calls_daily, max_upload_rate, max_tokens, max_batch_ops,
+  max_api_calls_daily, max_upload_rate, max_tokens, max_batch_ops, monthly_credits,
   allow_zip, allow_search, allow_custom_template, allow_custom_domain,
   allow_share_expiry, allow_share_password, allow_template_upload,
   allow_template_manage, allow_backup, stats_days, max_sub_accounts)
 VALUES
   ('free', '免费版', 0, 0,
     50, 20, 2, 2,
-    100, 10, 1, 0,
+    100, 10, 1, 0, 0,
     0, 0, 0, 0,
     0, 0, 0,
     0, 0, 7, 0),
   ('pro', 'Pro', 900, 8600,
     500, 500, 10, 10,
-    1000, 30, 5, 20,
+    1000, 30, 5, 20, 100,
     1, 1, 0, 0,
     1, 0, 1,
     0, 1, 30, 0),
   ('max', 'Max', 2900, 27800,
     10240, NULL, 50, 30,
-    10000, 100, 20, 100,
+    10000, 100, 20, 100, 500,
     1, 1, 1, 1,
     1, 1, 1,
     1, 1, 90, 5);
@@ -140,18 +162,22 @@ VALUES
 
 #### `activation_codes` — 激活码表
 
+支持兑换套餐或积分，通过 `reward_type` 区分。
+
 ```sql
 CREATE TABLE IF NOT EXISTS activation_codes (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   code            TEXT UNIQUE NOT NULL,               -- 激活码（如 'JP-A1B2C3D4E5'）
-  plan_id         INTEGER NOT NULL REFERENCES plans(id),
-  duration_days   INTEGER NOT NULL,                   -- 有效天数（30=月, 365=年）
+  reward_type     TEXT NOT NULL DEFAULT 'plan',       -- 'plan' / 'credits'
+  plan_id         INTEGER REFERENCES plans(id),       -- reward_type='plan' 时必填
+  credits         INTEGER,                            -- reward_type='credits' 时必填
+  duration_days   INTEGER,                            -- 套餐有效天数（30=月, 365=年）
   status          TEXT NOT NULL DEFAULT 'active',     -- active / used / expired / revoked
   created_by      INTEGER REFERENCES users(id),       -- 创建者（admin）
   used_by         INTEGER REFERENCES users(id),       -- 使用者
   used_at         TEXT,                                -- 使用时间
   expires_at      TEXT,                                -- 激活码本身过期时间（未使用则作废）
-  note            TEXT,                                -- 备注（如「张三 赞助 Pro 年付」）
+  note            TEXT,                                -- 备注
   created_at      TEXT DEFAULT (datetime('now'))
 );
 
@@ -177,13 +203,61 @@ CREATE TABLE IF NOT EXISTS user_plans (
 CREATE INDEX idx_user_plans_user ON user_plans(user_id, status);
 ```
 
+#### `credits` — 用户积分余额表
+
+独立表而非仅 users 字段，便于扩展和审计。
+
+```sql
+CREATE TABLE IF NOT EXISTS user_credits (
+  user_id         INTEGER PRIMARY KEY REFERENCES users(id),
+  balance         INTEGER NOT NULL DEFAULT 0,         -- 当前积分余额（可为负，但消费时拒绝）
+  lifetime_earned INTEGER NOT NULL DEFAULT 0,         -- 累计获得积分
+  lifetime_used   INTEGER NOT NULL DEFAULT 0,         -- 累计使用积分
+  updated_at      TEXT DEFAULT (datetime('now'))
+);
+```
+
+#### `credit_transactions` — 积分流水表
+
+```sql
+CREATE TABLE IF NOT EXISTS credit_transactions (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id         INTEGER NOT NULL REFERENCES users(id),
+  amount          INTEGER NOT NULL,                   -- 正为充值/赠送，负为消费
+  type            TEXT NOT NULL,                      -- 'purchase' | 'grant' | 'consume' | 'refund' | 'plan_monthly'
+  description     TEXT,
+  related_type    TEXT,                               -- 'file' | 'template' | 'activation_code' | 'payment' | 'admin'
+  related_id      INTEGER,                            -- 关联记录 ID
+  balance_after   INTEGER NOT NULL,                   -- 交易后余额
+  created_at      TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_credit_transactions_user ON credit_transactions(user_id, created_at);
+CREATE INDEX idx_credit_transactions_type ON credit_transactions(type, created_at);
+```
+
+#### `credit_products` — 积分定价表（可选）
+
+用于在线支付上线后按包售卖积分，激活码阶段可空。
+
+```sql
+CREATE TABLE IF NOT EXISTS credit_products (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  name          TEXT NOT NULL,
+  credits       INTEGER NOT NULL,
+  price_cents   INTEGER NOT NULL,
+  is_enabled    INTEGER NOT NULL DEFAULT 1,
+  created_at    TEXT DEFAULT (datetime('now'))
+);
+```
+
 #### `usage_daily` — 日用量追踪表
 
 ```sql
 CREATE TABLE IF NOT EXISTS usage_daily (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id      INTEGER NOT NULL REFERENCES users(id),
-  date         TEXT NOT NULL,                -- '2026-06-10'
+  date         TEXT NOT NULL,                -- '2026-06-27'
   api_calls    INTEGER NOT NULL DEFAULT 0,   -- 当日 API 调用次数
   upload_count INTEGER NOT NULL DEFAULT 0,   -- 当日上传次数
   UNIQUE(user_id, date)
@@ -213,9 +287,12 @@ ALTER TABLE users ADD COLUMN plan_id INTEGER NOT NULL DEFAULT 1 REFERENCES plans
 ALTER TABLE users ADD COLUMN plan_expires_at TEXT;             -- 套餐到期时间（NULL=永不过期，free 用户为 NULL）
 ALTER TABLE users ADD COLUMN storage_bytes INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN file_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN quota_reset_at TEXT;              -- 配额周期重置时间
 ```
 
 > `plan_id` 和 `plan_expires_at` 冗余到 users 表，方便快速判断当前套餐，无需每次 JOIN。注册时默认 `plan_id = 1`（free）、`plan_expires_at = NULL`。
+>
+> 注意：当前代码已通过 migration `022_add_usage_tracking.js` 在 `users` 表中新增 `total_storage_bytes`、`api_calls_count`、`storage_quota_bytes`。新计费体系上线时，应保留 `total_storage_bytes` 作为 `usage_storage.total_bytes` 的同步来源，或在 migration 中做数据迁移。
 
 ---
 
@@ -226,11 +303,11 @@ ALTER TABLE users ADD COLUMN file_count INTEGER NOT NULL DEFAULT 0;
 ```
 用户看到定价页 → 点击「赞助解锁」→ 引导联系管理员（显示联系方式/二维码）
        ↓
-用户完成赞助 → 管理员在后台生成激活码（指定套餐 + 有效期）
+用户完成赞助 → 管理员在后台生成激活码（指定套餐 + 有效期 或 积分数额）
        ↓
 管理员将激活码发送给用户
        ↓
-用户在「兑换激活码」页面输入 → 验证 → 升级套餐
+用户在「兑换激活码」页面输入 → 验证 → 升级套餐 或 增加积分
 ```
 
 ### 4.2 激活码格式
@@ -249,11 +326,14 @@ JP-{10位大写字母数字}
 POST /api/activation/redeem   { code: 'JP-A1B2C3D4E5' }
   1. 查找激活码（status=active）
   2. 检查激活码是否过期（expires_at）
-  3. 检查用户当前套餐是否低于目标套餐（不允许降级兑换）
+  3. 根据 reward_type 分发：
+     a) plan: 检查用户当前套餐是否低于目标套餐（不允许降级兑换）
+     b) credits: 直接增加积分余额
   4. 更新 activation_codes: status=used, used_by=userId, used_at=now
-  5. 创建 user_plans 记录
-  6. 更新 users: plan_id, plan_expires_at
-  7. 返回套餐信息
+  5. 创建 user_plans 记录（仅 plan 类型）
+  6. 更新 users: plan_id, plan_expires_at 或增加 user_credits.balance
+  7. 写入 credit_transactions 流水（plan 类型可记为 'grant'）
+  8. 返回套餐信息或积分余额
 ```
 
 ### 4.4 套餐到期与续期
@@ -264,6 +344,7 @@ POST /api/activation/redeem   { code: 'JP-A1B2C3D4E5' }
 | 激活码叠加（已有 Pro，再兑 Pro） | 新到期时间 = max(当前到期时间, now) + duration_days |
 | 升级兑换（已有 Pro，兑 Max） | 立即升级，新到期时间 = now + duration_days（Pro 剩余时间不折算） |
 | 降级兑换（已有 Max，兑 Pro） | 拒绝，提示「当前套餐已高于目标套餐」 |
+| 积分激活码叠加 | 余额累加，写入 credit_transactions |
 
 ### 4.5 降级处理
 
@@ -271,20 +352,77 @@ POST /api/activation/redeem   { code: 'JP-A1B2C3D4E5' }
 - **不删除文件**，超限文件标记为 `read_only`（可下载，不可编辑/覆盖）
 - **API Token 保留前 1 个**，多余的禁用（不删除）
 - **版本历史保留前 2 个**，多余的标记归档
+- **剩余积分保留**，可继续用于模板消费
 - 用户可随时兑换新激活码恢复
 
 ---
 
-## 5. 配额检查机制
+## 5. 积分消费机制
 
-### 5.1 检查流程
+### 5.1 积分获取途径
+
+| 途径 | 说明 | 流水类型 |
+|------|------|---------|
+| 激活码兑换 | 管理员发放积分激活码 | `grant` |
+| 套餐月赠送 | Pro/Max 每月自动到账 | `plan_monthly` |
+| 管理员手动赠送 | 运营活动、补偿 | `grant` |
+| 在线支付购买 | 上线后通过支付购买积分包 | `purchase` |
+| 退款返还 | 消费失败或撤销时返还 | `refund` |
+
+### 5.2 积分消费场景
+
+| 场景 | 建议扣费（参考） | 说明 |
+|------|----------------|------|
+| 内容模板市场下载 / 使用 | 10-50 credits | 由模板上传者或管理员定价 |
+| 超出配额的存储空间（每 100MB/月） | 50 credits | 鼓励升级套餐 |
+| 超出配额的 API 调用（每 100 次） | 10 credits | 用积分兜底 |
+| 超出配额的月上传次数（每次） | 5 credits | 用积分兜底 |
+| 恢复历史版本 | 5 credits | 一次性操作 |
+| 大文件上传（> 套餐单文件上限，每 10MB） | 10 credits | Free 用户可用积分上传大文件 |
+| 批量操作超额部分 | 1 credit / 个 | 超过套餐批量上限后 |
+| 高级 MCP tool（如批量导入/导出） | 20 credits | 高价值操作 |
+
+### 5.3 积分消费流程
+
+```
+用户发起积分消费操作
+       ↓
+  credits.check(userId, amount)
+       ↓
+  ├─ 读取 user_credits.balance
+  ├─ 检查余额 ≥ amount
+  │     ↓ 否
+  │  返回 402 PaymentRequired + 提示充值/升级
+  │     ↓ 是
+  ├─ 开启事务
+  ├─ 扣减 user_credits.balance
+  ├─ 插入 credit_transactions（type='consume'）
+  └─ 提交事务
+       ↓
+  放行业务操作
+```
+
+### 5.4 积分消费失败处理
+
+| 场景 | 处理 |
+|------|------|
+| 扣费成功但业务失败 | 事务回滚，不扣费 |
+| 扣费成功且业务成功，但用户后续删除文件 | 不退还积分 |
+| 模板消费后模板被下架 | 已消费的不追回 |
+| 管理员撤销误发积分 | 通过负向 `grant` 流水修正 |
+
+---
+
+## 6. 配额检查机制
+
+### 6.1 检查流程
 
 ```
 用户发起操作（上传 / API 调用 / Token 创建 …）
        ↓
   quota.check(userId, dimension)
        ↓
-  ┌─ 读取 users.plan_id → JOIN plans 获取配额上限
+  ├─ 读取 users.plan_id → JOIN plans 获取配额上限
   │  （套餐信息缓存在内存，plan_id 变更时刷新）
   │
   ├─ 检查 users.plan_expires_at（过期则先降级）
@@ -294,10 +432,13 @@ POST /api/activation/redeem   { code: 'JP-A1B2C3D4E5' }
   └─ 比较：用量 < 配额？
        ↓
   是 → 放行，用量 +1
-  否 → 返回 403 QuotaExceeded + 提示升级
+  否 → 尝试用 credits 抵扣（如配置允许）
+       ↓
+  抵扣成功 → 放行
+  抵扣失败 → 返回 403 QuotaExceeded + 提示升级
 ```
 
-### 5.2 检查维度与时机
+### 6.2 检查维度与时机
 
 | 维度 | 检查时机 | 数据来源 |
 |------|---------|---------|
@@ -310,7 +451,7 @@ POST /api/activation/redeem   { code: 'JP-A1B2C3D4E5' }
 | Token 数 | 创建 Token 前 | `SELECT COUNT(*) FROM tokens WHERE user_id=?` |
 | 功能权限 | 功能入口 | `plans.allow_*` 字段直接判断 |
 
-### 5.3 用量更新策略
+### 6.3 用量更新策略
 
 | 指标 | 更新方式 |
 |------|---------|
@@ -319,10 +460,11 @@ POST /api/activation/redeem   { code: 'JP-A1B2C3D4E5' }
 | 存储用量 | 增量更新：上传成功 `+size`，删除文件 `-size` |
 | 文件计数 | 增量更新：上传成功 +1，删除文件 -1 |
 | 日用量清理 | 保留 90 天，超期记录定时删除 |
+| 月赠送积分 | 每月按 `plans.monthly_credits` 发放 |
 
 > API 调用计数使用内存缓冲，避免每次请求都写 SQLite。Node 进程重启时会丢失当批未 flush 的计数（可接受，最多少算 60 秒的调用量）。
 
-### 5.4 quota 模块 API 设计
+### 6.4 quota 与 credits 模块 API 设计
 
 ```js
 // quota.js
@@ -330,6 +472,14 @@ module.exports = {
   async check(userId, dimension, extra = {}),
   async increment(userId, dimension, value = 1),
   async getUsageOverview(userId),
+};
+
+// credits.js
+module.exports = {
+  async getBalance(userId),
+  async consume(userId, amount, { description, relatedType, relatedId }),
+  async grant(userId, amount, { description, relatedType, relatedId }),
+  async listTransactions(userId, { limit, offset }),
 };
 ```
 
@@ -350,14 +500,14 @@ module.exports = {
 
 ---
 
-## 6. REST API 新增
+## 7. REST API 新增
 
-### 6.1 套餐与用量
+### 7.1 套餐与用量
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
 | GET | `/api/plans` | 列出所有套餐及参考价 | 无 |
-| GET | `/api/plans/current` | 当前用户的套餐 + 各维度用量 | 登录 |
+| GET | `/api/plans/current` | 当前用户的套餐 + 各维度用量 + 积分余额 | 登录 |
 
 **`GET /api/plans/current` 响应示例**：
 
@@ -375,11 +525,26 @@ module.exports = {
     "apiCallsToday": 156,
     "tokens": 3
   },
+  "credits": {
+    "balance": 245,
+    "lifetimeEarned": 500,
+    "lifetimeUsed": 255
+  },
   "expiresAt": "2026-07-10T00:00:00.000Z"
 }
 ```
 
-### 6.2 激活码（用户端）
+### 7.2 积分相关
+
+| 方法 | 路径 | 说明 | 鉴权 |
+|------|------|------|------|
+| GET | `/api/credits` | 当前积分余额与最近流水 | 登录 |
+| GET | `/api/credits/transactions` | 积分流水列表 | 登录 |
+| POST | `/api/admin/credits/grant` | 管理员给用户赠送积分 | admin |
+| GET | `/api/admin/credits/products` | 积分商品列表 | admin |
+| POST | `/api/admin/credits/products` | 新增/编辑积分商品 | admin |
+
+### 7.3 激活码（用户端）
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
@@ -392,12 +557,24 @@ module.exports = {
 ```json
 {
   "success": true,
+  "rewardType": "plan",
   "plan": { "name": "pro", "displayName": "Pro" },
   "expiresAt": "2026-07-10T00:00:00.000Z"
 }
 ```
 
-### 6.3 激活码管理（管理员）
+或积分类型：
+
+```json
+{
+  "success": true,
+  "rewardType": "credits",
+  "credits": 100,
+  "balance": 345
+}
+```
+
+### 7.4 激活码管理（管理员）
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
@@ -406,10 +583,11 @@ module.exports = {
 | POST | `/api/admin/codes/revoke/:id` | 撤销激活码（未使用的） | admin |
 | GET | `/api/admin/codes/stats` | 激活码统计（已用/未用/过期数） | admin |
 
-**`POST /api/admin/codes` 请求体**：
+**`POST /api/admin/codes` 请求体（套餐码）**：
 
 ```json
 {
+  "rewardType": "plan",
   "planId": 2,
   "durationDays": 30,
   "count": 5,
@@ -418,85 +596,81 @@ module.exports = {
 }
 ```
 
-> `count` 批量生成数量（1-50）；`expiresInDays` 激活码本身的有效期（未使用则作废）。
-
-**响应**：
+**积分码**：
 
 ```json
 {
-  "codes": [
-    { "code": "JP-A1B2C3D4E5", "planId": 2, "durationDays": 30 },
-    { "code": "JP-F6G7H8I9J0", "planId": 2, "durationDays": 30 }
-  ]
+  "rewardType": "credits",
+  "credits": 100,
+  "count": 10,
+  "expiresInDays": 90,
+  "note": "端午节活动"
 }
 ```
 
-### 6.4 管理员直接授权
+### 7.5 管理员直接授权
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
 | POST | `/api/admin/grant` | 直接给用户授权套餐 | admin |
-
-**请求体**：
-
-```json
-{
-  "userId": 5,
-  "planId": 2,
-  "durationDays": 365,
-  "note": "内测用户赠送"
-}
-```
-
-> 用于内测用户、合作伙伴赠送等场景，不经过激活码。
+| POST | `/api/admin/credits/grant` | 直接给用户赠送积分 | admin |
 
 ---
 
-## 7. 前端改动
+## 8. 前端改动
 
-### 7.1 新增页面
+### 8.1 新增页面
 
 #### 定价页（`#/pricing`）
 
 - 三栏对比表格（Free / Pro / Max）
 - Pro/Max 的操作按钮为「赞助解锁」，点击弹出联系方式（微信二维码 / 邮箱）
 - 底部「已有激活码？点此兑换」链接
+- 显示积分商品（上线后）
 
 #### 兑换激活码弹窗
 
 - 输入框 + 兑换按钮
 - 成功/失败提示
-- 显示新的套餐信息和到期时间
+- 显示新的套餐信息和到期时间，或积分到账提示
 
 #### 订阅管理（用户设置内）
 
 - 当前套餐显示 + 各维度用量进度条
 - 到期时间倒计时
+- 积分余额显示 + 最近流水
 - 「兑换激活码」按钮
 - 套餐历史记录列表
 
-### 7.2 管理员新增
+### 8.2 管理员新增
 
 #### 激活码管理（Settings 内）
 
-- 生成激活码表单（选套餐、选时长、数量、备注）
+- 生成激活码表单（选类型：套餐/积分，选时长/数额，数量，备注）
 - 激活码列表（状态筛选：未用/已用/过期/已撤销）
 - 撤销操作
 - 统计概览
 
-### 7.3 修改页面
+#### 积分管理
+
+- 给用户赠送积分
+- 积分商品配置
+- 积分流水查询
+
+### 8.3 修改页面
 
 | 页面 | 改动 |
 |------|------|
-| **主页** | 超限时上传按钮灰化 + tooltip 提示升级；右上角显示当前套餐 badge |
-| **上传** | 超限文件上传返回 403 时弹出升级引导 |
-| **预览页** | 版本历史超出配额时提示；统计图表按套餐显示天数 |
+| **主页** | 超限时上传按钮灰化 + tooltip 提示升级；右上角显示当前套餐 badge 和积分余额 |
+| **上传** | 超限文件上传返回 403/402 时弹出升级引导或积分抵扣确认 |
+| **预览页** | 版本历史超出配额时提示积分恢复；统计图表按套餐显示天数 |
 | **设置** | Token 创建超限时提示；新增「套餐管理」入口 |
 | **落地页** | Header 新增「定价」链接；CTA 按钮引导注册 |
+| **模板市场** | 每个模板显示所需积分；点击使用弹出积分确认 |
 
 ---
 
-## 8. 定时任务
+## 9. 定时任务
 
 | 任务 | 频率 | 说明 |
 |------|------|------|
@@ -505,12 +679,16 @@ module.exports = {
 | API 用量 flush | 每 60 秒 | 内存缓冲的 API 调用计数写入 `usage_daily` |
 | 日用量清理 | 每天 1 次 | 删除 90 天前的 `usage_daily` 记录 |
 | 存储用量校准 | 每天 1 次 | 重新计算 `usage_storage`（防止增量误差累积） |
+| 月赠送积分发放 | 每月 1 号 | 按 `plans.monthly_credits` 给所有 active Pro/Max 用户发放积分 |
+| 配额周期重置 | 每月 1 号 | 重置 `users.quota_reset_at`，日用量表 natural 滚动 |
 
 ---
 
-## 9. 配额超限响应格式
+## 10. 超限响应格式
 
-所有配额超限返回统一格式：
+### 10.1 配额超限
+
+HTTP 状态码 **403 Forbidden**（非 429，429 用于速率限制）。
 
 ```json
 {
@@ -521,6 +699,8 @@ module.exports = {
     "usedMb": 50.2,
     "limitMb": 50
   },
+  "canUseCredits": true,
+  "creditCost": 50,
   "upgradeHint": {
     "plan": "pro",
     "displayName": "Pro",
@@ -529,72 +709,100 @@ module.exports = {
 }
 ```
 
-HTTP 状态码统一使用 **403 Forbidden**（非 429，429 用于速率限制）。
+### 10.2 积分不足
+
+HTTP 状态码 **402 PaymentRequired**。
+
+```json
+{
+  "error": "InsufficientCredits",
+  "message": "积分不足，无法下载该模板",
+  "required": 50,
+  "balance": 12,
+  "upgradeHint": {
+    "plan": "pro",
+    "displayName": "Pro",
+    "monthlyCredits": 100
+  }
+}
+```
 
 ---
 
-## 10. 安全考虑
+## 11. 安全考虑
 
 | 风险 | 措施 |
 |------|------|
 | 激活码暴力枚举 | 格式 `JP-` + 10 位（36^10 = 3.6 万亿种），接口限流 5 次/分钟 |
 | 激活码重复使用 | `status=used` 后不可再用，数据库 UNIQUE 约束 |
 | 配额绕过 | 所有文件操作入口（REST API + MCP tool）统一经过 `quota.check()` |
-| 并发超额 | 存储用量使用 SQLite 事务保证原子性 |
-| Token 滥用 | MCP tool 调用同样计入 API 调用配额 |
-| 管理员接口泄露 | 激活码管理 API 强制 `requireAdmin` |
+| 积分并发透支 | 扣减积分使用 SQLite 事务 + 余额校验，拒绝负余额 |
+| 积分回滚滥用 | 仅允许管理员通过显式 `grant` 流水修正，业务侧不自动退款 |
+| MCP 工具绕过 | MCP tool 调用同样计入 API 调用配额与积分消费 |
+| 管理员接口泄露 | 激活码管理、积分管理 API 强制 `requireAdmin` |
 
 ---
 
-## 11. 向在线支付迁移
+## 12. 向在线支付迁移
 
 当激活码模式验证了付费需求后，迁移到在线支付只需：
 
 1. **新增 `payments` 表**（订单号、金额、支付方式、状态）
 2. **`user_plans.source` 新增 `'payment'`** 值，`source_id` 指向 payments 记录
 3. **新增支付相关 API**（创建订单、回调通知）
-4. **激活码机制保留**，作为促销/赠品渠道
+4. **积分购买对接支付**：`credit_products` + `payments` 联动
+5. **激活码机制保留**，作为促销/赠品渠道
 
-现有表结构（plans / user_plans / usage_daily / usage_storage）和 quota 模块无需改动。
+现有表结构（plans / user_plans / usage_daily / usage_storage / user_credits / credit_transactions）和 quota/credits 模块无需改动。
 
 ---
 
-## 12. 分期实施计划
+## 13. 分期实施计划
 
-### Phase 1：配额体系（约 2-3 天）
+### Phase 1：配额体系（约 3-4 天）
 
-1. 创建 migration：plans / activation_codes / user_plans / usage_daily / usage_storage 表 + users 新字段
+1. 创建 migration：plans / activation_codes / user_plans / usage_daily / usage_storage / user_credits / credit_transactions 表 + users 新字段
 2. 实现 `quota.js` 模块（含内存缓冲的 API 调用计数）
 3. 在现有 API 入口插入配额检查（上传、Token 创建、MCP tool）
 4. 前端配额超限提示（通用 toast）
 
-### Phase 2：激活码（约 2-3 天）
+### Phase 2：积分体系（约 3-4 天）
 
-1. 管理员激活码生成/管理 API
+1. 实现 `credits.js` 模块与积分流水
+2. 模板市场下载扣积分
+3. 超额配额允许积分抵扣
+4. 版本恢复、大文件上传扣积分
+5. 前端积分余额展示与确认弹窗
+
+### Phase 3：激活码（约 2-3 天）
+
+1. 管理员激活码生成/管理 API（支持套餐码和积分码）
 2. 用户兑换激活码 API + 到期降级定时任务
 3. 前端定价页 + 兑换弹窗 + 管理员后台
 4. 用量可视化（进度条）
 
-### Phase 3：完善体验（约 2 天）
+### Phase 4：完善体验（约 2 天）
 
 1. 降级处理（超限文件只读）
 2. 激活码叠加/升级逻辑
-3. 管理员直接授权
+3. 管理员直接授权与积分赠送
 4. 前端套餐管理页
 
 ---
 
-## 13. 文件结构（新增/修改）
+## 14. 文件结构（新增/修改）
 
 ```
 quota.js                        # 配额检查模块
+credits.js                      # 积分消费模块
 migrations/
-  007_plans_and_billing.js      # 套餐/激活码/用量表
+  023_billing_and_credits.js    # 套餐/激活码/用量/积分表
 public/
   js/pages/pricing.js           # 定价页
+  js/components/credit-dialog.js # 积分确认弹窗
 public/js/app.js                # 新增路由 + 配额提示
-public/index.html               # 新增 template（定价页）
+public/index.html               # 新增 template（定价页、积分确认）
 public/css/style.css            # 定价页样式
 ```
 
-> 现有文件改动：`server.js`（新增路由 + 配额中间件）、`mcp-server.js`（MCP tool 配额检查）。
+> 现有文件改动：`server.js`（新增路由 + 配额中间件）、`mcp/server.js` 或相关 tool 文件（MCP tool 配额与积分检查）。

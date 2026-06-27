@@ -791,6 +791,7 @@ async function loadDetail(body, id, _navigate) {
             作者：${escapeHtml(meta.uploader_name || '匿名')} · ${meta.instantiation_count || 0} 次使用 · ${relativeTime(meta.published_at || meta.created_at)}
           </div>
           <div class="market-detail-actions mw-icon-actions">
+            <button class="btn btn-small btn-primary" id="detail-use-template">使用此模板</button>
             <button class="mw-icon-btn" id="detail-star" data-tip="收藏" aria-label="收藏" data-starred="${meta.starred ? '1' : '0'}">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 17.3 5.8 20.9l1.6-6.8L2.2 8.9l6.9-.6L12 2z"/></svg>
             </button>
@@ -799,6 +800,9 @@ async function loadDetail(body, id, _navigate) {
             </button>
             <button class="mw-icon-btn" id="detail-copy-url" data-tip="复制公开链接" aria-label="复制公开链接">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.6 13.4a1 1 0 010-1.4l3-3a1 1 0 011.4 1.4l-1.3 1.3 1.4 1.4 1.3-1.3a3 3 0 10-4.2-4.2l-3 3a3 3 0 000 4.2 1 1 0 001.4-1.4zM13.4 10.6a1 1 0 010 1.4l-3 3a1 1 0 01-1.4-1.4l1.3-1.3-1.4-1.4-1.3 1.3a3 3 0 104.2 4.2l3-3a1 1 0 000-1.4 1 1 0 00-1.4 0z"/></svg>
+            </button>
+            <button class="mw-icon-btn" id="detail-view-public" data-tip="查看公链" aria-label="查看公链">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
             </button>
           </div>
         </aside>
@@ -811,6 +815,23 @@ async function loadDetail(body, id, _navigate) {
     } else {
       iframe.srcdoc = contentData.content;
     }
+
+    // 使用此模板
+    body.querySelector('#detail-use-template').onclick = async () => {
+      if (!state.currentUser) {
+        toast('请先登录后使用模板', 'error');
+        return;
+      }
+      try {
+        const [shareData] = await Promise.all([
+          api(`/api/content-templates/${id}/share`, { method: 'POST' }),
+          api(`/api/content-templates/${id}/use`, { method: 'POST' }).catch(() => {}),
+        ]);
+        showUseTemplatePrompt({ title: meta.title, shareKey: shareData.key, fileType: meta.file_type });
+      } catch (e) {
+        toast(e.message || '获取模板链接失败', 'error');
+      }
+    };
 
     // 收藏（toggle）
     body.querySelector('#detail-star').onclick = async () => {
@@ -839,6 +860,24 @@ async function loadDetail(body, id, _navigate) {
         toast(ok ? `已复制公开链接：${url}` : '复制失败，请手动复制', ok ? 'success' : 'error');
       } catch (e) {
         toast(e.message || '生成链接失败', 'error');
+      }
+    };
+
+    // 跳转：打开 /t/:key 公开页
+    body.querySelector('#detail-view-public').onclick = async () => {
+      try {
+        let key = meta.share_key;
+        if (!key) {
+          const data = await api(`/api/content-templates/${id}/share`, { method: 'POST' });
+          key = data.key;
+        }
+        if (key) {
+          window.open(`${location.origin}/t/${key}`, '_blank');
+        } else {
+          toast('未找到公开链接', 'error');
+        }
+      } catch (e) {
+        toast(e.message || '打开公链失败', 'error');
       }
     };
 
@@ -926,7 +965,7 @@ function renderMineList(list, templates, pg, navigate) {
       </div>
       <div class="mine-item-actions">
         ${t.status !== 'archived' ? `<button class="btn btn-small" data-act="edit">编辑</button>` : ''}
-        ${t.status !== 'archived' ? `<button class="btn btn-small btn-danger" data-act="archive">归档</button>` : ''}
+        ${t.status !== 'archived' ? `<button class="btn btn-small btn-danger" data-act="archive">删除</button>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -938,11 +977,11 @@ function renderMineList(list, templates, pg, navigate) {
       btn.onclick = async () => {
         const act = btn.dataset.act;
         if (act === 'archive') {
-          const ok = await dialogModal.confirm({ message: `确定归档《${title}》？归档后将从市场移除。`, confirmText: '归档', danger: true });
+          const ok = await dialogModal.confirm({ message: `确定删除《${title}》？删除后将从市场移除。`, confirmText: '删除', danger: true });
           if (!ok) return;
           try {
             await api(`/api/content-templates/${id}`, { method: 'DELETE' });
-            toast(`《${title}》已归档`);
+            toast(`《${title}》已删除`);
             loadMineList(list.closest('#market-body'), navigate);
           } catch (e) { toast(e.message || '操作失败', 'error'); }
         } else if (act === 'edit') {
@@ -1036,7 +1075,7 @@ const STATUS_BADGE = {
   pending: '<span class="ct-status-badge ct-status-pending">审核中</span>',
   approved: '<span class="ct-status-badge ct-status-approved">已通过</span>',
   rejected: '<span class="ct-status-badge ct-status-rejected">被拒</span>',
-  archived: '<span class="ct-status-badge ct-status-archived">已归档</span>',
+  archived: '<span class="ct-status-badge ct-status-archived">已删除</span>',
 };
 
 // ============================================================
@@ -1054,7 +1093,7 @@ function renderAdmin(container, navigate) {
           <button class="filter-chip ${adminState.status === 'pending' ? 'active' : ''}" data-status="pending">待审核</button>
           <button class="filter-chip ${adminState.status === 'approved' ? 'active' : ''}" data-status="approved">已上架</button>
           <button class="filter-chip ${adminState.status === 'rejected' ? 'active' : ''}" data-status="rejected">已拒绝</button>
-          <button class="filter-chip ${adminState.status === 'archived' ? 'active' : ''}" data-status="archived">已归档</button>
+          <button class="filter-chip ${adminState.status === 'archived' ? 'active' : ''}" data-status="archived">已删除</button>
           <button class="filter-chip ${!adminState.status ? 'active' : ''}" data-status="">全部</button>
         </div>
         <button class="btn btn-small" id="admin-category-mgr">分类管理</button>
@@ -1128,6 +1167,7 @@ function renderAdminList(list, templates, pg, navigate, body) {
         ${t.status === 'pending' ? `<button class="btn btn-small btn-danger" data-act="reject">拒绝</button>` : ''}
         ${t.status === 'approved' ? `<button class="btn btn-small" data-act="toggle-vis">${t.visibility === 'visible' ? '隐藏' : '展示'}</button>` : ''}
         ${t.status === 'approved' ? `<button class="btn btn-small" data-act="feature">${t.featured ? '取消精选' : '精选'}</button>` : ''}
+        ${t.status !== 'archived' ? `<button class="btn btn-small btn-danger" data-act="delete">删除</button>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -1172,6 +1212,12 @@ function renderAdminList(list, templates, pg, navigate, body) {
             const featured = btn.textContent.includes('取消精选');
             await api(`/api/content-templates/${id}/admin`, { method: 'PATCH', body: { featured: !featured } });
             toast(!featured ? `《${title}》已设为精选` : `《${title}》已取消精选`);
+            loadAdminList(body, navigate);
+          } else if (act === 'delete') {
+            const ok = await dialogModal.confirm({ message: `确定删除《${title}》？删除后将从市场移除。`, confirmText: '删除', danger: true });
+            if (!ok) return;
+            await api(`/api/content-templates/${id}`, { method: 'DELETE' });
+            toast(`《${title}》已删除`);
             loadAdminList(body, navigate);
           }
         } catch (e) {

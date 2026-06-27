@@ -2003,7 +2003,7 @@ async function openPublishMarket(container, fileId, file) {
 
   const STATUS_LABEL = {
     draft: '草稿', pending: '审核中', approved: '已通过',
-    rejected: '已拒绝', archived: '已归档',
+    rejected: '已拒绝', archived: '已删除',
   };
 
   // 动态构建模态 DOM（不依赖 index.html 静态结构，规避并发修改）
