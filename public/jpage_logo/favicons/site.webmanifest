@@ -1,0 +1,21 @@
+{
+  "name": "即页 jpage",
+  "short_name": "即页",
+  "description": "零配置 HTML / Markdown 即时预览与分享工具，面向 AI 生成内容的完整呈现、管理与风格化。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B1020",
+  "theme_color": "#2563EB",
+  "icons": [
+    {
+      "src": "/favicons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

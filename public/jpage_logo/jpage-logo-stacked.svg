@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="420" viewBox="0 0 420 420" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">JPage 即页竖版 Logo</title>
+  <desc id="desc">JPage 即页品牌竖版组合标识。</desc>
+  <g transform="translate(162 52)"></g>
+  <defs>
+    <linearGradient id="jpBg" x1="8" y1="88" x2="88" y2="8" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#2563EB"/><stop offset=".52" stop-color="#7C3AED"/><stop offset="1" stop-color="#22D3EE"/></linearGradient>
+    <linearGradient id="jpSpark" x1="34" y1="72" x2="66" y2="28" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#F59E0B"/><stop offset="1" stop-color="#22D3EE"/></linearGradient>
+  </defs>
+  <g transform="translate(162 52)">
+    <rect x="4" y="4" width="88" height="88" rx="22" fill="url(#jpBg)"/>
+    <path d="M28 18h31.5L72 30.5V74a8 8 0 0 1-8 8H28a8 8 0 0 1-8-8V26a8 8 0 0 1 8-8Z" fill="#FFFFFF"/>
+    <path d="M59.5 18v11.5a1 1 0 0 0 1 1H72L59.5 18Z" fill="#DBF8FF"/>
+    <path d="M47 31 34 53h13l-5 20 22-29H50l6-13h-9Z" fill="url(#jpSpark)"/>
+    <path d="M58 38v19.5C58 70 50.3 76 39.6 76c-5.4 0-10-1.5-13.6-4.2" stroke="#0B1020" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round" opacity=".92"/>
+  </g>
+  <text x="210" y="212" text-anchor="middle" font-family="Inter Display, Inter, Arial, sans-serif" font-size="58" font-weight="850" letter-spacing="-2" fill="#0F172A">jpage</text>
+  <text x="210" y="264" text-anchor="middle" font-family="Noto Sans CJK SC, PingFang SC, Microsoft YaHei, sans-serif" font-size="48" font-weight="800" letter-spacing="3" fill="#0F172A">即页</text>
+  <text x="210" y="314" text-anchor="middle" font-family="Noto Sans CJK SC, Inter, sans-serif" font-size="20" font-weight="600" fill="#64748B">让 AI 生成的内容也有审美</text>
+</svg>

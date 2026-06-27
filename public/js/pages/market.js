@@ -135,7 +135,7 @@ function renderMarketShell(container, { active, navigate }) {
     <div class="market-page mw-market-page">
       <aside class="mw-sidebar">
         <a href="#/" class="mw-brand" aria-label="返回首页">
-          <img class="mw-brand-mark" src="/jpage_logo/jpage_logo_main.png" alt="即页">
+          <img class="mw-brand-mark" src="/jpage_logo/jpage-app-icon.svg" alt="即页">
           <span class="mw-brand-text">JPage<br><strong>Market</strong></span>
         </a>
         <nav class="mw-side-nav">

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">JPage 即页标识</title>
+  <desc id="desc">一个带折角的页面符号，内部包含代表即时生成的闪电与 J 形动线。</desc>
+  <defs>
+    <linearGradient id="jpBg" x1="8" y1="88" x2="88" y2="8" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2563EB"/><stop offset=".52" stop-color="#7C3AED"/><stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <linearGradient id="jpSpark" x1="34" y1="72" x2="66" y2="28" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F59E0B"/><stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <filter id="softShadow" x="0" y="0" width="96" height="96" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#0B1020" flood-opacity=".22"/>
+    </filter>
+  </defs>
+  <rect x="4" y="4" width="88" height="88" rx="22" fill="url(#jpBg)"/>
+  <g filter="url(#softShadow)">
+    <path d="M28 18h31.5L72 30.5V74a8 8 0 0 1-8 8H28a8 8 0 0 1-8-8V26a8 8 0 0 1 8-8Z" fill="#FFFFFF"/>
+    <path d="M59.5 18v11.5a1 1 0 0 0 1 1H72L59.5 18Z" fill="#DBF8FF"/>
+    <path d="M47 31 34 53h13l-5 20 22-29H50l6-13h-9Z" fill="url(#jpSpark)"/>
+    <path d="M58 38v19.5C58 70 50.3 76 39.6 76c-5.4 0-10-1.5-13.6-4.2" stroke="#0B1020" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round" opacity=".92"/>
+  </g>
+</svg>
