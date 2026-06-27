@@ -13,6 +13,7 @@ const { clientIp, now, generateShareKey } = require('../lib/util');
 const { UPLOAD_DIR } = require('../lib/paths');
 const { generateStoredName } = require('./files/_shared');
 const { isFtsIndexable, indexFileContent } = require('../lib/fts');
+const { addUserStorage } = require('../lib/usage');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -494,6 +495,7 @@ router.post('/:id/instantiate', requireAuth, async (req, res) => {
         [originalName, storedName, t.file_type, size, req.userId, generateShareKey(), req.params.id, ts]
       );
       fileId = result.lastID;
+      await addUserStorage(req.userId, size);
     } catch (e) {
       // 写库失败需回滚磁盘文件
       fs.promises.unlink(filePath).catch(() => {});

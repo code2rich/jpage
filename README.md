@@ -338,7 +338,7 @@ jpage/
 | `/api/content-templates` | GET | 当前用户模板列表 |
 | `/api/content-templates` | POST | 创建模板 |
 | `/api/content-templates/:id` | PUT/DELETE | 更新/删除模板（仅所有者） |
-| `/api/content-templates/:id/use` | POST | 基于模板创建文件 |
+| `/api/content-templates/:id/use` | POST | 记录模板使用计数 |
 | `/api/templates` | GET | 样式模板（渲染皮肤） |
 
 ### 管理后台（仅 admin）

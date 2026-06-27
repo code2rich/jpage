@@ -308,6 +308,7 @@ MCP 使用的 JSON 覆盖上传，自动版本备份。
 | `/api/users` | POST | 创建用户 `{username, password, role, email?}` |
 | `/api/users/:id` | PUT | 更新用户名/邮箱/角色或重置密码 |
 | `/api/users/:id` | DELETE | 删除用户（不可删自己，文件转交 admin） |
+| `/api/users/me/usage` | GET | 当前登录用户的用量统计（存储、文件数、API 调用、短链浏览） |
 
 ## API Token
 
@@ -356,7 +357,7 @@ MCP 使用的 JSON 覆盖上传，自动版本备份。
 |---|---|---|
 | `/api/admin/export` | GET | 导出数据库为备份 |
 | `/api/admin/import` | POST | 导入备份（替换连接后重新 `configureDatabase()`） |
-| `/api/admin/stats` | GET | 系统统计 |
+| `/api/admin/stats` | GET | 系统统计（文件/用户/存储/短链浏览/API 调用来源） |
 
 ---
 

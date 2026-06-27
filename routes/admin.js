@@ -8,13 +8,14 @@ const multer = require('multer');
 const archiver = require('archiver');
 const JSZip = require('jszip');
 const sqlite3 = require('sqlite3').verbose();
-const { getDb, dbGet, configureDatabase, resetDb } = require('../lib/db');
+const { getDb, dbGet, dbAll, configureDatabase, resetDb } = require('../lib/db');
 const { DATA_DIR, UPLOAD_DIR } = require('../lib/paths');
 const { requireAuth, requireAdmin } = require('../lib/middleware/auth');
 const { clientIp } = require('../lib/util');
 const { loadTemplateNameMap } = require('../lib/templates');
 const { reloadCategoryNameCache } = require('../lib/categories');
 const { clearRenderCache } = require('../lib/render-cache');
+const { recalculateAllUsersStorage } = require('../lib/usage');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -102,6 +103,7 @@ router.post('/import', requireAuth, requireAdmin, adminUpload.single('file'), as
     await loadTemplateNameMap();
     await reloadCategoryNameCache();
     clearRenderCache();
+    await recalculateAllUsersStorage();
     logger.audit('backup.import', { ip: clientIp(req), backupDir });
     res.json({ success: true, message: '数据已恢复，建议刷新页面重新加载' });
   } catch (e) {
@@ -125,7 +127,28 @@ router.get('/stats', requireAuth, requireAdmin, async (req, res) => {
         if (s.isFile()) uploadsSize += s.size;
       }
     }
-    res.json({ fileCount: fileCount.c, dbSize, uploadsSize, totalSize: dbSize + uploadsSize });
+
+    const userCount = await dbGet('SELECT COUNT(*) AS c FROM users');
+    const totalStorage = await dbGet('SELECT COALESCE(SUM(total_storage_bytes), 0) AS total FROM users');
+    const totalViews = await dbGet('SELECT COALESCE(SUM(view_count), 0) AS total FROM files');
+    const totalApiCalls = await dbGet('SELECT COUNT(*) AS c FROM api_calls');
+    const sourceRows = await dbAll('SELECT source, COUNT(*) AS count FROM api_calls GROUP BY source');
+    const apiCallsBySource = {};
+    for (const row of sourceRows) {
+      apiCallsBySource[row.source || 'unknown'] = row.count;
+    }
+
+    res.json({
+      fileCount: fileCount.c,
+      dbSize,
+      uploadsSize,
+      totalSize: dbSize + uploadsSize,
+      userCount: userCount.c,
+      totalStorageBytes: totalStorage.total,
+      totalShortLinkViews: totalViews.total,
+      totalApiCalls: totalApiCalls.c,
+      apiCallsBySource,
+    });
   } catch (e) {
     res.status(500).json({ error: '获取统计失败' });
   }

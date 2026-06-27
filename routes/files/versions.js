@@ -9,6 +9,7 @@ const { unlinkQuiet, currentUserId, clientIp, resolveUploadSource } = require('.
 const { UPLOAD_DIR } = require('../../lib/paths');
 const { renderFile } = require('../../lib/render');
 const { generateStoredName, backupAndApplyVersion } = require('./_shared');
+const { addUserStorage } = require('../../lib/usage');
 const logger = require('../../logger');
 
 function registerVersions(router) {
@@ -154,12 +155,19 @@ function registerVersions(router) {
       );
       if (!ver) return res.status(404).json({ error: '版本不存在' });
 
+      const file = await dbGet('SELECT uploaded_by FROM files WHERE id = ?', [req.params.id]);
+
       // 删除磁盘文件
       const filePath = path.join(UPLOAD_DIR, ver.stored_name);
       if (fs.existsSync(filePath)) await unlinkQuiet(filePath);
 
       // 删除版本记录
       await dbRun('DELETE FROM file_versions WHERE id = ?', [ver.id]);
+
+      // 扣减该版本占用的存储量
+      if (ver.size && file) {
+        await addUserStorage(file.uploaded_by, -ver.size);
+      }
 
       logger.audit('file.version.delete', { fileId: parseInt(req.params.id), version: parseInt(req.params.ver), userId: currentUserId(req), ip: clientIp(req) });
       res.json({ success: true });

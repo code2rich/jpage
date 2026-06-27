@@ -11,6 +11,7 @@ const { UPLOAD_DIR } = require('../../lib/paths');
 const { isFtsIndexable, indexFileContent } = require('../../lib/fts');
 const { handleZipUpload, translateZipError } = require('../../lib/zip');
 const { uploadLimiter, upload, largeJson, MAX_FILE_SIZE, ALLOWED_TEXT_EXTS, backupAndApplyVersion } = require('./_shared');
+const { addUserStorage } = require('../../lib/usage');
 const logger = require('../../logger');
 
 function registerUpload(router) {
@@ -73,10 +74,12 @@ function registerUpload(router) {
       }
 
       // 不存在同名文件：新建
+      const userId = currentUserId(req);
       const result = await dbRun(
         'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key, upload_source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [req.file.originalname, req.file.filename, fileType, req.file.size, isPublic ? 1 : 0, currentUserId(req), generateShareKey(), source, now()]
+        [req.file.originalname, req.file.filename, fileType, req.file.size, isPublic ? 1 : 0, userId, generateShareKey(), source, now()]
       );
+      await addUserStorage(userId, req.file.size);
       // FTS 索引同步
       if (isFtsIndexable(fileType, req.file.filename)) {
         indexFileContent(result.lastID, req.file.filename);
@@ -164,11 +167,13 @@ function registerUpload(router) {
 
     // 不存在同名文件：新建
     const isPublicFlag = isPublic === false ? 0 : 1;
+    const jsonUserId = currentUserId(req);
     try {
       const result = await dbRun(
         'INSERT INTO files (original_name, stored_name, file_type, size, is_public, uploaded_by, share_key, upload_source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [decoded, storedName, fileType, size, isPublicFlag, currentUserId(req), generateShareKey(), source, now()]
+        [decoded, storedName, fileType, size, isPublicFlag, jsonUserId, generateShareKey(), source, now()]
       );
+      await addUserStorage(jsonUserId, size);
       // FTS 索引同步
       if (isFtsIndexable(fileType, storedName)) {
         indexFileContent(result.lastID, storedName);

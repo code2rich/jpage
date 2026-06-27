@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const { dbAll, dbGet, dbRun } = require('../lib/db');
 const { requireAuth, requireAdmin } = require('../lib/middleware/auth');
 const { clientIp } = require('../lib/util');
+const { recalculateUserStorage } = require('../lib/usage');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -16,6 +17,37 @@ router.get('/', requireAuth, requireAdmin, async (req, res) => {
     res.json({ users: users.map(u => ({ ...u, emailVerified: !!u.email_verified })) });
   } catch (e) {
     res.status(500).json({ error: '获取用户列表失败' });
+  }
+});
+
+// 个人用量面板（当前登录用户）
+router.get('/me/usage', requireAuth, async (req, res) => {
+  try {
+    const user = await dbGet(
+      'SELECT total_storage_bytes, storage_quota_bytes, api_calls_count FROM users WHERE id = ?',
+      [req.userId]
+    );
+    const fileCount = await dbGet('SELECT COUNT(*) AS c FROM files WHERE uploaded_by = ?', [req.userId]);
+    const views = await dbGet('SELECT COALESCE(SUM(view_count), 0) AS c FROM files WHERE uploaded_by = ?', [req.userId]);
+    const bySource = await dbAll(
+      'SELECT source, COUNT(*) AS count FROM api_calls WHERE user_id = ? GROUP BY source',
+      [req.userId]
+    );
+    const apiCallsBySource = {};
+    for (const row of bySource) {
+      apiCallsBySource[row.source || 'unknown'] = row.count;
+    }
+
+    res.json({
+      storageBytes: user ? user.total_storage_bytes || 0 : 0,
+      storageQuota: user ? user.storage_quota_bytes : null,
+      fileCount: fileCount ? fileCount.c : 0,
+      apiCallsTotal: user ? user.api_calls_count || 0 : 0,
+      apiCallsBySource,
+      shortLinkViews: views ? views.c : 0,
+    });
+  } catch (e) {
+    res.status(500).json({ error: '获取用量统计失败' });
   }
 });
 
@@ -107,6 +139,8 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
     const admin = await dbGet("SELECT id FROM users WHERE role = 'admin' AND id != ? ORDER BY id ASC LIMIT 1", [targetId]);
     if (admin) {
       await dbRun('UPDATE files SET uploaded_by = ? WHERE uploaded_by = ?', [admin.id, targetId]);
+      // 文件归属变更后，重新计算接收 admin 的存储量
+      await recalculateUserStorage(admin.id);
     }
     // 删除用户（ON DELETE CASCADE 会清理 tokens）
     await dbRun('DELETE FROM users WHERE id = ?', [targetId]);

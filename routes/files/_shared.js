@@ -11,6 +11,7 @@ const path = require('path');
 const { dbGet, dbAll, dbRun } = require('../../lib/db');
 const { now, unlinkQuiet, decodeFilename } = require('../../lib/util');
 const { UPLOAD_DIR } = require('../../lib/paths');
+const { addUserStorage } = require('../../lib/usage');
 
 // --- 常量 ---
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
@@ -91,25 +92,35 @@ async function backupAndApplyVersion(file, next, recordedBy, source = 'web', per
     'UPDATE files SET stored_name = ?, size = ?, upload_source = ?, updated_at = ? WHERE id = ?',
     [next.storedName, next.size, source, now(), file.id]
   );
+
+  // 维护用户存储量：当前文件大小变化量 = 新版本 - 旧版本
+  await addUserStorage(file.uploaded_by, next.size - file.size);
+
   // 超过上限时删除最旧的历史版本（含磁盘文件），避免长期占盘。
-  await pruneOldVersions(file.id, MAX_FILE_VERSIONS);
+  await pruneOldVersions(file.id, MAX_FILE_VERSIONS, file.uploaded_by);
   return { version: nextVer + 1 };
 }
 
 // --- 历史版本裁剪 ---
 // 保留每个文件最近 keep 个历史版本（version 最大的 keep 个），删掉更老的，
 // 同步清理磁盘文件。当前版本在 files 主记录，不参与计数。
-async function pruneOldVersions(fileId, keep) {
+async function pruneOldVersions(fileId, keep, ownerId) {
   if (!Number.isFinite(keep) || keep <= 0) return;
   // version 倒序：前 keep 条保留，其余删除
   const all = await dbAll(
-    'SELECT id, stored_name FROM file_versions WHERE file_id = ? ORDER BY version DESC',
+    'SELECT id, stored_name, size FROM file_versions WHERE file_id = ? ORDER BY version DESC',
     [fileId]
   );
   const toRemove = all.slice(keep);
+  let removedBytes = 0;
   for (const v of toRemove) {
     if (v.stored_name) await unlinkQuiet(path.join(UPLOAD_DIR, v.stored_name));
     await dbRun('DELETE FROM file_versions WHERE id = ?', [v.id]);
+    if (v.size) removedBytes += v.size;
+  }
+  // 扣减被删版本占用的存储量
+  if (removedBytes > 0 && ownerId) {
+    await addUserStorage(ownerId, -removedBytes);
   }
 }
 

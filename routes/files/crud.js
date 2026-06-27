@@ -10,6 +10,7 @@ const { UPLOAD_DIR } = require('../../lib/paths');
 const { deleteFileIndex } = require('../../lib/fts');
 const { invalidateRenderCache } = require('../../lib/render-cache');
 const { checkFileOwnership } = require('../../lib/middleware/files');
+const { subtractFileStorage } = require('../../lib/usage');
 const logger = require('../../logger');
 
 function registerCrud(router) {
@@ -65,6 +66,9 @@ function registerCrud(router) {
       await dbRun('DELETE FROM starred_files WHERE file_id = ?', [req.params.id]);
       await deleteFileIndex(req.params.id);
 
+      // 扣减用户存储量（含历史版本）
+      await subtractFileStorage(file);
+
       // 清理版本记录及对应磁盘文件
       const versions = await dbAll('SELECT stored_name FROM file_versions WHERE file_id = ?', [req.params.id]);
       for (const v of versions) {
@@ -107,6 +111,11 @@ function registerCrud(router) {
       const idPlaceholders = fileIds.map(() => '?').join(',');
 
       if (action === 'delete') {
+        // 扣减各文件所有者存储量（在事务外执行，避免统计写失败阻塞删除）
+        for (const f of files) {
+          await subtractFileStorage({ id: f.id, size: f.size, uploaded_by: f.uploaded_by });
+        }
+
         await dbRun('BEGIN');
         try {
           await dbRun(`DELETE FROM file_tags WHERE file_id IN (${idPlaceholders})`, fileIds);

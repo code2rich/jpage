@@ -285,6 +285,11 @@ function renderHome(container) {
       settingsBtn.setAttribute('aria-expanded', 'false');
       openProfileModal();
     });
+    settingsDropdown.querySelector('#menu-item-usage')?.addEventListener('click', () => {
+      settingsDropdown.classList.remove('open');
+      settingsBtn.setAttribute('aria-expanded', 'false');
+      openUsageModal();
+    });
     settingsDropdown.querySelector('#menu-item-market-admin')?.addEventListener('click', () => {
       settingsDropdown.classList.remove('open');
       settingsBtn.setAttribute('aria-expanded', 'false');
@@ -1679,6 +1684,14 @@ function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
+function renderSourceCounts(bySource) {
+  if (!bySource || Object.keys(bySource).length === 0) return '-';
+  const labelMap = { web: '网页', cli: 'CLI', mcp: 'MCP', utools: 'uTools', unknown: '其他' };
+  return Object.entries(bySource)
+    .map(([source, count]) => (labelMap[source] || source.toUpperCase()) + ': ' + count)
+    .join(', ');
+}
+
 async function openBackupModal() {
   const modal = document.getElementById('backup-modal');
   modal.hidden = false;
@@ -1690,10 +1703,15 @@ async function openBackupModal() {
     const stats = await api('/api/admin/stats');
     statsEl.innerHTML =
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-size:14px">' +
+      '<span style="color:var(--text-secondary)">用户数量</span><span>' + stats.userCount + '</span>' +
       '<span style="color:var(--text-secondary)">文件数量</span><span>' + stats.fileCount + '</span>' +
       '<span style="color:var(--text-secondary)">数据库大小</span><span>' + formatBytes(stats.dbSize) + '</span>' +
       '<span style="color:var(--text-secondary)">上传文件大小</span><span>' + formatBytes(stats.uploadsSize) + '</span>' +
+      '<span style="color:var(--text-secondary)">总占用存储</span><span>' + formatBytes(stats.totalStorageBytes) + '</span>' +
       '<span style="color:var(--text-secondary)">总大小</span><span style="font-weight:600">' + formatBytes(stats.totalSize) + '</span>' +
+      '<span style="color:var(--text-secondary)">短链浏览量</span><span>' + stats.totalShortLinkViews + '</span>' +
+      '<span style="color:var(--text-secondary)">API 调用总数</span><span>' + stats.totalApiCalls + '</span>' +
+      '<span style="color:var(--text-secondary)">API 调用来源</span><span>' + renderSourceCounts(stats.apiCallsBySource) + '</span>' +
       '</div>';
   } catch (e) {
     statsEl.innerHTML = '<p class="login-error">加载统计失败: ' + esc(e.message) + '</p>';
@@ -1744,6 +1762,45 @@ async function openBackupModal() {
       toast(e.message, 'error');
     }
   };
+}
+
+// ---------- 个人用量统计弹窗 ----------
+async function openUsageModal() {
+  const modal = document.getElementById('usage-modal');
+  modal.hidden = false;
+  modal.setAttribute('aria-hidden', 'false');
+  const statsEl = modal.querySelector('#usage-stats');
+  statsEl.innerHTML = '<p style="color:var(--text-secondary)">加载中...</p>';
+
+  try {
+    const usage = await api('/api/users/me/usage');
+    let storageHtml = '<span>' + formatBytes(usage.storageBytes) + '</span>';
+    if (usage.storageQuota) {
+      const pct = Math.min(100, Math.round((usage.storageBytes / usage.storageQuota) * 100));
+      storageHtml +=
+        '<div style="margin-top:4px;height:6px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden">' +
+        '<div style="width:' + pct + '%;height:100%;background:var(--primary)"></div></div>' +
+        '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">已用 ' + pct + '%（配额 ' + formatBytes(usage.storageQuota) + '）</div>';
+    }
+    statsEl.innerHTML =
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-size:14px">' +
+      '<span style="color:var(--text-secondary)">存储占用</span><span>' + storageHtml + '</span>' +
+      '<span style="color:var(--text-secondary)">文件数量</span><span>' + usage.fileCount + '</span>' +
+      '<span style="color:var(--text-secondary)">API 调用总数</span><span>' + usage.apiCallsTotal + '</span>' +
+      '<span style="color:var(--text-secondary)">API 调用来源</span><span>' + renderSourceCounts(usage.apiCallsBySource) + '</span>' +
+      '<span style="color:var(--text-secondary)">短链浏览量</span><span>' + usage.shortLinkViews + '</span>' +
+      '</div>';
+  } catch (e) {
+    statsEl.innerHTML = '<p class="login-error">加载用量统计失败: ' + esc(e.message) + '</p>';
+  }
+
+  const hideModal = () => { closeModal(modal); };
+  modal.querySelector('#usage-modal-close').onclick = hideModal;
+  modal.querySelector('#usage-modal-dismiss').onclick = hideModal;
+  if (!modal.dataset.bound) {
+    modal.dataset.bound = '1';
+    modal.addEventListener('click', e => { if (e.target === modal) hideModal(); });
+  }
 }
 
 // ---------- Tags & Categories ----------

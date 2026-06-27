@@ -6,7 +6,7 @@
 
 | 分类 | 能力 |
 |---|---|
-| 🔐 登录 | 配置远程服务器地址 + 账号密码登录（用户名或邮箱），session 自动持久化，下次进入免登录 |
+| 🔐 登录 | 配置远程服务器地址 + 账号密码登录（用户名或邮箱），默认服务器 `https://www.jpage.cn`，session 自动持久化，下次进入免登录 |
 | 📋 文件列表 | 分页、按更新/创建时间/名称/大小排序、按标签/分类/收藏筛选 |
 | 🔍 搜索 | 文件名 + 全文内容搜索（走即页 FTS5 全文索引） |
 | ⬆ 上传 | 选择本地 `.html`/`.md`/`.zip` 文件上传；或粘贴 HTML/Markdown 文本新建 |
@@ -69,9 +69,10 @@ plugin-workspace/
 ## 使用
 
 1. 在 uTools 主搜索框输入 **「即页」**（或 `jpage`）进入插件
-2. 首次使用：填写**服务器地址**（如 `https://jpage.example.com`）+ **账号** + **密码** → 登录
+2. 首次使用：服务器地址默认已填 `https://www.jpage.cn`（可修改），输入**账号** + **密码** → 登录
 3. 之后进入插件会自动恢复登录态；会话过期（7 天）会自动跳回登录页
-4. 在主界面搜索、上传、管理文件
+4. 需要清空本地缓存（服务器地址、账号、登录状态）时，在登录页点击「清空缓存」
+5. 在主界面搜索、上传、管理文件
 
 ## 调用即页的 API
 
@@ -80,6 +81,7 @@ plugin-workspace/
 | 域 | 端点 |
 |---|---|
 | 认证 | `auth/login`, `auth/me`, `auth/logout`, `auth/change-password`, `auth/profile` |
+| 配置 | `jpage.getConfig`, `jpage.setBase`, `jpage.clearCache` |
 | 文件 | `files`（列表/搜索/分页）, `files/upload`（multipart）, `files/upload-json`, `files/:id`（详情/改/删）, `files/:id/content`, `files/:id/overwrite`, `files/:id/versions`, `files/:id/tags`, `files/:id/star`, `files/:id/category` |
 | 标签 | `tags`（增/查）, `tags/:id`（删） |
 | 分类 | `categories`（增/查）, `categories/:id`（改/删） |

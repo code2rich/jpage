@@ -30,6 +30,9 @@ const { initMailer } = require('./mailer');
 const { mountMcpServer, closeMcpTransports } = require('./mcp-server');
 const logger = require('./logger');
 
+// 用量统计中间件（需在 /api 路由之前挂载，才能捕获所有 API 请求）
+const { recordUsage } = require('./lib/middleware/usage');
+
 // 路由域
 const authRouter = require('./routes/auth');
 const usersRouter = require('./routes/users');
@@ -161,6 +164,8 @@ app.get('/health', async (req, res) => {
 });
 
 // --- 路由挂载 ---
+// 先挂载用量采集，使其位于所有 /api 请求之前；后续具体路由的鉴权会填充 req.userId。
+app.use('/api', recordUsage);
 app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/tokens', tokensRouter);

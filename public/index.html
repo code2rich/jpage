@@ -371,6 +371,10 @@ CLI 工具
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
 	个人资料
 	</button>
+	<button type="button" class="settings-menu-item" role="menuitem" id="menu-item-usage">
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+	用量统计
+	</button>
 	<div class="settings-menu-divider admin-only" role="separator"></div>
 	<button type="button" class="settings-menu-item admin-only" role="menuitem" id="menu-item-market-admin">
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><line x1="9" y1="13" x2="15" y2="13"/></svg>
@@ -832,6 +836,22 @@ CLI 工具
 </div>
 <div class="modal-footer">
 <button type="button" class="btn btn-small" id="backup-modal-dismiss">关闭</button>
+</div>
+</div>
+</div>
+
+<!-- 个人用量统计弹窗 -->
+<div class="modal-backdrop" id="usage-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="usage-modal-title">
+<div class="modal-panel modal-panel-sm">
+<div class="modal-header">
+<h2 id="usage-modal-title">用量统计</h2>
+<button type="button" class="btn btn-small modal-close" id="usage-modal-close" aria-label="关闭">×</button>
+</div>
+<div class="modal-body">
+<div id="usage-stats" style="margin-bottom:16px"></div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn btn-small" id="usage-modal-dismiss">关闭</button>
 </div>
 </div>
 </div>

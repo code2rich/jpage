@@ -64,9 +64,11 @@ lib/                      # 共享层
   zip.js                  # ZIP 上传校验/解压/分类
   dispatch.js             # MCP 进程内请求分发器
   crypto.js               # API Token 明文 AES-256-GCM 加密
+  usage.js                # 用户存储空间维护（增删改重算）
   middleware/
     auth.js               # requireAuth / loadSession / requireAdmin
     files.js              # loadFileWithPrivacy / checkFileOwnership
+    usage.js              # /api 请求用量采集（API 调用计数 + 来源）
 
 routes/                   # 按域拆分的 Express Router
   auth.js                 # /api/auth/*
@@ -243,7 +245,8 @@ CI（`.github/workflows/ci.yml`）在 Node 20/22 矩阵上执行 `npm run lint`�
 - `_migrations(id, name UNIQUE, applied_at)`
 - `files(id, original_name, stored_name, file_type, size, created_at, updated_at, is_public, uploaded_by, share_key, category_id, is_bundle, entry_path, view_count, template_id, share_expires_at, share_password_hash, upload_source, source_asset_id, created_from)`
 - `file_versions(id, file_id, version, stored_name, size, created_at, uploaded_by, upload_source, performed_by)`
-- `users(id, username UNIQUE, email, email_verified, password_hash, role, created_at)`（email 有 `WHERE email IS NOT NULL` 唯一索引）
+- `users(id, username UNIQUE, email, email_verified, password_hash, role, created_at, total_storage_bytes, api_calls_count, storage_quota_bytes)`（email 有 `WHERE email IS NOT NULL` 唯一索引）
+- `api_calls(id, user_id, source, action, method, path, status, created_at)`
 - `tokens(id, user_id, name, token_hash UNIQUE, token_prefix, token_enc, last_used_at, created_at)`
 - `tags(id, name UNIQUE, created_at)`
 - `file_tags(file_id, tag_id)`
@@ -264,6 +267,7 @@ CI（`.github/workflows/ci.yml`）在 Node 20/22 矩阵上执行 `npm run lint`�
 
 - **鉴权**：`/api/auth/me`、`/api/auth/login`、`/api/auth/register`、`/api/auth/logout`、`/api/auth/change-password`、`/api/auth/profile`、`/api/auth/verify-email`、`/api/auth/resend-verification`、`/api/auth/send-register-code`、`/api/auth/smtp-status`、`/api/auth/registration-status`
 - **用户管理（admin）**：`/api/users`
+- **个人用量**：`/api/users/me/usage`
 - **API Token**：`/api/tokens`、`/api/tokens/:id/reveal`
 - **文件管理**：`/api/files`、`/api/files/search`、`/api/files/upload`、`/api/files/upload-json`、`/api/files/upload-zip-base64`、`/api/files/batch`、`/api/files/:id`、`/api/files/:id/content`、`/api/files/:id/render`、`/api/files/:id/download`、`/api/files/:id/asset/*`、`/api/files/:id/overwrite`、`/api/files/:id/overwrite-json`、`/api/files/:id/stats`
 - **版本历史**：`/api/files/:id/versions`、versions content/render/restore/delete
@@ -342,7 +346,7 @@ CLI 与 MCP 共用同一套 REST API，是对等的两个客户端入口。
 - `_migrations(name UNIQUE)` 记录已应用的 migration。
 - `migrations/` 下文件按文件名排序执行；每个文件导出 `{ name, async up(db, { dbRun, dbGet, dbAll }) }`。
 - **新增 migration 规则**：
-  1. 命名格式 `{序号}_{描述}.js`，序号接续当前最大值（当前已到 021）。
+  1. 命名格式 `{序号}_{描述}.js`，序号接续当前最大值（当前已到 022）。
   2. 新建表用 `CREATE TABLE IF NOT EXISTS`。
   3. 新增列必须幂等：先 `PRAGMA table_info` 检查是否存在，再 `ALTER TABLE ADD COLUMN`。
   4. SQLite `ALTER TABLE ADD COLUMN` 不支持非恒定默认值；需要默认值时先加列（无默认或恒定默认），再 `UPDATE` 回填。
