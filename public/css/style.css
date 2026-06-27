@@ -3154,6 +3154,23 @@ html:not(.light) {
 }
 
 /* ---------- 分享设置弹窗 ---------- */
+.modal-header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-header-title svg {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.modal-header-title h2 {
+  font-size: 16px;
+  margin: 0;
+}
+
+/* 状态徽标 */
 .share-status {
   display: flex;
   flex-wrap: wrap;
@@ -3161,7 +3178,6 @@ html:not(.light) {
   margin-bottom: 16px;
 }
 
-/* 密码保护 / 过期时间徽标 */
 .file-badge-share-lock {
   background: rgba(217, 119, 6, 0.12);
   color: #b45309;
@@ -3177,61 +3193,161 @@ html:not(.light) {
   .file-badge-share-expire { background: rgba(129, 140, 248, 0.18); color: #a5b4fc; }
 }
 
+/* 链接卡片 */
+.share-link-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 18px;
+}
+
+.share-link-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.share-link-card-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 /* 链接行：只读输入框 + 复制按钮 */
 .share-link-row {
   display: flex;
   gap: 8px;
-  margin-bottom: 18px;
 }
 
 .share-link-row input {
   flex: 1;
   min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
 }
 
-/* 分组区块：标签 + 输入 + 提示 + 操作按钮 */
+.btn-share-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.btn-share-copy svg {
+  flex-shrink: 0;
+}
+
+/* 设置区块容器 */
+.share-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 单个设置区块 */
 .share-section {
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  transition: border-color 0.15s;
 }
 
-.share-label {
-  display: block;
+.share-section:hover {
+  border-color: var(--primary-soft);
+}
+
+.share-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.share-section-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary-soft);
+  border-radius: 8px;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.share-section-title {
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
-  margin-bottom: 6px;
 }
 
-.share-section input[type="text"],
-.share-section input[type="password"],
-.share-section input[type="datetime-local"] {
+.share-section-body {
+  margin-bottom: 12px;
+}
+
+.share-section-body input[type="text"],
+.share-section-body input[type="password"],
+.share-section-body input[type="datetime-local"] {
   width: 100%;
   box-sizing: border-box;
-  margin-bottom: 4px;
+}
+
+.share-input-group {
+  display: flex;
+  gap: 8px;
+}
+
+.share-input-group input {
+  flex: 1;
+  min-width: 0;
 }
 
 .share-hint {
   font-size: 12px;
   color: var(--text-secondary);
-  margin-bottom: 10px;
+  margin-top: 6px;
 }
 
-.share-btn-row {
+.share-section-footer {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
 }
 
-/* 弱化危险按钮：清除密码 / 重新生成等次级破坏性操作 */
+/* 幽灵按钮 */
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+}
+
+.btn-ghost:hover {
+  color: var(--text);
+  background: var(--primary-soft);
+  border-color: var(--border);
+}
+
+/* 弱化危险按钮 */
 .btn-danger-soft {
   background: transparent;
   color: var(--danger);
-  border: 1px solid var(--danger);
+  border: 1px solid rgba(248, 113, 113, 0.3);
 }
 
 .btn-danger-soft:hover {
-  background: rgba(220, 38, 38, 0.08);
+  background: rgba(248, 113, 113, 0.08);
+  border-color: var(--danger);
+}
+
+html:not(.light) .btn-danger-soft {
+  border-color: rgba(248, 113, 113, 0.25);
 }
 
 
