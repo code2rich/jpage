@@ -25,7 +25,7 @@ const { reloadCategoryNameCache } = require('./lib/categories');
 const { backfillFtsIndex } = require('./lib/fts');
 const { scheduleViewCountFlush, flushViewCounts, recordVisit } = require('./lib/view-counts');
 const { setAdminUserId } = require('./lib/auth-state');
-const { renderFile } = require('./lib/render');
+const { renderFile, renderTemplateContent } = require('./lib/render');
 const { initMailer } = require('./mailer');
 const { mountMcpServer, closeMcpTransports } = require('./mcp-server');
 const logger = require('./logger');
@@ -279,7 +279,7 @@ app.post('/s/:key', shareKeyLimiter, async (req, res) => {
 
 // --- 模板公开短链 /t/:key ---
 // 与 /s/:key（文件短链）并列。匿名可访问，仅渲染 approved+visible 模板。
-// HTML 模板直接输出内容；Markdown 模板用 <pre> 输出原文（与市场卡片预览一致）。
+// Markdown 模板使用与文件渲染一致的 marked + 默认模板；HTML 注入 charset 后下发。
 const TEMPLATE_VISIBLE_COND = "ct.status = 'approved' AND ct.visibility = 'visible' AND COALESCE(c.is_enabled, 0) = 1";
 app.get('/t/:key', async (req, res) => {
   try {
@@ -293,12 +293,7 @@ app.get('/t/:key', async (req, res) => {
     if (!t) {
       return res.status(404).send('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:sans-serif;text-align:center;padding:4em"><h1>404</h1><p>模板不存在或已下架</p><a href="/">返回首页</a></body></html>');
     }
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    if (t.file_type === 'markdown') {
-      const escaped = String(t.content).replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
-      return res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${t.title}</title></head><body><pre style="padding:24px;font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word;margin:0">${escaped}</pre></body></html>`);
-    }
-    res.send(t.content);
+    return await renderTemplateContent(res, t);
   } catch (e) {
     logger.error({ type: 'app', action: 'template_shortlink.get', error: e.message });
     res.status(500).json({ error: '渲染失败' });
