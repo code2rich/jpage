@@ -191,7 +191,10 @@ async function loadSideCategories(container, go) {
 // 市场首页
 // ============================================================
 
-const homeState = { category: '', keyword: '', sort: '', page: 1 };
+const homeState = { category: '', keyword: '', sort: '', fileType: '', page: 1 };
+let currentHomeRequest = null;
+let homeScrollObserver = null;
+let marketShortcutBound = false;
 
 function saveHomeState() {
   try { sessionStorage.setItem('marketHomeState', JSON.stringify(homeState)); } catch (_) {}
@@ -203,8 +206,27 @@ function restoreHomeState() {
     if (saved.category !== undefined) homeState.category = saved.category;
     if (saved.keyword !== undefined) homeState.keyword = saved.keyword;
     if (saved.sort !== undefined) homeState.sort = saved.sort;
+    if (saved.fileType !== undefined) homeState.fileType = saved.fileType;
     if (saved.page !== undefined) homeState.page = saved.page;
   } catch (_) {}
+}
+
+function hasActiveFilters() {
+  return !!(homeState.keyword || homeState.category || homeState.sort || homeState.fileType);
+}
+
+function renderSkeletonCards(n) {
+  let html = '<div class="ct-skeleton-grid">';
+  for (let i = 0; i < n; i++) {
+    html += '<div class="ct-skeleton-card">'
+      + '<div class="ct-skeleton-thumb"></div>'
+      + '<div class="ct-skeleton-lines">'
+      + '<div class="ct-skeleton-line w70"></div>'
+      + '<div class="ct-skeleton-line w40"></div>'
+      + '</div></div>';
+  }
+  html += '</div>';
+  return html;
 }
 
 function renderHome(container, navigate) {
@@ -212,95 +234,236 @@ function renderHome(container, navigate) {
   const go = navigate || ((path) => { location.hash = path; });
   const body = renderMarketShell(container, { active: 'home', navigate });
   body.innerHTML = `
-    <header class="mw-topbar">
+    <div class="mw-filter-bar">
       <div class="mw-search-wrap">
         <span aria-hidden="true">⌕</span>
-        <input type="search" id="market-search" class="search-input" placeholder="搜索页面、工作流、主题、创作者" value="${escapeHtml(homeState.keyword)}">
+        <input type="search" id="market-search" autocomplete="off" placeholder="搜索页面、工作流、主题、创作者" value="${escapeHtml(homeState.keyword)}">
+        <button type="button" id="market-search-clear" class="mw-search-clear hidden" aria-label="清空搜索">×</button>
       </div>
       <div class="mw-top-actions">
-        <select id="market-sort" class="market-select">
-          <option value="">热门优先</option>
-          <option value="created_at" ${homeState.sort === 'created_at' ? 'selected' : ''}>最新发布</option>
-          <option value="featured" ${homeState.sort === 'featured' ? 'selected' : ''}>精选优先</option>
-        </select>
+        <div class="mw-segmented-tabs" id="market-sort-tabs" role="tablist" aria-label="排序">
+          <button type="button" data-sort="" class="${homeState.sort === '' ? 'active' : ''}">热门优先</button>
+          <button type="button" data-sort="created_at" class="${homeState.sort === 'created_at' ? 'active' : ''}">最新发布</button>
+          <button type="button" data-sort="featured" class="${homeState.sort === 'featured' ? 'active' : ''}">精选优先</button>
+        </div>
+        <div class="mw-type-chips" id="market-type-chips" role="group" aria-label="文件类型">
+          <button type="button" data-type="" class="${homeState.fileType === '' ? 'active' : ''}">全部</button>
+          <button type="button" data-type="html" class="${homeState.fileType === 'html' ? 'active' : ''}">HTML</button>
+          <button type="button" data-type="markdown" class="${homeState.fileType === 'markdown' ? 'active' : ''}">MD</button>
+        </div>
+        <button type="button" id="market-clear-filters" class="btn btn-small mw-clear-filters hidden">清除全部</button>
         <a href="#/market/my" class="btn btn-small">我的上架</a>
       </div>
-    </header>
-    <div class="mw-category-row" id="market-category-chips"></div>
+    </div>
+    <div class="mw-category-scroll" id="market-category-scroll">
+      <button type="button" class="mw-cat-scroll-btn left hidden" id="market-cat-left" aria-label="向左滚动">‹</button>
+      <div class="mw-category-row" id="market-category-chips"></div>
+      <button type="button" class="mw-cat-scroll-btn right hidden" id="market-cat-right" aria-label="向右滚动">›</button>
+    </div>
     <section class="mw-feed-head">
       <div>
         <h1>推荐作品</h1>
         <p>浏览、筛选和创建可复用页面资产。</p>
       </div>
-      <span id="mw-result-count">-</span>
+      <span id="mw-result-count" aria-live="polite" aria-atomic="true">-</span>
     </section>
     <div id="market-grid" class="ct-grid mw-grid"></div>
+    <div class="mw-load-more-wrap" id="market-load-more"></div>
+    <button type="button" class="mw-back-to-top hidden" id="market-back-to-top" aria-label="回到顶部">↑</button>
   `;
 
-  // 搜索（防抖）
   const searchInput = body.querySelector('#market-search');
+  const searchClear = body.querySelector('#market-search-clear');
   let searchTimer;
-  searchInput.oninput = () => {
+  function updateSearchClear() {
+    searchClear.classList.toggle('hidden', !searchInput.value);
+  }
+  updateSearchClear();
+
+  searchInput.addEventListener('input', () => {
+    updateSearchClear();
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => {
       homeState.keyword = searchInput.value.trim();
-      homeState.page = 1;
       saveHomeState();
-      loadHomeList(body, go);
+      loadHomeList(body, go, { reset: true });
     }, 300);
-  };
+  });
 
-  // 排序
-  body.querySelector('#market-sort').onchange = (e) => {
-    homeState.sort = e.target.value;
-    homeState.page = 1;
+  searchClear.addEventListener('click', () => {
+    searchInput.value = '';
+    updateSearchClear();
+    searchInput.focus();
+    homeState.keyword = '';
     saveHomeState();
-    loadHomeList(body, go);
-  };
+    loadHomeList(body, go, { reset: true });
+  });
 
-  // 分类条（异步加载）
-  loadCategoryChips(body, go).then(() => loadHomeList(body, go));
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (searchInput.value) {
+        searchInput.value = '';
+        updateSearchClear();
+        homeState.keyword = '';
+        saveHomeState();
+        loadHomeList(body, go, { reset: true });
+      }
+    }
+  });
+
+  body.querySelectorAll('#market-sort-tabs button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sort = btn.dataset.sort;
+      homeState.sort = sort;
+      saveHomeState();
+      body.querySelectorAll('#market-sort-tabs button').forEach(b => b.classList.toggle('active', b.dataset.sort === sort));
+      loadHomeList(body, go, { reset: true });
+    });
+  });
+
+  body.querySelectorAll('#market-type-chips button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const type = btn.dataset.type;
+      homeState.fileType = type;
+      saveHomeState();
+      body.querySelectorAll('#market-type-chips button').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+      loadHomeList(body, go, { reset: true });
+    });
+  });
+
+  body.querySelector('#market-clear-filters').addEventListener('click', () => {
+    clearAllFilters(body, go);
+  });
+
+  const backToTop = body.querySelector('#market-back-to-top');
+  function onScroll() {
+    const y = window.scrollY || window.pageYOffset;
+    backToTop.classList.toggle('hidden', y < 600);
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  backToTop.addEventListener('click', () => { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  onScroll();
+
+  if (!marketShortcutBound) {
+    marketShortcutBound = true;
+    document.addEventListener('keydown', (e) => {
+      if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+        const input = document.getElementById('market-search');
+        if (!input) return;
+        e.preventDefault();
+        input.focus();
+      }
+    });
+  }
+
+  loadCategoryChips(body, go).then(() => loadHomeList(body, go, { reset: true }));
+}
+
+function clearAllFilters(body, navigate) {
+  homeState.keyword = '';
+  homeState.category = '';
+  homeState.sort = '';
+  homeState.fileType = '';
+  homeState.page = 1;
+  saveHomeState();
+  const searchInput = body.querySelector('#market-search');
+  if (searchInput) {
+    searchInput.value = '';
+    const clear = body.querySelector('#market-search-clear');
+    if (clear) clear.classList.add('hidden');
+  }
+  body.querySelectorAll('#market-sort-tabs button').forEach(b => b.classList.toggle('active', b.dataset.sort === ''));
+  body.querySelectorAll('#market-type-chips button').forEach(b => b.classList.toggle('active', b.dataset.type === ''));
+  updateCategoryChipsActive(body);
+  loadHomeList(body, navigate, { reset: true });
+}
+
+function updateCategoryChipsActive(body) {
+  const chipsEl = body.querySelector('#market-category-chips');
+  if (chipsEl) {
+    chipsEl.querySelectorAll('.filter-chip').forEach(c => c.classList.toggle('active', c.dataset.category === homeState.category));
+  }
+  const side = document.querySelector('#mw-side-cats');
+  if (side) {
+    side.querySelectorAll('[data-side-category]').forEach(b => b.classList.toggle('active', b.dataset.sideCategory === homeState.category));
+  }
+}
+
+function setupCategoryScroll(body) {
+  const wrap = body.querySelector('#market-category-scroll');
+  const row = body.querySelector('#market-category-chips');
+  const leftBtn = body.querySelector('#market-cat-left');
+  const rightBtn = body.querySelector('#market-cat-right');
+  if (!wrap || !row || !leftBtn || !rightBtn || row.dataset.scrollBound) return;
+  row.dataset.scrollBound = '1';
+  function updateShadows() {
+    const max = row.scrollWidth - row.clientWidth;
+    wrap.classList.toggle('show-left', row.scrollLeft > 0);
+    wrap.classList.toggle('show-right', row.scrollLeft < max - 1);
+    leftBtn.classList.toggle('hidden', row.scrollLeft <= 0);
+    rightBtn.classList.toggle('hidden', row.scrollLeft >= max - 1);
+  }
+  row.addEventListener('scroll', updateShadows, { passive: true });
+  leftBtn.addEventListener('click', () => { row.scrollBy({ left: -200, behavior: 'smooth' }); });
+  rightBtn.addEventListener('click', () => { row.scrollBy({ left: 200, behavior: 'smooth' }); });
+  window.addEventListener('resize', updateShadows, { passive: true });
+  updateShadows();
 }
 
 async function loadCategoryChips(body, navigate) {
   const chipsEl = body.querySelector('#market-category-chips');
+  if (!chipsEl) return;
   try {
     const data = await api('/api/content-templates/categories');
     const cats = data.categories || [];
-    const all = `<button class="filter-chip ${!homeState.category ? 'active' : ''}" data-category="">推荐</button>`;
+    const all = `<button type="button" class="filter-chip ${!homeState.category ? 'active' : ''}" data-category="">推荐</button>`;
     const items = cats.map(c =>
-      `<button class="filter-chip ${homeState.category === c.slug ? 'active' : ''}" data-category="${escapeHtml(c.slug)}">${escapeHtml(c.name)}</button>`
+      `<button type="button" class="filter-chip ${homeState.category === c.slug ? 'active' : ''}" data-category="${escapeHtml(c.slug)}">${escapeHtml(c.name)}</button>`
     ).join('');
     chipsEl.innerHTML = all + items;
     chipsEl.querySelectorAll('.filter-chip').forEach(chip => {
-      chip.onclick = () => {
+      chip.addEventListener('click', () => {
         homeState.category = chip.dataset.category;
-        homeState.page = 1;
-        chipsEl.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
         saveHomeState();
-        loadHomeList(body, navigate);
-      };
+        updateCategoryChipsActive(body);
+        loadHomeList(body, navigate, { reset: true });
+      });
     });
+    setupCategoryScroll(body);
   } catch {
     chipsEl.innerHTML = '';
   }
 }
 
-async function loadHomeList(body, navigate) {
+async function loadHomeList(body, navigate, { reset = false } = {}) {
   const grid = body.querySelector('#market-grid');
+  const loadMoreWrap = body.querySelector('#market-load-more');
   if (!grid) return;
-  resetThumbCache();
 
-  // 首次加载或列表为空时显示全屏 loading；有内容时叠加局部 loading
-  const hasContent = grid.querySelectorAll('.ct-card').length > 0;
+  if (currentHomeRequest) {
+    currentHomeRequest.abort();
+    currentHomeRequest = null;
+  }
+  const controller = new AbortController();
+  currentHomeRequest = controller;
+
+  if (reset) {
+    homeState.page = 1;
+    resetThumbCache();
+    grid.innerHTML = renderSkeletonCards(12);
+    if (loadMoreWrap) loadMoreWrap.innerHTML = '';
+    updateClearFilters(body);
+  }
+
+  const hasContent = !reset && grid.querySelectorAll('.ct-card').length > 0;
   let overlay = null;
   if (hasContent) {
     grid.style.position = 'relative';
     overlay = renderLoading(grid, { overlay: true });
     grid.appendChild(overlay);
-  } else {
-    renderLoading(grid);
+  } else if (!reset) {
+    grid.innerHTML = renderSkeletonCards(12);
   }
 
   const params = new URLSearchParams();
@@ -309,27 +472,186 @@ async function loadHomeList(body, navigate) {
   if (homeState.category) params.set('category', homeState.category);
   if (homeState.keyword) params.set('keyword', homeState.keyword);
   if (homeState.sort) params.set('sort', homeState.sort);
+  if (homeState.fileType) params.set('fileType', homeState.fileType);
 
   try {
-    const data = await api('/api/content-templates/market?' + params.toString());
+    const data = await api('/api/content-templates/market?' + params.toString(), { signal: controller.signal });
+    if (controller.signal.aborted) return;
+    currentHomeRequest = null;
     const countEl = body.querySelector('#mw-result-count');
     if (countEl && data.pagination) countEl.textContent = `${data.pagination.total || 0} 个结果`;
-    renderHomeGrid(grid, data.templates || [], data.pagination, navigate);
+    renderHomeGrid(grid, data.templates || [], data.pagination, navigate, { append: !reset });
+    updateClearFilters(body);
   } catch (e) {
-    const title = homeState.keyword
-      ? `搜索「${homeState.keyword}」失败`
-      : (homeState.category ? '分类加载失败' : '加载失败');
-    renderError(grid, {
-      message: e.message || title,
-      retry: () => loadHomeList(body, navigate),
-    });
+    if (e.name === 'AbortError') return;
+    currentHomeRequest = null;
+    if (overlay) overlay.remove();
+    if (reset) {
+      const title = homeState.keyword
+        ? `搜索「${homeState.keyword}」失败`
+        : (homeState.category ? '分类加载失败' : '加载失败');
+      renderError(grid, {
+        message: e.message || title,
+        retry: () => loadHomeList(body, navigate, { reset: true }),
+      });
+    } else {
+      toast(e.message || '加载失败', 'error');
+      renderLoadMore(loadMoreWrap, navigate, body, true);
+    }
   } finally {
     if (overlay) overlay.remove();
   }
 }
 
-function renderHomeGrid(grid, templates, pg, navigate) {
-  if (!templates.length) {
+function createTemplateCard(t) {
+  const typeClass = t.file_type === 'markdown' ? 'ct-badge-md' : 'ct-badge-html';
+  const typeLabel = t.file_type === 'markdown' ? 'MD' : 'HTML';
+  const cat = t.category_name ? `<span class="ct-badge ct-badge-scene">${escapeHtml(t.category_name)}</span>` : '';
+  const featured = t.featured ? '<span class="ct-badge ct-badge-featured">精选</span>' : '';
+  const isLoggedIn = !!state.currentUser;
+  return `<div class="ct-card mw-card" data-id="${t.id}" data-file-type="${t.file_type}" data-title="${escapeHtml(t.title)}" tabindex="0">
+    <div class="ct-card-thumb">
+      <div class="ct-card-thumb-wrap"><iframe class="ct-thumb-iframe" sandbox="allow-scripts"></iframe></div>
+      <div class="ct-card-thumb-loading"></div>
+      <div class="mw-card-top-actions">
+        <button type="button" class="mw-icon-btn" data-act="copy" data-tip="复制链接" aria-label="复制链接" ${!isLoggedIn ? 'hidden' : ''}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </button>
+      </div>
+      <div class="mw-card-actions">
+        <button type="button" data-act="preview">查看详情</button>
+        <button type="button" data-act="use">使用模板</button>
+      </div>
+    </div>
+    <div class="mw-card-meta-row">${cat}${featured}<span class="ct-badge ${typeClass}">${typeLabel}</span></div>
+    <div class="ct-card-header">
+      <span class="ct-card-title">${escapeHtml(t.title)}</span>
+    </div>
+    <p class="ct-card-desc">${escapeHtml(t.description || '').slice(0, 100)}</p>
+    <div class="mw-card-author">${escapeHtml(t.uploader_name || '匿名创作者')}</div>
+    <div class="ct-card-footer">
+      <span class="ct-use-count">${t.instantiation_count || 0} 次使用</span>
+    </div>
+  </div>`;
+}
+
+function setupCardInteractions(grid, navigate) {
+  grid.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-act]');
+    const card = e.target.closest('.ct-card');
+    if (btn && card) {
+      const id = card.dataset.id;
+      const title = card.dataset.title || '该模板';
+      const act = btn.dataset.act;
+      e.stopPropagation();
+      if (act === 'use') {
+        if (!state.currentUser) {
+          toast('请先登录后使用模板', 'error');
+          return;
+        }
+        btn.classList.add('is-loading');
+        try {
+          const data = await api(`/api/content-templates/${id}/instantiate`, { method: 'POST' });
+          toast(`已基于《${title}》创建文件`);
+          navigate(`/view/${data.fileId}`);
+        } catch (err) {
+          toast(err.message || `使用《${title}》失败`, 'error');
+        } finally {
+          btn.classList.remove('is-loading');
+        }
+        return;
+      }
+      if (act === 'copy') {
+        if (!state.currentUser) {
+          toast('请先登录后复制链接', 'error');
+          return;
+        }
+        try {
+          const data = await api(`/api/content-templates/${id}/share`, { method: 'POST' });
+          const url = `${location.origin}/t/${data.key}`;
+          const ok = await copyToClipboard(url);
+          toast(ok ? '已复制公开链接' : '复制失败', ok ? 'success' : 'error');
+        } catch (err) {
+          toast(err.message || '复制链接失败', 'error');
+        }
+        return;
+      }
+      if (act === 'preview') {
+        try { sessionStorage.setItem('marketScrollY', String(window.scrollY)); } catch (_) {}
+        navigate(`/market/${id}`);
+        return;
+      }
+    }
+    if (card) {
+      e.stopPropagation();
+      try { sessionStorage.setItem('marketScrollY', String(window.scrollY)); } catch (_) {}
+      navigate(`/market/${card.dataset.id}`);
+    }
+  });
+
+  grid.querySelectorAll('.ct-card').forEach(card => {
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        try { sessionStorage.setItem('marketScrollY', String(window.scrollY)); } catch (_) {}
+        navigate(`/market/${card.dataset.id}`);
+      }
+    });
+  });
+}
+
+function renderLoadMore(wrap, navigate, body, error = false, pg = null) {
+  if (!wrap) return;
+  if (error) {
+    wrap.innerHTML = '<button type="button" class="mw-load-more-btn" id="market-retry">加载失败，点击重试</button>';
+    wrap.querySelector('#market-retry').addEventListener('click', () => loadHomeList(body, navigate, { reset: false }));
+    return;
+  }
+  if (!pg || pg.page >= pg.totalPages) {
+    if (pg && pg.totalPages > 1) {
+      wrap.innerHTML = '<div class="mw-end-msg">没有更多了</div>';
+    } else {
+      wrap.innerHTML = '';
+    }
+    const sentinel = body?.querySelector('#market-scroll-sentinel');
+    if (sentinel && homeScrollObserver) homeScrollObserver.unobserve(sentinel);
+    return;
+  }
+  wrap.innerHTML = '<button type="button" class="mw-load-more-btn" id="market-load-more-btn">加载更多</button>';
+  const btn = wrap.querySelector('#market-load-more-btn');
+  btn.addEventListener('click', () => {
+    homeState.page++;
+    saveHomeState();
+    loadHomeList(body, navigate, { reset: false });
+  });
+  setupInfiniteScroll(body);
+}
+
+function setupInfiniteScroll(body) {
+  const sentinel = body?.querySelector('#market-scroll-sentinel');
+  if (!sentinel) return;
+  if (!homeScrollObserver) {
+    homeScrollObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const btn = document.getElementById('market-load-more-btn');
+        if (btn && !btn.disabled) btn.click();
+      });
+    }, { rootMargin: '400px' });
+  }
+  homeScrollObserver.observe(sentinel);
+}
+
+function updateClearFilters(body) {
+  const btn = body.querySelector('#market-clear-filters');
+  if (btn) btn.classList.toggle('hidden', !hasActiveFilters());
+}
+
+function renderHomeGrid(grid, templates, pg, navigate, { append = false } = {}) {
+  const body = grid.closest('#market-body');
+  const loadMoreWrap = body?.querySelector('#market-load-more');
+
+  if (!templates.length && !append) {
     let title = '当前没有已审核公开作品';
     let desc = '你可以回到首页文件列表，在文件的「⋯」菜单中选择「上架到市场」，审核通过后会展示在这里。';
     if (homeState.keyword) {
@@ -341,89 +663,44 @@ function renderHomeGrid(grid, templates, pg, navigate) {
     } else if (homeState.sort === 'featured') {
       title = '暂无精选作品';
       desc = '管理员标记精选后，这里会展示优质模板。';
+    } else if (homeState.fileType) {
+      title = '该类型下暂无作品';
+      desc = '看看其他类型，或成为第一个上传该类型作品的创作者。';
     }
-    const actionHtml = homeState.keyword || homeState.category || homeState.sort
+    const actionHtml = hasActiveFilters()
       ? '<div class="ct-empty-action"><button class="btn btn-small" id="ct-clear-filter">清除筛选</button></div>'
       : '';
     renderEmpty(grid, { title, desc, actionHtml });
     grid.querySelector('#ct-clear-filter')?.addEventListener('click', () => {
-      homeState.keyword = '';
-      homeState.category = '';
-      homeState.sort = '';
-      homeState.page = 1;
-      saveHomeState();
-      const searchInput = grid.closest('#market-body')?.querySelector('#market-search');
-      if (searchInput) searchInput.value = '';
-      loadHomeList(grid.closest('#market-body'), navigate);
+      clearAllFilters(body, navigate);
     });
+    if (loadMoreWrap) loadMoreWrap.innerHTML = '';
     return;
   }
-  grid.innerHTML = templates.map(t => {
-    const typeClass = t.file_type === 'markdown' ? 'ct-badge-md' : 'ct-badge-html';
-    const typeLabel = t.file_type === 'markdown' ? 'MD' : 'HTML';
-    const cat = t.category_name ? `<span class="ct-badge ct-badge-scene">${escapeHtml(t.category_name)}</span>` : '';
-    const featured = t.featured ? '<span class="ct-badge ct-badge-featured">精选</span>' : '';
-    return `<div class="ct-card mw-card" data-id="${t.id}" data-file-type="${t.file_type}" data-title="${escapeHtml(t.title)}">
-      <div class="ct-card-thumb">
-        <div class="ct-card-thumb-wrap"><iframe class="ct-thumb-iframe" sandbox="allow-scripts"></iframe></div>
-        <div class="ct-card-thumb-loading"></div>
-        <div class="mw-card-actions">
-          <button type="button" data-act="preview">查看详情</button>
-          <button type="button" data-act="use">使用模板</button>
-        </div>
-      </div>
-      <div class="mw-card-meta-row">${cat}${featured}<span class="ct-badge ${typeClass}">${typeLabel}</span></div>
-      <div class="ct-card-header">
-        <span class="ct-card-title">${escapeHtml(t.title)}</span>
-      </div>
-      <p class="ct-card-desc">${escapeHtml(t.description || '').slice(0, 100)}</p>
-      <div class="mw-card-author">${escapeHtml(t.uploader_name || '匿名创作者')}</div>
-      <div class="ct-card-footer">
-        <span class="ct-use-count">${t.instantiation_count || 0} 次使用</span>
-      </div>
-    </div>`;
-  }).join('');
 
-  // 分页
-  if (pg && pg.totalPages > 1) {
-    grid.innerHTML += `<div class="ct-pagination">
-      <button class="btn btn-small" id="ct-prev" ${pg.page <= 1 ? 'disabled' : ''}>上一页</button>
-      <span class="ct-page-info">${pg.page} / ${pg.totalPages}</span>
-      <button class="btn btn-small" id="ct-next" ${pg.page >= pg.totalPages ? 'disabled' : ''}>下一页</button>
-    </div>`;
-    grid.querySelector('#ct-prev')?.addEventListener('click', () => { homeState.page = Math.max(1, homeState.page - 1); saveHomeState(); loadHomeList(grid.closest('#market-body'), navigate); });
-    grid.querySelector('#ct-next')?.addEventListener('click', () => { homeState.page = Math.min(pg.totalPages, homeState.page + 1); saveHomeState(); loadHomeList(grid.closest('#market-body'), navigate); });
+  const html = templates.map(t => createTemplateCard(t)).join('');
+  if (append) {
+    const sentinel = grid.querySelector('#market-scroll-sentinel');
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    while (temp.firstChild) {
+      grid.insertBefore(temp.firstChild, sentinel);
+    }
+  } else {
+    grid.innerHTML = html + '<div id="market-scroll-sentinel" class="mw-end-msg"></div>';
   }
 
-  // 卡片点击 → 详情
   const obs = ensureThumbObserver();
   grid.querySelectorAll('.ct-card').forEach(card => {
-    card.onclick = async (e) => {
-      const act = e.target.closest('[data-act]')?.dataset.act;
-      const id = card.dataset.id;
-      if (act === 'use') {
-        e.stopPropagation();
-        const title = card.dataset.title || '该模板';
-        try {
-          const data = await api(`/api/content-templates/${id}/instantiate`, { method: 'POST' });
-          toast(`已基于《${title}》创建文件，正在打开…`);
-          navigate(`/view/${data.fileId}`);
-        } catch (err) {
-          toast(err.message || `使用《${title}》失败，请先登录`, 'error');
-        }
-        return;
-      }
-      if (act === 'preview' || !act) {
-        e.stopPropagation();
-        try { sessionStorage.setItem('marketScrollY', String(window.scrollY)); } catch (_) {}
-        navigate(`/market/${id}`);
-        return;
-      }
-    };
-    obs.observe(card);
+    if (!card.dataset.thumbBound) {
+      card.dataset.thumbBound = '1';
+      obs.observe(card);
+    }
   });
 
-  // 从详情页返回时恢复滚动位置
+  setupCardInteractions(grid, navigate);
+  renderLoadMore(loadMoreWrap, navigate, body, false, pg);
+
   const savedY = (() => { try { return sessionStorage.getItem('marketScrollY'); } catch { return null; } })();
   if (savedY) {
     try { sessionStorage.removeItem('marketScrollY'); } catch (_) {}
