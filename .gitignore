@@ -37,6 +37,10 @@ Thumbs.db
 .env
 .env.local
 
+# MCP
+.mcp.json
+mcp-servers/
+
 # Articles
 article/
 
