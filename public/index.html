@@ -33,135 +33,186 @@
           <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
           <svg class="icon-sun" viewBox="0 0 24 24"><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41M12 6a6 6 0 100 12 6 6 0 000-12z"/></svg>
         </button>
-        <a class="btn btn-primary" href="#/login">登录</a>
+        <a class="btn btn-ghost btn-sm" href="#/login">登录</a>
       </div>
     </div>
   </nav>
 
-  <!-- Hero 区域 -->
+  <!-- Hero -->
   <section class="landing-hero">
-    <p class="landing-hero-eyebrow"><span></span>HTML · Markdown · 即时预览分享</p>
-    <h1 class="landing-hero-title"><em>即页</em> <small>jpage</small></h1>
-    <p class="landing-hero-sub">零 配 置 · 即 写 即 览 即 分 享</p>
-    <p class="landing-hero-slogan">拖入文件，即刻成页。AI 工具直连，一键分享。</p>
-    <div class="landing-hero-actions">
-      <a class="btn btn-primary btn-lg" href="#/login">开始使用</a>
+    <div class="landing-hero-bg" aria-hidden="true">
+      <div class="blob blob-1"></div>
+      <div class="blob blob-2"></div>
+      <div class="blob blob-3"></div>
+      <div class="landing-grid" aria-hidden="true"></div>
     </div>
-    <div class="landing-hero-tags">
-      <span class="landing-tag">Express</span>
-      <span class="landing-tag">SQLite</span>
-      <span class="landing-tag">Vanilla JS</span>
-      <span class="landing-tag">MCP</span>
-      <span class="landing-tag">Docker</span>
+    <div class="landing-hero-content reveal">
+      <p class="landing-hero-eyebrow"><span class="badge-dot"></span>HTML · Markdown · ZIP · 即时预览分享</p>
+      <h1 class="landing-hero-title"><em>即页</em> <small>jpage</small></h1>
+      <p class="landing-hero-sub">零配置的内容发布引擎</p>
+      <p class="landing-hero-slogan">拖入文件，即刻成页。AI 工具直连，一键分享。<br>为 AI 时代重新设计的内容预览与分发工作流。</p>
+      <div class="landing-hero-actions">
+        <a class="btn btn-primary btn-lg" href="#/login">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          开始使用
+        </a>
+        <a class="btn btn-ghost btn-lg" id="landing-github-btn" href="https://github.com/code2rich/jpage" target="_blank" rel="noopener noreferrer">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.3-1.7-1.3-1.7-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.78 2.73 1.27 3.4.97.1-.76.41-1.27.74-1.56-2.56-.29-5.26-1.28-5.26-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.7 5.41-5.27 5.69.42.37.8 1.1.8 2.22v3.29c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5z"/></svg>
+          GitHub
+        </a>
+      </div>
+      <div class="landing-hero-tags">
+        <span class="landing-tag">Express</span>
+        <span class="landing-tag">SQLite</span>
+        <span class="landing-tag">Vanilla JS</span>
+        <span class="landing-tag">MCP</span>
+        <span class="landing-tag">Docker</span>
+        <span class="landing-tag">ESM</span>
+      </div>
+    </div>
+    <div class="landing-demo reveal">
+      <div class="landing-demo-window">
+        <div class="landing-demo-header">
+          <div class="landing-demo-dots"><span></span><span></span><span></span></div>
+          <div class="landing-demo-title">index.html</div>
+        </div>
+        <div class="landing-demo-body">
+          <div class="landing-demo-sidebar">
+            <div class="demo-logo">JP</div>
+            <div class="demo-nav-items"><span></span><span></span><span></span></div>
+          </div>
+          <div class="landing-demo-main">
+            <div class="demo-upload">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span>拖入文件，即刻成页</span>
+            </div>
+            <div class="demo-file-list">
+              <div class="demo-file"><span class="demo-file-icon html">HTML</span><span class="demo-file-name">report.html</span><span class="demo-file-meta">2.4 MB · 刚刚</span></div>
+              <div class="demo-file"><span class="demo-file-icon md">MD</span><span class="demo-file-name">README.md</span><span class="demo-file-meta">12 KB · 1 分钟前</span></div>
+              <div class="demo-file"><span class="demo-file-icon zip">ZIP</span><span class="demo-file-name">portfolio.zip</span><span class="demo-file-meta">8.1 MB · 5 分钟前</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
-  <!-- 四次进化 -->
-  <section class="landing-sec" id="versions">
+  <!-- 特性 -->
+  <section class="landing-sec" id="features">
     <div class="landing-sec-inner">
-      <div class="landing-sec-tag">Version History</div>
-      <h2 class="landing-sec-title">五次进化，五个问题的答案</h2>
+      <div class="landing-sec-tag reveal">Features</div>
+      <h2 class="landing-sec-title reveal">不只是预览，是完整的内容发布工作流</h2>
+      <div class="landing-features-grid">
+        <div class="landing-feature-card reveal landing-feature-large">
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg></div>
+          <h3>HTML / Markdown / ZIP 全能渲染</h3>
+          <p>代码高亮、KaTeX 公式、Mermaid 图表完整呈现。ZIP 网站包自动解压并渲染入口页。</p>
+          <div class="feature-tags"><span>180+ 语言</span><span>行内公式</span><span>流程图</span></div>
+        </div>
+        <div class="landing-feature-card reveal">
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
+          <h3>短链即分享</h3>
+          <p>上传即得 /s/:key 短链接。支持别名、过期时间与密码保护。</p>
+        </div>
+        <div class="landing-feature-card reveal">
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></div>
+          <h3>CLI & MCP 双入口</h3>
+          <p>jpage CLI 与 MCP Server 并行，AI 工具与人类用户共用同一套权限与审计。</p>
+        </div>
+        <div class="landing-feature-card reveal">
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></div>
+          <h3>版本与组织</h3>
+          <p>完整版本历史、标签、分类、收藏，让文件从临时分享进化为知识库。</p>
+        </div>
+        <div class="landing-feature-card reveal landing-feature-wide">
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg></div>
+          <h3>内容模板市场</h3>
+          <p>内置 9 大场景模板，支持用户上架与管理员审核。AI 可以学习风格，批量生成一致审美。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 三步流程 -->
+  <section class="landing-sec landing-sec-alt" id="workflow">
+    <div class="landing-sec-inner">
+      <div class="landing-sec-tag reveal">How it works</div>
+      <h2 class="landing-sec-title reveal">三步，从文件到链接</h2>
+      <div class="landing-steps">
+        <div class="landing-step reveal">
+          <div class="step-num">01</div>
+          <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+          <h3>拖入文件</h3>
+          <p>支持 HTML、Markdown、ZIP 拖拽或 CLI multipart 流式上传。</p>
+        </div>
+        <div class="landing-step-divider reveal" aria-hidden="true"></div>
+        <div class="landing-step reveal">
+          <div class="step-num">02</div>
+          <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
+          <h3>即时渲染</h3>
+          <p>自动识别文件类型，Markdown 套用模板，HTML 进入 iframe Sandbox 安全预览。</p>
+        </div>
+        <div class="landing-step-divider reveal" aria-hidden="true"></div>
+        <div class="landing-step reveal">
+          <div class="step-num">03</div>
+          <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></div>
+          <h3>一键分享</h3>
+          <p>复制短链接，或让 AI 通过 MCP 直接读取、更新、管理你的内容。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 数据指标 -->
+  <section class="landing-sec" id="stats">
+    <div class="landing-sec-inner">
+      <div class="landing-stats reveal">
+        <div class="stat"><strong>17+</strong><span>MCP Tools</span></div>
+        <div class="stat"><strong>11</strong><span>CLI 命令</span></div>
+        <div class="stat"><strong>4</strong><span>渲染模板</span></div>
+        <div class="stat"><strong>0</strong><span>配置成本</span></div>
+        <div class="stat"><strong>Docker</strong><span>一行部署</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 版本进化 -->
+  <section class="landing-sec landing-sec-alt" id="versions">
+    <div class="landing-sec-inner">
+      <div class="landing-sec-tag reveal">Version History</div>
+      <h2 class="landing-sec-title reveal">持续进化的产品能力</h2>
       <div class="landing-versions">
-        <div class="ver">
-          <div class="ver-dot"></div>
-          <div class="ver-card">
-            <div class="ver-head">
-              <span class="ver-num">V1.0 / V1.1</span>
-              <span class="ver-date">2026-05-13</span>
-              <span class="ver-title">诞生：从第一行代码到品牌确立</span>
-              <span class="ver-theme">「能不能分享」</span>
-            </div>
-            <p class="ver-desc">AI 生成的 HTML 不再沦为截图或附件。拖拽上传，秒级预览，短链接即分享——即页的第一个版本，只做一件事：让内容被完整地看见。正式命名「即页 jpage」，端口 8858，Docker 一行部署。</p>
-            <div class="ver-highlights">
-              <div class="hl"><span class="hl-icon">📄</span>HTML/Markdown 拖拽上传秒级预览</div>
-              <div class="hl"><span class="hl-icon">🔄</span>渲染/源码双模式切换</div>
-              <div class="hl"><span class="hl-icon">🐳</span>Docker 一行部署，SQLite 零配置</div>
-              <div class="hl"><span class="hl-icon">🏷️</span>重命名、删除、下载</div>
-              <div class="hl"><span class="hl-icon">🎨</span>品牌视觉确立，端口 8858</div>
-            </div>
-          </div>
-        </div>
-        <div class="ver">
-          <div class="ver-dot"></div>
-          <div class="ver-card">
-            <div class="ver-head">
-              <span class="ver-num">V1.2</span>
-              <span class="ver-date">2026-06-07</span>
-              <span class="ver-title">渲染增强 + MCP 协议</span>
-              <span class="ver-theme">「分享得好不好看」</span>
-            </div>
-            <p class="ver-desc">公式、图表、代码完整渲染。同时接入 MCP 协议，Claude Code 直连即页——AI 生成到发布全自动化。Skills 管理、文件隐私控制、API 全面开放，产品能力质的飞跃。</p>
-            <div class="ver-highlights">
-              <div class="hl"><span class="hl-icon">✨</span>highlight.js 代码高亮（180+ 语言）</div>
-              <div class="hl"><span class="hl-icon">📐</span>KaTeX 数学公式（行内 + 块级）</div>
-              <div class="hl"><span class="hl-icon">📊</span>Mermaid 图表（深/浅色主题）</div>
-              <div class="hl"><span class="hl-icon">🔗</span>MCP Server（6 Tools + 2 Resources）</div>
-              <div class="hl"><span class="hl-icon">🔒</span>文件公开/私有切换</div>
-              <div class="hl"><span class="hl-icon">📦</span>Skills 管理 + ZIP 打包</div>
-              <div class="hl"><span class="hl-icon">🔌</span>JSON 直传 + Bearer 认证</div>
-            </div>
-          </div>
-        </div>
-        <div class="ver">
-          <div class="ver-dot"></div>
-          <div class="ver-card">
-            <div class="ver-head">
-              <span class="ver-num">V1.3</span>
-              <span class="ver-date">2026-06-08</span>
-              <span class="ver-title">管理体系：从分享到管理</span>
-              <span class="ver-theme">「分享之后怎么管理」</span>
-            </div>
-            <p class="ver-desc">短链接一键分享、ZIP 网站包上传、完整版本历史、三维文件组织、多用户管理——从「能分享」进化到「好管理」。MCP 工具从 6 个扩展到 15 个，安全全面加固。</p>
-            <div class="ver-highlights">
-              <div class="hl"><span class="hl-icon">🔗</span>短链接 /s/:key 即时分享</div>
-              <div class="hl"><span class="hl-icon">📁</span>ZIP 网站包 + 批量上传</div>
-              <div class="hl"><span class="hl-icon">📋</span>版本历史（备份/恢复/清理）</div>
-              <div class="hl"><span class="hl-icon">🏷️</span>标签 / 收藏 / 分类三维组织</div>
-              <div class="hl"><span class="hl-icon">👥</span>多用户管理 + API Token</div>
-              <div class="hl"><span class="hl-icon">🛡️</span>CSP + iframe Sandbox 加固</div>
-              <div class="hl"><span class="hl-icon">📱</span>UI/UX 全面升级 + 移动端优化</div>
-            </div>
-          </div>
-        </div>
-        <div class="ver">
-          <div class="ver-dot"></div>
-          <div class="ver-card">
-            <div class="ver-head">
-              <span class="ver-num">V1.4</span>
-              <span class="ver-date">2026-06-09</span>
-              <span class="ver-title">风格化：AI 内容的审美革命</span>
-              <span class="ver-theme">「AI 生成的内容怎么有风格」</span>
-            </div>
-            <p class="ver-desc">内容模板市场让 AI 学会风格参考——不是模板套用，是风格学习。4 种 Markdown 渲染模板、全文搜索、链接访问统计。MCP 扩展到 17 个工具。</p>
-            <div class="ver-highlights">
-              <div class="hl"><span class="hl-icon">🏪</span>内容模板市场（9 场景 · 3 内置）</div>
-              <div class="hl"><span class="hl-icon">🎨</span>4 种 Markdown 渲染模板</div>
-              <div class="hl"><span class="hl-icon">🔍</span>FTS5 全文搜索</div>
-              <div class="hl"><span class="hl-icon">📈</span>链接访问统计</div>
-              <div class="hl"><span class="hl-icon">📐</span>app.js → 8 个 ES Modules</div>
-              <div class="hl"><span class="hl-icon">🤖</span>MCP 17 Tools + 模板集成</div>
-            </div>
-          </div>
-        </div>
-        <div class="ver">
+        <div class="ver reveal">
           <div class="ver-dot"></div>
           <div class="ver-card">
             <div class="ver-head">
               <span class="ver-num">V1.5</span>
-              <span class="ver-date">2026-06-19</span>
+              <span class="ver-date">2026-06</span>
               <span class="ver-title">双客户端 + AI 演示 + 卡片视图</span>
-              <span class="ver-theme">「快速、多样、直观地发布」</span>
             </div>
-            <p class="ver-desc">jpage CLI 成为与 MCP 并列的第二客户端入口——大文件 multipart 流式上传，告别 base64。新增 jpage-presentation Skill，AI 一句话生成 reveal.js 幻灯片。文件列表卡片视图用 iframe 实时缩略图，所见即所得。</p>
-            <div class="ver-highlights">
-              <div class="hl"><span class="hl-icon">⌨️</span>jpage CLI（11 命令 · npm 包）</div>
-              <div class="hl"><span class="hl-icon">🎞️</span>jpage-presentation 幻灯片 Skill</div>
-              <div class="hl"><span class="hl-icon">🃏</span>卡片视图 iframe 实时缩略图</div>
-              <div class="hl"><span class="hl-icon">🎨</span>reveal.js 4 主题（商务/学术/创意/极简）</div>
-              <div class="hl"><span class="hl-icon">🔗</span>复制链接改为图标按钮</div>
-              <div class="hl"><span class="hl-icon">⚡</span>multipart 流式上传（CLI）</div>
-              <div class="hl"><span class="hl-icon">🛠️</span>双客户端入口拆分 + 缓存刷新修复</div>
+            <p class="ver-desc">jpage CLI 成为与 MCP 并列的第二客户端入口；新增 jpage-presentation Skill，AI 一句话生成 reveal.js 幻灯片；文件列表卡片视图用 iframe 实时缩略图。</p>
+          </div>
+        </div>
+        <div class="ver reveal">
+          <div class="ver-dot"></div>
+          <div class="ver-card">
+            <div class="ver-head">
+              <span class="ver-num">V1.4</span>
+              <span class="ver-date">2026-06</span>
+              <span class="ver-title">内容模板市场 + 风格化渲染</span>
             </div>
+            <p class="ver-desc">内容模板市场让 AI 学会风格参考；4 种 Markdown 渲染模板、FTS5 全文搜索、链接访问统计。</p>
+          </div>
+        </div>
+        <div class="ver reveal">
+          <div class="ver-dot"></div>
+          <div class="ver-card">
+            <div class="ver-head">
+              <span class="ver-num">V1.0</span>
+              <span class="ver-date">2026-05</span>
+              <span class="ver-title">诞生：从第一行代码到品牌确立</span>
+            </div>
+            <p class="ver-desc">AI 生成的 HTML 不再沦为截图或附件。拖拽上传，秒级预览，短链接即分享——即页的第一个版本，只做一件事：让内容被完整地看见。</p>
           </div>
         </div>
       </div>
@@ -171,13 +222,24 @@
   <!-- 设计理念 -->
   <section class="landing-sec" id="philosophy">
     <div class="landing-sec-inner">
-      <div class="landing-sec-tag">Design Philosophy</div>
-      <h2 class="landing-sec-title">设计理念</h2>
+      <div class="landing-sec-tag reveal">Design Philosophy</div>
+      <h2 class="landing-sec-title reveal">设计理念</h2>
       <div class="landing-philos">
-        <div class="phi"><div class="phi-ico">⚡</div><h3>零配置哲学</h3><p>docker-compose up — 三秒启动，五秒上传，八秒分享。开发者的内容工具应该像呼吸一样自然，不折腾配置，只专注内容。</p></div>
-        <div class="phi"><div class="phi-ico">🤖</div><h3>AI-Native</h3><p>不是给产品加 AI 功能，而是以 AI 为中心重新设计内容发布流程。MCP 工具让 Claude 成为内容助手，一句话生成、一键发布。</p></div>
-        <div class="phi"><div class="phi-ico">✂️</div><h3>极简主义</h3><p>无框架前端、无构建工具、无 npm script 魔法。Vanilla JS 写出的代码，十年后还能读懂。复杂度是敌人，简洁是美德。</p></div>
-        <div class="phi"><div class="phi-ico">🌱</div><h3>渐进增强</h3><p>从文件预览器到模板市场。版本管理、标签分类、全文搜索——每个功能都是自然生长的结果，不是预先设计的冗余。</p></div>
+        <div class="phi reveal"><div class="phi-ico">⚡</div><h3>零配置哲学</h3><p>docker-compose up — 三秒启动，五秒上传，八秒分享。开发者的内容工具应该像呼吸一样自然。</p></div>
+        <div class="phi reveal"><div class="phi-ico">🤖</div><h3>AI-Native</h3><p>不是给产品加 AI 功能，而是以 AI 为中心重新设计内容发布流程。MCP 让 Claude 成为内容助手。</p></div>
+        <div class="phi reveal"><div class="phi-ico">✂️</div><h3>极简主义</h3><p>无框架前端、无构建工具、无 npm script 魔法。Vanilla JS 写出的代码，十年后还能读懂。</p></div>
+        <div class="phi reveal"><div class="phi-ico">🌱</div><h3>渐进增强</h3><p>从文件预览器到模板市场。每个功能都是自然生长的结果，不是预先设计的冗余。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="landing-sec landing-sec-cta" id="cta">
+    <div class="landing-sec-inner">
+      <div class="landing-cta reveal">
+        <h2>准备好让内容流动起来了吗？</h2>
+        <p>即页 jpage — 拖入文件，即刻成页。</p>
+        <a class="btn btn-primary btn-lg" href="#/login">立即开始</a>
       </div>
     </div>
   </section>
@@ -923,8 +985,12 @@ CLI 工具
 <div class="share-section-title">访问密码</div>
 </div>
 <div class="share-section-body">
-<div class="share-input-group">
+<div class="share-input-group share-password-group">
 <input type="password" id="share-password-input" placeholder="设置后访问需输入密码" autocomplete="new-password">
+<button type="button" class="btn btn-icon share-password-toggle" id="share-password-toggle" aria-label="显示密码" title="显示密码">
+<svg class="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+<svg class="icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+</button>
 <button type="button" class="btn btn-small" id="share-password-save">保存</button>
 </div>
 <div class="share-hint">留空保存表示清除密码</div>
