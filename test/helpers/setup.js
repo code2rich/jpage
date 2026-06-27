@@ -26,6 +26,9 @@ function createTestEnv() {
   // 同时清理 lib/paths 缓存（它缓存了 DATA_DIR）
   const pathsPath = require.resolve('../../lib/paths');
   delete require.cache[pathsPath];
+  // 清理 lib/db 缓存：server.js 注入的 db 实例保存在模块闭包中，必须重置以避免测试间状态污染
+  const dbPath = require.resolve('../../lib/db');
+  delete require.cache[dbPath];
 
   const { app, initApp } = require('../../server');
 
