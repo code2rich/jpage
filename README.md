@@ -161,6 +161,14 @@ API 和 MCP 端点支持三种认证方式：
 | `SMTP_PASS` | 否 | SMTP 登录密码或授权码 |
 | `SMTP_FROM` | 否 | 发件人地址（如 `"即页 <user@example.com>"`） |
 | `APP_URL` | 否 | 应用外部访问地址，用于拼接验证链接（如 `https://jpage.cn`） |
+| `JPAGE_DATA_DIR` | 否 | 数据目录，默认 `./data` |
+| `COOKIE_SECURE` | 否 | 设为 `true` 时 Cookie 仅 HTTPS 传输（生产推荐） |
+| `MCP_IP` | 否 | MCP 端点日志中显示的主机名，默认 `localhost` |
+| `MCP_PROTOCOL` | 否 | MCP 端点协议，默认 `http` |
+| `TOKEN_ENCRYPTION_KEY` | 否 | API Token 加密密钥（hex 32 字节）；未设置时自动在数据目录生成 `token-key.key` |
+| `MAX_FILE_VERSIONS` | 否 | 单个文件保留的最大版本数，默认 `20` |
+| `BACKUP_CRON` | 否 | 自动备份 cron 表达式（如 `0 3 * * *`） |
+| `BACKUP_DIR` | 否 | 自动备份目录，默认 `<JPAGE_DATA_DIR>/backups` |
 
 如果 `ADMIN_USER` 和 `ADMIN_PASSWORD` 都留空启动，启动日志会输出：
 
@@ -217,12 +225,14 @@ jpage/
 │   ├── view-counts.js  # 浏览数缓冲批量回写
 │   ├── zip.js          # ZIP 上传（安全校验/解压/分类）
 │   ├── dispatch.js     # MCP 进程内请求分发（绕过 TCP 自调用）
-│   └── middleware/     # 鉴权 + 文件加载中间件
+│   ├── crypto.js       # API Token 明文 AES-256-GCM 加密
+│   ├── usage.js        # 用户存储空间维护
+│   └── middleware/     # 鉴权 + 文件加载 + 用量采集中间件
 ├── logger.js           # 结构化 JSON Lines 日志
 ├── mailer.js           # SMTP 邮件（验证码/验证链接）
 ├── mcp-server.js       # MCP Streamable HTTP 端点（/mcp）
 ├── migrations.js       # 数据库迁移 runner
-├── migrations/         # 按序执行的 schema 迁移文件（001-012）
+├── migrations/         # 按序执行的 schema 迁移文件（001-022）
 ├── skills-registry.js  # 扫描 skills/ 目录，提供 skill 列表/详情/zip 打包
 ├── templates/          # Markdown 渲染样式模板（default/github/academic/dark-pro）
 ├── package.json
@@ -235,8 +245,9 @@ jpage/
 │   ├── api.md          # REST API 完整参考
 │   └── design/         # 设计文档
 ├── skills/
-│   └── jpage-upload/   # Claude Code / Desktop skill
-│       └── SKILL.md
+│   ├── jpage-upload/         # 上传技能
+│   ├── jpage-presentation/   # 演示技能
+│   └── jpage-content-template/ # 内容模板技能
 ├── test/               # 单元 + 集成测试（node:test + supertest）+ e2e harness
 ├── data/               # SQLite 数据库、上传文件与会话存储（运行时自动创建）
 └── public/             # 前端静态资源
@@ -334,7 +345,7 @@ jpage/
 
 | 端点 | 方法 | 说明 |
 |---|---|---|
-| `/api/content-templates/public` | GET | 公开模板列表（无需登录） |
+| `/api/content-templates/market` | GET | 公开模板列表（无需登录） |
 | `/api/content-templates` | GET | 当前用户模板列表 |
 | `/api/content-templates` | POST | 创建模板 |
 | `/api/content-templates/:id` | PUT/DELETE | 更新/删除模板（仅所有者） |
@@ -393,7 +404,7 @@ MCP_TOKEN=your-secret-token
 
 ### 能力
 
-**Tools**（15 个）：
+**Tools**（17 个）：
 
 | 工具 | 用途 |
 |---|---|
@@ -412,6 +423,8 @@ MCP_TOKEN=your-secret-token
 | `list_categories` | 列出分类 |
 | `create_category` | 创建分类 |
 | `set_file_category` | 设置文件分类 |
+| `list_content_templates` | 列出内容模板市场作品 |
+| `get_content_template` | 获取内容模板详情 |
 
 **Resources**（2 个）：
 
