@@ -1,0 +1,3 @@
+# uTools 插件构建产物（由 pack.sh 重新生成）
+dist/
+*.upx

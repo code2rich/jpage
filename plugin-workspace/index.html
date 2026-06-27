@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>即页</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <script>
+      // ★ 全局错误兜底：必须在所有其他脚本之前执行。
+      // 任何未捕获异常（同步 error 或异步 unhandledrejection）都会在页面顶部显示，
+      // 避免页面"一闪而过白屏"却看不到原因。
+      (function () {
+        function showErr(label, detail) {
+          var msg = '[' + label + '] ' + (detail && detail.stack || detail);
+          console.error(msg);
+          var d = document.createElement('div');
+          d.id = 'fatal-err';
+          d.style.cssText =
+            'position:fixed;top:0;left:0;right:0;padding:16px 20px;background:#fef2f2;color:#991b1b;font-family:Menlo,Monaco,monospace;font-size:12px;z-index:99999;white-space:pre-wrap;max-height:60vh;overflow:auto;border-bottom:2px solid #dc2626;box-shadow:0 2px 8px rgba(0,0,0,.15)';
+          d.textContent = '⚠ 即页插件运行出错：\n\n' + msg + '\n\n（请截图此信息反馈）';
+          (document.body || document.documentElement).appendChild(d);
+        }
+        window.addEventListener('error', function (e) {
+          showErr('error', e.error || e.message);
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          showErr('promise', e.reason);
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    <!-- ============ 登录 / 设置视图 ============ -->
+    <div id="login-view">
+      <div class="login-card">
+        <div class="login-logo">
+          <img src="logo.png" alt="即页" />
+          <h1>即页</h1>
+          <p id="login-subtitle">登录你的即页账户</p>
+        </div>
+
+        <div id="login-error" class="login-error"></div>
+
+        <div class="login-form">
+          <div class="field">
+            <label class="field-label">服务器地址</label>
+            <input
+              id="server-url"
+              class="input"
+              type="text"
+              placeholder="https://jpage.example.com 或 http://localhost:8858"
+              autocomplete="off"
+            />
+          </div>
+          <div class="field">
+            <label class="field-label">账号（用户名或邮箱）</label>
+            <input
+              id="account"
+              class="input"
+              type="text"
+              placeholder="admin / you@example.com"
+              autocomplete="off"
+            />
+          </div>
+          <div class="field">
+            <label class="field-label">密码</label>
+            <input
+              id="password"
+              class="input"
+              type="password"
+              placeholder="••••••••"
+              autocomplete="off"
+            />
+          </div>
+          <div class="login-actions">
+            <button id="btn-login" class="btn btn-primary">
+              登录
+            </button>
+          </div>
+          <div class="login-switch">
+            <a id="link-test">测试服务器连接</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 主视图 ============ -->
+    <div id="main-view">
+      <!-- 顶栏 -->
+      <div class="topbar">
+        <div class="topbar-brand">
+          <img src="logo.png" alt="即页" />
+          <span>即页</span>
+        </div>
+        <div class="topbar-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          <input id="search-input" type="text" placeholder="按文件名搜索…" />
+        </div>
+        <div class="topbar-spacer"></div>
+        <button id="btn-upload" class="btn btn-primary btn-sm">上传</button>
+        <button id="btn-new" class="btn btn-sm">新建文本</button>
+        <div class="topbar-user">
+          <div id="user-avatar" class="user-avatar">?</div>
+          <span id="user-name">-</span>
+        </div>
+        <button id="btn-settings" class="btn btn-icon btn-ghost" title="设置 / 切换账号">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- 工具条：筛选 -->
+      <div class="toolbar">
+        <div class="toolbar-filters">
+          <select id="filter-sort">
+            <option value="updated_at:desc">最近更新</option>
+            <option value="updated_at:asc">最早更新</option>
+            <option value="created_at:desc">最近创建</option>
+            <option value="original_name:asc">名称 A→Z</option>
+            <option value="original_name:desc">名称 Z→A</option>
+            <option value="size:desc">大小 ↓</option>
+            <option value="size:asc">大小 ↑</option>
+          </select>
+          <select id="filter-tag">
+            <option value="">所有标签</option>
+          </select>
+          <select id="filter-category">
+            <option value="">所有分类</option>
+            <option value="uncategorized">未分类</option>
+          </select>
+          <select id="filter-starred">
+            <option value="">全部</option>
+            <option value="1">★ 已收藏</option>
+          </select>
+        </div>
+        <div class="topbar-spacer"></div>
+        <span id="result-count" style="font-size: 12px; color: var(--text-mute)"></span>
+      </div>
+
+      <!-- 内容区 -->
+      <div class="content">
+        <div id="file-list" class="file-list"></div>
+        <div id="empty-state" class="empty hidden">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+          </svg>
+          <h3>还没有文件</h3>
+          <p>点击「上传」或「新建文本」开始使用即页</p>
+        </div>
+        <div id="pagination" class="pagination"></div>
+      </div>
+    </div>
+
+    <!-- 模态层容器 -->
+    <div id="modal-root"></div>
+
+    <!-- toast -->
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="js/util.js"></script>
+    <script src="js/login.js"></script>
+    <script src="js/upload.js"></script>
+    <script src="js/detail.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>

@@ -98,6 +98,8 @@ export default [
       'article/',
       // Skill 内的第三方资源（如 reveal.js 引擎/插件），不该 lint
       'skills/*/assets/',
+      // uTools 插件构建产物，每次 pack 重新生成，无需 lint
+      'plugin-workspace/dist/',
     ],
   },
 
@@ -166,6 +168,24 @@ export default [
     files: ['migrations/**/*.js'],
     rules: {
       'no-unused-vars': 'off',
+    },
+  },
+
+  {
+    // uTools 插件源码： classic script + uTools 注入全局 + 模块间全局类
+    files: ['plugin-workspace/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'script',
+      globals: {
+        ...nodeGlobals,
+        ...browserGlobals,
+        utools: 'readonly',
+        JP: 'writable',
+        Login: 'readonly',
+        Upload: 'readonly',
+        Detail: 'readonly',
+      },
     },
   },
 ];

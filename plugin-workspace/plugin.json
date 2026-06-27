@@ -1,0 +1,30 @@
+{
+  "main": "index.html",
+  "logo": "logo.png",
+  "preload": "preload.js",
+  "features": [
+    {
+      "code": "jpage",
+      "explain": "即页 · 管理你的即页文件（登录、搜索、上传、预览、分享）",
+      "cmds": ["即页", "jpage"]
+    },
+    {
+      "code": "jpage-upload",
+      "explain": "拖拽上传到即页 · 生成分享链接",
+      "cmds": [
+        {
+          "type": "files",
+          "match": {
+            "fileType": ["html", "htm", "md", "markdown", "zip"]
+          },
+          "label": "上传到即页"
+        }
+      ]
+    }
+  ],
+  "platform": ["darwin", "win32", "linux"],
+  "description": "即页 uTools 插件：登录即页服务器，在 uTools 内直接管理你的 HTML/Markdown 文件——搜索、上传、预览、分享、版本历史、标签分类。",
+  "version": "1.1.0",
+  "author": "jpage",
+  "homepage": "https://www.jpage.cn"
+}
