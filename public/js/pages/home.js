@@ -39,26 +39,62 @@ function uploaderBadge(name) {
   return name ? `<span class="file-badge file-badge-uploader" title="上传者">👤 ${escapeHtml(name)}</span>` : '';
 }
 
-// 卡片缩略图懒加载管线（镜像 content-templates.js 的 thumbObserver：rootMargin 预加载 + 最多 3 并发）
-// 注意：不能用 file-id Set 去重——翻页/筛选时 list.innerHTML='' 会销毁并重建卡片 DOM，
-// 新卡片是全新元素，必须重新挂 iframe（会命中浏览器/渲染缓存，开销小）。
-// 去重改为按「该卡片是否已有 iframe」判断，避免切回已访问过的页时缩略图卡在灰色占位。
+// 卡片缩略图按需加载管线。
+// 历史实现是 IntersectionObserver 检测到可视卡片就立即挂载 iframe，每个卡片渲染完整 HTML 文档，
+// 导致登录后卡片视图首屏同时发起大量 /api/files/:id/render，页面卡住数秒。
+// 现改为「首屏不阻塞 + 空闲时自动补全 + 悬停/聚焦加速」：
+//   1. IntersectionObserver 只维护当前可视卡片集合，不再立即挂 iframe；
+//   2. 用 requestIdleCallback 在浏览器空闲时逐个加载可视卡片预览；
+//   3. 鼠标悬停或键盘聚焦时立即加载该卡片。
+// 这样首屏 DOM 可秒开，预览仍会自动出现，且不会一次性压垮浏览器/服务端。
 let cardThumbObserver = null;
+const visibleCardThumbs = new Set();
+let idleThumbScheduled = false;
 let cardThumbActive = 0;
 const CARD_THUMB_MAX = 2;
 const cardThumbQueue = [];
+
 function ensureCardThumbObserver() {
   if (cardThumbObserver) return cardThumbObserver;
   cardThumbObserver = new IntersectionObserver(entries => {
     entries.forEach(entry => {
-      if (!entry.isIntersecting) return;
       const card = entry.target;
-      cardThumbObserver.unobserve(card);
-      enqueueCardThumb(card);
+      if (entry.isIntersecting) visibleCardThumbs.add(card);
+      else visibleCardThumbs.delete(card);
     });
+    scheduleIdleThumbLoad();
   }, { rootMargin: '100px' });
   return cardThumbObserver;
 }
+
+function hasUnloadedVisibleCard() {
+  for (const card of visibleCardThumbs) {
+    const thumb = card.querySelector('.file-card-thumb');
+    if (thumb && !thumb.querySelector('.file-card-thumb-iframe')) return true;
+  }
+  return false;
+}
+
+function scheduleIdleThumbLoad() {
+  if (idleThumbScheduled || !hasUnloadedVisibleCard()) return;
+  idleThumbScheduled = true;
+  const run = () => {
+    idleThumbScheduled = false;
+    let loadedOne = false;
+    for (const card of visibleCardThumbs) {
+      const thumb = card.querySelector('.file-card-thumb');
+      if (thumb && !thumb.querySelector('.file-card-thumb-iframe')) {
+        enqueueCardThumb(card);
+        loadedOne = true;
+        break;
+      }
+    }
+    if (loadedOne) scheduleIdleThumbLoad();
+  };
+  // 用 setTimeout 串行调度，比 requestIdleCallback 更可预测，且不会被 DevTools/后台标签挂起。
+  setTimeout(run, 300);
+}
+
 function enqueueCardThumb(card) {
   if (cardThumbActive < CARD_THUMB_MAX) {
     cardThumbActive++;
@@ -98,6 +134,27 @@ function loadCardThumb(card) {
     iframe.addEventListener('error', finish, { once: true });
     iframe.src = API_BASE + '/api/files/' + card.dataset.fileId + '/render';
   });
+}
+// 鼠标悬停或键盘聚焦时立即加载该卡片预览。
+function scheduleCardThumbOnHover(card) {
+  const trigger = () => {
+    const thumb = card.querySelector('.file-card-thumb');
+    if (!thumb || thumb.querySelector('.file-card-thumb-iframe')) return;
+    enqueueCardThumb(card);
+  };
+  card.addEventListener('mouseenter', trigger);
+  card.addEventListener('focus', trigger);
+}
+
+function resetCardThumbState() {
+  if (cardThumbObserver) {
+    cardThumbObserver.disconnect();
+    cardThumbObserver = null;
+  }
+  visibleCardThumbs.clear();
+  idleThumbScheduled = false;
+  cardThumbQueue.length = 0;
+  cardThumbActive = 0;
 }
 
 // ---------- Home Page ----------
@@ -816,6 +873,9 @@ function renderFileList(container, list, files) {
 function renderCardList(container, list, files) {
   // 切换容器为网格布局
   list.classList.add('view-card');
+  // 每次重渲染前重置缩略图状态，防止旧 DOM 引用泄漏或队列残留
+  resetCardThumbState();
+  const observer = ensureCardThumbObserver();
   // 卡片视图也支持全选
   const selectAllCb = container.querySelector('#select-all-checkbox');
   if (selectAllCb) {
@@ -834,8 +894,6 @@ function renderCardList(container, list, files) {
       });
     };
   }
-  const observer = ensureCardThumbObserver();
-
   files.forEach((f, index) => {
     const el = document.createElement('div');
     el.className = 'file-card';
@@ -996,8 +1054,9 @@ function renderCardList(container, list, files) {
       });
     });
 
-    // 注册懒加载：卡片滚到可视区附近才挂 iframe
+    // 注册缩略图加载：加入可视区跟踪（空闲时自动加载）+ 悬停/聚焦立即加载。
     observer.observe(el);
+    scheduleCardThumbOnHover(el);
     list.appendChild(el);
   });
 }
@@ -1076,10 +1135,8 @@ function setupViewToggle(container) {
   buttons.forEach(btn => {
     btn.addEventListener('click', () => {
       if (viewMode === btn.dataset.view) return;
-      // 切换前断开旧 observer，避免卡片 DOM 已销毁仍持有引用造成泄漏
-      if (cardThumbObserver) { cardThumbObserver.disconnect(); }
-      cardThumbQueue.length = 0;
-      cardThumbActive = 0;
+      // 切换视图前重置缩略图状态，避免旧卡片 DOM 销毁后仍触发渲染或持有引用
+      resetCardThumbState();
       setViewMode(btn.dataset.view);
       buttons.forEach(b => b.classList.toggle('active', b === btn));
       applyFilters(container); // 复用现有重渲染流，重建列表/卡片

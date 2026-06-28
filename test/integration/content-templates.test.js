@@ -8,8 +8,26 @@ const { createTestEnv } = require('../helpers/setup');
 let env;
 let adminAgent;
 let userAgent;
+let adminToken;
+let userToken;
 
 const SAMPLE_HTML = '<!doctype html><body><h1>路演 PPT</h1></body>';
+
+// 为用户创建一个 API Token，返回明文 token
+async function createToken(agent, name) {
+  const res = await agent.post('/api/tokens').send({ name });
+  assert.strictEqual(res.status, 200, `创建 token 失败：${JSON.stringify(res.body)}`);
+  assert.ok(res.body.token, '应返回明文 token');
+  return res.body.token;
+}
+
+// 用 Token 调用 instantiate
+function instantiateRequest(id, token) {
+  return request(env.app)
+    .post(`/api/content-templates/${id}/instantiate`)
+    .set('Authorization', 'Bearer ' + token)
+    .set('X-Upload-Source', 'cli');
+}
 
 test.before(async () => {
   env = createTestEnv();
@@ -19,6 +37,8 @@ test.before(async () => {
   await adminAgent.post('/api/users').send({ username: 'regular', password: 'regularpass123', role: 'user' });
   userAgent = request.agent(env.app);
   await userAgent.post('/api/auth/login').send({ username: 'regular', password: 'regularpass123' });
+  adminToken = await createToken(adminAgent, 'admin-test-token');
+  userToken = await createToken(userAgent, 'user-test-token');
 });
 
 test.after(() => { env.cleanup(); });
@@ -206,19 +226,15 @@ test('作者归档模板 → 市场移除，但数据保留', async () => {
   assert.ok(mine.body.templates.some(t => t.id === id));
 });
 
-// --- 使用计数 ---
-test('POST :id/use 对 approved+visible 递增，对未上架拒绝', async () => {
+// --- /use 端点已废弃 ---
+test('POST :id/use 返回 410 Gone', async () => {
   const submit = await userAgent.post('/api/content-templates').send({
-    title: '计数', fileType: 'html', categoryId: 1, content: '<p>x</p>',
+    title: 'use端点废弃', fileType: 'html', categoryId: 2, content: '<p>x</p>',
   });
   const id = submit.body.id;
-  // 未上架时 use → 400
-  const beforeApprove = await adminAgent.post(`/api/content-templates/${id}/use`);
-  assert.strictEqual(beforeApprove.status, 400);
   await adminAgent.post(`/api/content-templates/${id}/review`).send({ status: 'approved', visibility: 'visible' });
-  const use = await adminAgent.post(`/api/content-templates/${id}/use`);
-  assert.strictEqual(use.status, 200);
-  assert.ok(use.body.use_count >= 1);
+  const res = await adminAgent.post(`/api/content-templates/${id}/use`);
+  assert.strictEqual(res.status, 410);
 });
 
 // --- 管理员分类管理 ---
@@ -427,22 +443,24 @@ async function createPublishedTemplate(agent, title) {
   return submit.body.id;
 }
 
-test('instantiate：approved+visible → 创建文件 + 记录 installs + use_count+1', async () => {
+test('instantiate：approved+visible + Token → 创建文件 + 记录 installs + use_count+1', async () => {
   const id = await createPublishedTemplate(userAgent, '可实例化模板');
 
   // 实例化前 use_count=0
   const metaBefore = await request(env.app).get(`/api/content-templates/market/${id}`);
   assert.strictEqual(metaBefore.body.use_count, 0);
 
-  const res = await userAgent.post(`/api/content-templates/${id}/instantiate`);
+  const res = await instantiateRequest(id, adminToken);
   assert.strictEqual(res.status, 200);
   assert.ok(res.body.fileId, '应返回新建文件 id');
   assert.strictEqual(res.body.templateId, id);
+  assert.ok(res.body.shareKey, '应返回文件 share_key');
 
-  // 验证文件确实创建了（upload_source='market' 标记来自实例化）
-  const fileRes = await userAgent.get(`/api/files/${res.body.fileId}`);
+  // 验证文件确实创建了（upload_source='market-cli' 标记来自 CLI 式 Token 实例化）
+  const fileRes = await adminAgent.get(`/api/files/${res.body.fileId}`);
   assert.strictEqual(fileRes.status, 200);
-  assert.strictEqual(fileRes.body.upload_source, 'market', '实例化产生的文件 upload_source 应为 market');
+  assert.strictEqual(fileRes.body.upload_source, 'market-cli', '实例化产生的文件 upload_source 应为 market-cli');
+  assert.strictEqual(fileRes.body.is_public, 0, '默认应为私有文件');
 
   // use_count +1
   const metaAfter = await request(env.app).get(`/api/content-templates/market/${id}`);
@@ -458,23 +476,29 @@ test('instantiate：未登录 → 401', async () => {
   assert.strictEqual(res.status, 401);
 });
 
-test('instantiate：未上架模板（pending）→ 400', async () => {
+test('instantiate：仅 Session Cookie → 403', async () => {
+  const id = await createPublishedTemplate(userAgent, 'session禁止实例化');
+  const res = await userAgent.post(`/api/content-templates/${id}/instantiate`);
+  assert.strictEqual(res.status, 403);
+});
+
+test('instantiate：未上架模板（pending）→ 404', async () => {
   const submit = await userAgent.post('/api/content-templates').send({
     title: '未上架', fileType: 'html', categoryId: 2, content: '<p>x</p>',
   });
-  const res = await userAgent.post(`/api/content-templates/${submit.body.id}/instantiate`);
+  const res = await instantiateRequest(submit.body.id, userToken);
   assert.strictEqual(res.status, 404, 'pending+hidden 模板不在市场可见范围，应 404');
 });
 
 test('instantiate：不存在的模板 id → 404', async () => {
-  const res = await userAgent.post('/api/content-templates/999999/instantiate');
+  const res = await instantiateRequest(999999, userToken);
   assert.strictEqual(res.status, 404);
 });
 
 test('instantiate：同用户再次实例化同模板 → 刷新 installs 记录（非报错）', async () => {
   const id = await createPublishedTemplate(userAgent, '重复实例化');
-  const first = await userAgent.post(`/api/content-templates/${id}/instantiate`);
-  const second = await userAgent.post(`/api/content-templates/${id}/instantiate`);
+  const first = await instantiateRequest(id, userToken);
+  const second = await instantiateRequest(id, userToken);
   assert.strictEqual(second.status, 200, 'UNIQUE(template_id,user_id) 应走 ON CONFLICT 更新而非报错');
   assert.ok(second.body.fileId !== first.body.fileId, '每次实例化应创建新文件');
   // instantiation_count 仍为 1（同用户的 install 记录被更新，而非新增）
@@ -485,8 +509,8 @@ test('instantiate：同用户再次实例化同模板 → 刷新 installs 记录
 
 test('instantiate：不同用户实例化 → instantiation_count 累加', async () => {
   const id = await createPublishedTemplate(adminAgent, '多用户实例化');
-  await adminAgent.post(`/api/content-templates/${id}/instantiate`);
-  await userAgent.post(`/api/content-templates/${id}/instantiate`);
+  await instantiateRequest(id, adminToken);
+  await instantiateRequest(id, userToken);
   const meta = await request(env.app).get(`/api/content-templates/market/${id}`);
   assert.strictEqual(meta.body.instantiation_count, 2, '两个不同用户应各记一条 install');
 });
@@ -507,11 +531,52 @@ test('instantiate：创建的文件内容 = 模板内容快照', async () => {
   const id = submit.body.id;
   await adminAgent.post(`/api/content-templates/${id}/review`).send({ status: 'approved', visibility: 'visible' });
 
-  const res = await userAgent.post(`/api/content-templates/${id}/instantiate`);
+  const res = await instantiateRequest(id, userToken);
   // 读文件原文，验证内容与模板一致
   const raw = await userAgent.get(`/api/files/${res.body.fileId}/content`);
   assert.strictEqual(raw.status, 200);
   assert.ok(raw.body.content.includes('快照验证_UNIQUE'), '实例化文件内容应与模板一致');
+});
+
+test('instantiate：支持自定义文件名与公开性', async () => {
+  const id = await createPublishedTemplate(userAgent, '自定义文件名');
+  const res = await instantiateRequest(id, userToken).send({
+    originalName: '我的汇报.html',
+    isPublic: true,
+  });
+  assert.strictEqual(res.status, 200);
+  const fileRes = await userAgent.get(`/api/files/${res.body.fileId}`);
+  assert.strictEqual(fileRes.body.original_name, '我的汇报.html');
+  assert.strictEqual(fileRes.body.is_public, 1);
+});
+
+test('instantiate：Token 来源写入 upload_source', async () => {
+  const id = await createPublishedTemplate(userAgent, 'token来源');
+  const res = await instantiateRequest(id, userToken);
+  assert.strictEqual(res.status, 200);
+
+  const file = await userAgent.get(`/api/files/${res.body.fileId}`);
+  assert.strictEqual(file.status, 200);
+  assert.strictEqual(file.body.upload_source, 'market-cli', 'CLI Token 实例化应记录 upload_source=market-cli');
+});
+
+test('GET :id/use-guide 匿名可访问并返回 CLI/MCP 命令', async () => {
+  const id = await createPublishedTemplate(userAgent, '使用引导');
+  const res = await request(env.app).get(`/api/content-templates/${id}/use-guide`);
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.templateId, id);
+  assert.ok(res.body.cli, '应返回 cli 命令');
+  assert.ok(res.body.cliWithName, '应返回带文件名的 cli 命令');
+  assert.ok(res.body.mcp, '应返回 mcp 参数');
+  assert.strictEqual(res.body.mcp.tool, 'instantiate_content_template');
+});
+
+test('GET :id/use-guide 对未上架模板返回 404', async () => {
+  const submit = await userAgent.post('/api/content-templates').send({
+    title: '未上架引导', fileType: 'html', categoryId: 2, content: '<p>x</p>',
+  });
+  const res = await request(env.app).get(`/api/content-templates/${submit.body.id}/use-guide`);
+  assert.strictEqual(res.status, 404);
 });
 
 // ============================================================

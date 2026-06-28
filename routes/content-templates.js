@@ -8,10 +8,10 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { dbGet, dbRun, dbAll } = require('../lib/db');
-const { requireAuth, requireAdmin, loadSession } = require('../lib/middleware/auth');
+const { requireAuth, requireAdmin, requireTokenAuth, loadSession } = require('../lib/middleware/auth');
 const { clientIp, now, generateShareKey } = require('../lib/util');
 const { UPLOAD_DIR } = require('../lib/paths');
-const { generateStoredName } = require('./files/_shared');
+const { generateStoredName, uploadLimiter } = require('./files/_shared');
 const { isFtsIndexable, indexFileContent } = require('../lib/fts');
 const { addUserStorage } = require('../lib/usage');
 const { renderTemplateContent } = require('../lib/render');
@@ -455,30 +455,20 @@ router.delete('/:id', requireAuth, async (req, res) => {
   }
 });
 
-// 使用计数（仅对 approved+visible 生效）
-router.post('/:id/use', requireAuth, async (req, res) => {
-  try {
-    const t = await dbGet('SELECT id, status, visibility FROM content_templates WHERE id = ?', [req.params.id]);
-    if (!t) return res.status(404).json({ error: '模板不存在' });
-    if (!(t.status === 'approved' && t.visibility === 'visible')) {
-      return res.status(400).json({ error: '模板未上架' });
-    }
-    await dbRun('UPDATE content_templates SET use_count = use_count + 1 WHERE id = ?', [req.params.id]);
-    const updated = await dbGet('SELECT use_count FROM content_templates WHERE id = ?', [req.params.id]);
-    res.json({ success: true, use_count: updated ? updated.use_count : 0 });
-  } catch (e) {
-    res.status(500).json({ error: '记录使用失败' });
-  }
+// 旧「使用计数」端点已废弃：「使用模板」= 实例化出文件，必须由 Token 驱动。
+// 保留 410 响应，引导客户端改用 /instantiate 或 /use-guide。
+router.post('/:id/use', (req, res) => {
+  res.status(410).json({ error: '该端点已废弃，请使用 POST /instantiate 实例化模板，或 GET /use-guide 获取 CLI/MCP 命令' });
 });
 
 // 实例化模板 → 在用户文件列表创建一个新文件（基于模板内容），并记录追溯。
 // 语义：「使用模板」= 用户真正得到一个可编辑的文件，而非空计数。
-// 仅对 approved+visible 模板生效；同用户对同模板可多次实例化（每次得到新文件）。
-// 复用 upload-json 的文件创建模式：generateStoredName + writeFile + INSERT files。
-router.post('/:id/instantiate', requireAuth, async (req, res) => {
+// 仅对 approved+visible 模板生效；必须通过 Token（MCP_TOKEN 或 jp_...）调用，禁止 Session Cookie。
+// 同用户对同模板可多次实例化（每次得到新文件）。
+router.post('/:id/instantiate', uploadLimiter, requireAuth, requireTokenAuth, async (req, res) => {
   try {
     const t = await dbGet(
-      `SELECT ct.id, ct.title, ct.content, ct.file_type
+      `SELECT ct.id, ct.title, ct.content, ct.file_type, ct.version
        FROM content_templates ct
        LEFT JOIN template_market_categories c ON ct.category_id = c.id
        WHERE ct.id = ? AND ${MARKET_VISIBLE_COND}`,
@@ -487,10 +477,12 @@ router.post('/:id/instantiate', requireAuth, async (req, res) => {
     if (!t) return res.status(404).json({ error: '模板不存在或未上架' });
     if (!t.content) return res.status(400).json({ error: '模板内容为空' });
 
-    // 文件名：模板标题 + 类型扩展名（剔除非法字符，避免路径问题）
     const ext = t.file_type === 'markdown' ? '.md' : '.html';
     const safeTitle = (t.title || '模板').replace(/[\\/:*?"<>|]/g, '_').trim() || '模板';
-    const originalName = safeTitle + ext;
+    const requestedName = req.body && typeof req.body.originalName === 'string' && req.body.originalName.trim()
+      ? req.body.originalName.trim()
+      : null;
+    const originalName = requestedName || (safeTitle + ext);
     const storedName = generateStoredName(ext);
     const content = t.content;
     const size = Buffer.byteLength(content, 'utf-8');
@@ -503,6 +495,8 @@ router.post('/:id/instantiate', requireAuth, async (req, res) => {
       return res.status(500).json({ error: '创建文件失败' });
     }
 
+    const isPublic = req.body && req.body.isPublic === true ? 1 : 0;
+    const uploadSource = req.tokenSource === 'mcp' ? 'market-mcp' : 'market-cli';
     const ts = now();
     let fileId;
     try {
@@ -510,8 +504,8 @@ router.post('/:id/instantiate', requireAuth, async (req, res) => {
         `INSERT INTO files
           (original_name, stored_name, file_type, size, is_public, uploaded_by,
            share_key, upload_source, source_asset_id, created_from, updated_at)
-         VALUES (?, ?, ?, ?, 0, ?, ?, 'market', ?, 'market', ?)`,
-        [originalName, storedName, t.file_type, size, req.userId, generateShareKey(), req.params.id, ts]
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [originalName, storedName, t.file_type, size, isPublic, req.userId, generateShareKey(), uploadSource, req.params.id, 'market', ts]
       );
       fileId = result.lastID;
       await addUserStorage(req.userId, size);
@@ -527,24 +521,72 @@ router.post('/:id/instantiate', requireAuth, async (req, res) => {
       indexFileContent(fileId, storedName);
     }
 
-    // 记录实例化追溯（UNIQUE(template_id, user_id)：同用户重复实例化时刷新为最新文件）
+    // 记录实例化追溯与 Token 绑定（UNIQUE(template_id, user_id)：同用户重复实例化时刷新为最新文件）
     await dbRun(
-      `INSERT INTO content_template_installs (template_id, user_id, file_id, source_version)
-       VALUES (?, ?, ?, (SELECT version FROM content_templates WHERE id = ?))
-       ON CONFLICT(template_id, user_id) DO UPDATE SET file_id = excluded.file_id, source_version = excluded.source_version, created_at = datetime('now')`,
-      [req.params.id, req.userId, fileId, req.params.id]
+      `INSERT INTO content_template_installs
+        (template_id, user_id, file_id, source_version, source, token_prefix, token_hash_prefix)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(template_id, user_id) DO UPDATE SET
+         file_id = excluded.file_id,
+         source_version = excluded.source_version,
+         source = excluded.source,
+         token_prefix = excluded.token_prefix,
+         token_hash_prefix = excluded.token_hash_prefix,
+         created_at = datetime('now')`,
+      [req.params.id, req.userId, fileId, t.version || '1.0.0', req.tokenSource || 'unknown',
+       req.tokenPrefix || null, req.tokenHashPrefix || null]
     );
 
-    // 模板热度 +1（保留市场排序信号）
+    // 模板热度：use_count 同步 +1；实例化次数由 content_template_installs 子查询实时统计
     await dbRun('UPDATE content_templates SET use_count = use_count + 1 WHERE id = ?', [req.params.id]);
 
+    // 读出新建文件的 share_key 返回，方便客户端直接构造预览链接
+    const fileRow = await dbGet('SELECT share_key FROM files WHERE id = ?', [fileId]);
+
     logger.audit('content_template.instantiate', {
-      templateId: parseInt(req.params.id), fileId, userId: req.userId, ip: clientIp(req)
+      templateId: parseInt(req.params.id), fileId, userId: req.userId,
+      source: req.tokenSource, tokenHashPrefix: req.tokenHashPrefix, ip: clientIp(req)
     });
-    res.json({ success: true, fileId, templateId: parseInt(req.params.id) });
+    res.json({ success: true, fileId, templateId: parseInt(req.params.id), shareKey: fileRow ? fileRow.share_key : null });
   } catch (e) {
     logger.error({ type: 'app', msg: '实例化模板失败', error: e.message });
     res.status(500).json({ error: '实例化失败' });
+  }
+});
+
+// 公开端点：返回某模板的 CLI/MCP 使用引导命令，供 Web UI「使用此模板」按钮展示。
+// 匿名可访问，因为只是命令文本，不创建文件。
+router.get('/:id/use-guide', async (req, res) => {
+  try {
+    const t = await dbGet(
+      `SELECT ct.id, ct.title, ct.file_type, ct.share_key
+       FROM content_templates ct
+       LEFT JOIN template_market_categories c ON ct.category_id = c.id
+       WHERE ct.id = ? AND ${MARKET_VISIBLE_COND}`,
+      [req.params.id]
+    );
+    if (!t) return res.status(404).json({ error: '模板不存在或未上架' });
+
+    const ext = t.file_type === 'markdown' ? '.md' : '.html';
+    const safeName = (t.title || '模板').replace(/[\\/:*?"<>|]/g, '_').trim() || '模板';
+    const defaultName = safeName + ext;
+    const templateId = parseInt(t.id, 10);
+
+    res.json({
+      templateId,
+      title: t.title,
+      fileType: t.file_type,
+      cli: `jpage template use ${templateId}`,
+      cliWithName: `jpage template use ${templateId} --name "${defaultName}"`,
+      mcp: {
+        tool: 'instantiate_content_template',
+        args: { id: templateId },
+      },
+      hint: '使用此模板需要有效的 API Token（jp_...）或 MCP_TOKEN，将在您的账户下创建一个新文件。',
+    });
+  } catch (e) {
+    logger.error({ type: 'app', msg: '获取模板使用引导失败', error: e.message });
+    res.status(500).json({ error: '获取使用引导失败' });
   }
 });
 

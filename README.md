@@ -245,9 +245,7 @@ jpage/
 │   ├── api.md          # REST API 完整参考
 │   └── design/         # 设计文档
 ├── skills/
-│   ├── jpage-upload/         # 上传技能
-│   ├── jpage-presentation/   # 演示技能
-│   └── jpage-content-template/ # 内容模板技能
+│   └── jpage/                # Claude Code / Desktop 统一技能：上传、生成内容、幻灯片、模板市场
 ├── test/               # 单元 + 集成测试（node:test + supertest）+ e2e harness
 ├── data/               # SQLite 数据库、上传文件与会话存储（运行时自动创建）
 └── public/             # 前端静态资源
@@ -435,10 +433,10 @@ MCP_TOKEN=your-secret-token
 
 ### 配套 Skill
 
-仓库内 `skills/jpage-upload/SKILL.md` 是 Claude Code / Desktop 的开箱即用技能。安装后，AI 生成 HTML、Markdown、报告、可视化等内容时会自动上传到即页并返回预览链接。
+仓库内 `skills/jpage/SKILL.md` 是 Claude Code / Desktop 的开箱即用技能。安装后，AI 生成 HTML、Markdown、报告、可视化、幻灯片、使用模板市场风格等内容时会自动上传到即页并返回预览链接。
 
 ```bash
-ln -s "$(pwd)/skills/jpage-upload" ~/.claude/skills/jpage-upload
+ln -s "$(pwd)/skills/jpage" ~/.claude/skills/jpage
 ```
 
 ### Web 管理

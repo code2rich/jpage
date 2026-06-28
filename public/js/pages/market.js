@@ -527,49 +527,64 @@ function createTemplateCard(t) {
   </div>`;
 }
 
-function showUseTemplatePrompt({ title, shareKey, fileType }) {
-  const url = `${location.origin}/t/${shareKey}`;
-  const typeLabel = fileType === 'markdown' ? 'Markdown' : 'HTML';
-  const promptText = `请参考以下即页模板的风格、结构和排版，为我创作一个新的内容：
+async function showTemplateUseGuide({ id, title }) {
+  try {
+    const guide = await api(`/api/content-templates/${id}/use-guide`);
 
-模板链接：${url}
-
-要求：
-1. 访问模板链接，了解其整体视觉风格、布局和交互方式。
-2. 根据我提供的新主题或需求，创作一个结构相似、风格一致的内容。
-3. 输出结果应为 ${typeLabel} 格式。
-4. 保持简洁、专业，并适合在即页平台上展示。`;
-
-  dialogModal.alert({
-    title: `使用《${title}》`,
-    message: `
-      <div class="use-template-dialog">
-        <p class="use-template-tip">复制以下提示词发给 AI，让 AI 参考该模板风格生成内容。</p>
-        <div class="use-template-field">
-          <label>提示词</label>
-          <textarea id="use-template-prompt" class="use-template-textarea" readonly>${escapeHtml(promptText)}</textarea>
-          <button type="button" id="btn-copy-use-prompt" class="btn btn-small btn-primary">复制提示词</button>
+    dialogModal.alert({
+      title: `使用《${title}》`,
+      message: `
+        <div class="use-template-dialog">
+          <p class="use-template-tip">「使用模板」会创建一个可编辑文件到您的账户。该操作需通过 CLI 或 MCP 用 Token 完成，Web 端仅作引导。</p>
+          <div class="use-template-field">
+            <div class="use-template-field-header">
+              <label>CLI 命令</label>
+              <button type="button" id="btn-copy-cli" class="btn btn-small btn-copy-prompt">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2z"/><path d="M4 15V5a2 2 0 0 1 2-2h8"/></svg>
+                <span>复制</span>
+              </button>
+            </div>
+            <textarea id="use-template-cli" class="use-template-textarea" readonly>${escapeHtml(guide.cliWithName || guide.cli)}</textarea>
+          </div>
+          <div class="use-template-field">
+            <div class="use-template-field-header">
+              <label>MCP 工具</label>
+              <button type="button" id="btn-copy-mcp" class="btn btn-small btn-copy-prompt">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2z"/><path d="M4 15V5a2 2 0 0 1 2-2h8"/></svg>
+                <span>复制参数</span>
+              </button>
+            </div>
+            <textarea id="use-template-mcp" class="use-template-textarea" readonly>${escapeHtml(JSON.stringify(guide.mcp, null, 2))}</textarea>
+          </div>
+          <p class="use-template-hint">${escapeHtml(guide.hint || '')}</p>
         </div>
-        <p class="use-template-link">模板链接：<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a></p>
-      </div>
-    `,
-    confirmText: '关闭'
-  });
+      `,
+      confirmText: '关闭'
+    });
 
-  // 弹窗渲染后绑定复制事件
-  setTimeout(() => {
-    const btn = document.getElementById('btn-copy-use-prompt');
-    const ta = document.getElementById('use-template-prompt');
-    if (btn) {
-      btn.addEventListener('click', async () => {
-        const ok = await copyToClipboard(promptText);
-        toast(ok ? '提示词已复制' : '复制失败', ok ? 'success' : 'error');
-      });
-    }
-    if (ta) {
-      ta.addEventListener('focus', () => ta.select());
-    }
-  }, 0);
+    setTimeout(() => {
+      const cliBtn = document.getElementById('btn-copy-cli');
+      const mcpBtn = document.getElementById('btn-copy-mcp');
+      const cliTa = document.getElementById('use-template-cli');
+      const mcpTa = document.getElementById('use-template-mcp');
+      if (cliBtn && cliTa) {
+        cliBtn.addEventListener('click', async () => {
+          const ok = await copyToClipboard(cliTa.value);
+          toast(ok ? 'CLI 命令已复制' : '复制失败', ok ? 'success' : 'error');
+        });
+        cliTa.addEventListener('focus', () => cliTa.select());
+      }
+      if (mcpBtn && mcpTa) {
+        mcpBtn.addEventListener('click', async () => {
+          const ok = await copyToClipboard(mcpTa.value);
+          toast(ok ? 'MCP 参数已复制' : '复制失败', ok ? 'success' : 'error');
+        });
+        mcpTa.addEventListener('focus', () => mcpTa.select());
+      }
+    }, 0);
+  } catch (err) {
+    toast(err.message || '获取使用引导失败', 'error');
+  }
 }
 
 function setupCardInteractions(grid, navigate) {
@@ -582,19 +597,7 @@ function setupCardInteractions(grid, navigate) {
       const act = btn.dataset.act;
       e.stopPropagation();
       if (act === 'use') {
-        if (!state.currentUser) {
-          toast('请先登录后使用模板', 'error');
-          return;
-        }
-        try {
-          const [shareData] = await Promise.all([
-            api(`/api/content-templates/${id}/share`, { method: 'POST' }),
-            api(`/api/content-templates/${id}/use`, { method: 'POST' }).catch(() => {}),
-          ]);
-          showUseTemplatePrompt({ title, shareKey: shareData.key, fileType: card.dataset.fileType });
-        } catch (err) {
-          toast(err.message || '获取模板链接失败', 'error');
-        }
+        await showTemplateUseGuide({ id, title });
         return;
       }
       if (act === 'copy') {
@@ -801,21 +804,9 @@ async function loadDetail(body, id, _navigate) {
     const iframe = body.querySelector('.market-detail-iframe');
     iframe.src = `/api/content-templates/market/${id}/preview-html`;
 
-    // 使用此模板
+    // 使用此模板：Web 端仅展示 CLI/MCP 引导，实际实例化需通过 Token 客户端完成
     body.querySelector('#detail-use-template').onclick = async () => {
-      if (!state.currentUser) {
-        toast('请先登录后使用模板', 'error');
-        return;
-      }
-      try {
-        const [shareData] = await Promise.all([
-          api(`/api/content-templates/${id}/share`, { method: 'POST' }),
-          api(`/api/content-templates/${id}/use`, { method: 'POST' }).catch(() => {}),
-        ]);
-        showUseTemplatePrompt({ title: meta.title, shareKey: shareData.key, fileType: meta.file_type });
-      } catch (e) {
-        toast(e.message || '获取模板链接失败', 'error');
-      }
+      await showTemplateUseGuide({ id, title: meta.title });
     };
 
     // 收藏（toggle）

@@ -8,7 +8,7 @@
 
 ## 0. TL;DR（一句话方案）
 
-在即页现有的「**Skill 编排 → MCP 工具 → REST/DB 沉淀**」三层插件位上，**以 Skill（SKILL.md）为主载体扩展内容生产纵深**，第一优先落地 `jpage-presentation`（reveal.js 幻灯片，走 Bundle 模式）；把 `jpage-chart`（与 Mermaid 重叠）和 Phase 3 的外部市场对接列为「暂缓」；其余 Skill（editorial / clone-ui）作为模板与 Skill 双轨增量。
+在即页现有的「**Skill 编排 → MCP 工具 → REST/DB 沉淀**」三层插件位上，**以 Skill（SKILL.md）为主载体扩展内容生产纵深**。当前已将 `jpage-upload`、`jpage-presentation`、`jpage-content-template` 合并为统一 `jpage` Skill；后续新增能力（editorial / clone-ui）作为该 Skill 的章节或模板双轨增量。`jpage-chart`（与 Mermaid 重叠）和 Phase 3 的外部市场对接列为「暂缓」。
 
 报告整体方向正确，但有三处技术判断需修正，本方案已据此调整。
 
@@ -86,13 +86,13 @@ Phase 1「1-2 周」含 3-5 套 reveal.js 主题——reveal.js 主题是 **30+ 
 
 ### 2.2 Skill 间协作：单一上传中枢
 
-所有生产型 Skill **统一复用 `jpage-upload` 的上传能力**，不各自实现：
+所有生产型能力**统一复用 `jpage` Skill 中的上传中枢**，不各自实现：
 
 ```
 用户："做个 Q3 汇报 PPT"
   │
   ▼
-jpage-presentation（编排：规划结构 → 生成 reveal.js HTML → 组装 ZIP）
+jpage Skill（编排：规划结构 → 生成 reveal.js HTML → 组装 ZIP）
   │  复用
   ▼
 upload_file（上传 ZIP → 自动判 bundle → 返回 /s/:key）
@@ -119,30 +119,26 @@ Skill 之间不直接调用，而是**通过共同的工具层间接协作**。�
 
 ```
 skills/
-├── jpage-upload/               # 现有：上传中枢（所有生产型 Skill 的依赖）
-├── jpage-content-template/     # 现有：风格顾问（查模板市场仿风格）
-├── jpage-presentation/         # ⭐ Phase 1：reveal.js 幻灯片（Bundle 模式）
-├── jpage-editorial/            # Phase 2：编辑风格内容（html-everything 启发）
-└── jpage-clone-ui/             # Phase 2：UI 风格克隆（santowilem 启发，限制单文件输出）
+└── jpage/                      # 统一技能：上传中枢 + 内容生成 + 幻灯片 + 模板市场
+    ├── SKILL.md                # 主技能文档
+    └── assets/                 # reveal.js 引擎、主题、插件
 ```
 
 **砍掉 `jpage-chart`**（与 Mermaid + dashboard 模板重叠）。
 
 ### 3.1 各 Skill 职责与触发词
 
-| Skill | 职责 | 触发词 | 依赖 | 落地阶段 |
-|---|---|---|---|---|
-| jpage-upload | 生成内容并上传 | "上传到即页""生成链接" | 无 | 已有 |
-| jpage-content-template | 查模板市场仿风格 | "参照模板""用 XX 风格" | upload | 已有 |
-| **jpage-presentation** | 生成 reveal.js 幻灯片（Bundle） | "生成 PPT""做幻灯片""演示文稿" | upload | **Phase 1** |
-| jpage-editorial | 编辑/杂志风格排版 | "编辑风格""杂志排版""新闻稿" | upload | Phase 2 |
-| jpage-clone-ui | 克隆网站/UI 风格 | "克隆这个网站""参考这个风格" | upload | Phase 2 |
+| 能力 | 职责 | 触发词 | 落地阶段 |
+|---|---|---|---|
+| **jpage（统一 Skill）** | 上传、生成 HTML/Markdown、reveal.js 幻灯片、查模板市场仿风格 | "上传到即页""生成链接""生成 PPT""参照模板" | 已完成 |
+| editorial（Skill 章节或独立指令） | 编辑/杂志风格排版 | "编辑风格""杂志排版""新闻稿" | Phase 2 |
+| clone-ui（Skill 章节或独立指令） | 克隆网站/UI 风格 | "克隆这个网站""参考这个风格" | Phase 2 |
 
 ---
 
-## 4. Phase 1 详细设计：jpage-presentation
+## 4. Phase 1 详细设计：jpage Skill 中的幻灯片能力
 
-这是本轮最高优先级，设计要落到可执行颗粒度。
+这是本轮最高优先级，设计要落到可执行颗粒度。该能力已并入统一 `jpage` Skill。
 
 ### 4.1 工作流（Bundle 模式）
 
@@ -227,14 +223,13 @@ reveal.js 主题 = 30+ CSS 变量。四套主题的差异化全靠调这些变�
 
 **工时如实标注**：每套主题（调色 + 排版 + 至少 3 种版式验证）≈ 1 天，四套 ≈ 4 天纯设计。
 
-### 4.4 jpage-presentation/SKILL.md 骨架
+### 4.4 jpage Skill 中幻灯片章节骨架
 
 ```markdown
 ---
-name: jpage-presentation
-description: 当用户要"生成 PPT""做幻灯片""演示文稿"时，生成基于 reveal.js
-  的自包含幻灯片网站包并上传到即页，返回分享链接。支持商务/学术/创意/极简
-  四套主题。
+name: jpage
+description: 即页统一技能：生成 HTML/Markdown 内容、制作 reveal.js 幻灯片、
+  使用内容模板市场风格、上传到即页并管理文件。
 version: 1.0.0
 author: jpage
 ---
@@ -271,16 +266,16 @@ author: jpage
 - 纯 MCP：upload_file(name="deck.zip", content=<base64>)（体积大时慢）
 
 # 复用
-- 上传环节统一走 jpage-upload 的 upload_file 工具，不另造
+- 上传环节统一走 jpage Skill 中的 upload_file 工具，不另造
 ```
 
 ### 4.5 Phase 1 改动清单（审阅用）
 
 | 文件 | 改动 | 类型 |
 |---|---|---|
-| `skills/jpage-presentation/SKILL.md` | 新增 | Skill |
-| `skills/jpage-presentation/assets/themes/*.css` | 新增 4 套主题 | 资源（随 Skill ZIP 下发） |
-| `skills/jpage-presentation/scripts/scaffold.js` | 新增结构脚手架（可选，复用 revealjs-skill 思路） | 脚本 |
+| `skills/jpage/SKILL.md` | 新增 / 合并 | Skill |
+| `skills/jpage/assets/themes/*.css` | 新增 4 套主题 | 资源（随 Skill ZIP 下发） |
+| `skills/jpage/assets/reveal.js` | reveal.js 引擎 | 资源 |
 | `migrations/013_add_presentation_scene.js` | content_templates 的 scene 预置 'presentation' 样例 | migration（可选） |
 | 预览页前端 | 加「新窗口打开」按钮（iframe 键盘兜底） | 小改（可选，Phase 1.5） |
 | 后端 routes/lib | **零改动** | — |
@@ -293,21 +288,21 @@ author: jpage
 
 Phase 1 验证「Bundle Skill + 模板双轨」模式跑通后，Phase 2 按同模式增量。
 
-### 5.1 jpage-editorial（编辑风格）
+### 5.1 editorial（编辑风格）
 
 **启发**：iharnoor/html-everything（Archivo Black 标题 + Inter Tight 正文 + JetBrains Mono 数字）。
 
 **落地选择**：**双轨**——
 - 渲染模板 `templates/editorial.html`（第 5 套 Markdown 渲染模板，用户上传 MD 时可选）
-- Skill `jpage-editorial`（编排：任意输入 → 编辑风格 HTML → 上传）
+- `jpage` Skill 新增「编辑风格」章节（编排：任意输入 → 编辑风格 HTML → 上传）
 
 **改动**：
 - `templates/editorial.html` 新增（注意：当前 `lib/templates.js` 的 `loadTemplates()` 自动扫描 `templates/*.html`，加文件即生效）
 - `BUILTIN_TEMPLATE_THEMES` 加一行映射
-- `skills/jpage-editorial/SKILL.md` 新增
+- `skills/jpage/SKILL.md` 新增 editorial 章节
 - 字体策略：Google Fonts CDN（编辑风格强依赖特定字体），或降级系统字体栈。**注意**：这破坏离线自包含，需在 SKILL.md 注明权衡。
 
-### 5.2 jpage-clone-ui（UI 风格克隆）
+### 5.2 clone-ui（UI 风格克隆）
 
 **启发**：santowilem/skills 的 7 阶段反幻觉工作流。
 
@@ -316,7 +311,7 @@ Phase 1 验证「Bundle Skill + 模板双轨」模式跑通后，Phase 2 按同�
 - 原版依赖 Playwright 截图对比 → 即页运行环境无 Playwright。**移除验证阶段**，降级为「AI 自检 + 用户反馈迭代」。
 - 原版的「学习系统」（lessons log）→ 简化为 Skill 内的「风格特征清单」。
 
-**落地**：纯 Skill（`skills/jpage-clone-ui/SKILL.md`），零后端改动。输出单文件 HTML 走 `upload_file`。
+**落地**：在 `skills/jpage/SKILL.md` 中新增 clone-ui 章节，零后端改动。输出单文件 HTML 走 `upload_file`。
 
 ---
 
@@ -340,7 +335,7 @@ Phase 1 验证「Bundle Skill + 模板双轨」模式跑通后，Phase 2 按同�
 |---|---|---|
 | 验证 Bundle 渲染 reveal.js | 0.5 天 | 用一个手写 reveal.js ZIP 走 `/api/files/upload`，确认 `<base>` 注入 + 资源加载正常 |
 | 4 套 reveal.js 主题 CSS | 4 天 | **含 UI 设计**：商务/学术/创意/极简，CSS 变量驱动 |
-| `jpage-presentation` SKILL.md | 1 天 | 触发词 + Bundle 工作流 + 上传方式 + iframe 注意事项 |
+| `jpage` Skill SKILL.md（含幻灯片、模板市场、上传章节） | 1 天 | 触发词 + Bundle 工作流 + 上传方式 + iframe 注意事项 |
 | presentation 场景模板预置 | 1 天 | scene 数组加项 + 1-2 个内置样例 |
 | 预览页「新窗口打开」按钮 | 0.5 天 | iframe 键盘兜底（可选，Phase 1.5） |
 | 端到端测试 | 1.5 天 | 4 主题 × MCP/curl 两通道 |
@@ -350,8 +345,8 @@ Phase 1 验证「Bundle Skill + 模板双轨」模式跑通后，Phase 2 按同�
 | 任务 | 工时 |
 |---|---|
 | `templates/editorial.html` + 主题映射 | 2 天 |
-| `jpage-editorial` SKILL.md | 1 天 |
-| `jpage-clone-ui` SKILL.md（纯指令，限单文件输出） | 2 天 |
+| `jpage` Skill 新增 editorial 章节 | 1 天 |
+| `jpage` Skill 新增 clone-ui 章节（纯指令，限单文件输出） | 2 天 |
 | 扩充内容模板至 15+（覆盖新 scene） | 3 天 |
 | 文档更新（README、CLAUDE.md、docs/api.md） | 1 天 |
 

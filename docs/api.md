@@ -386,9 +386,9 @@ curl -b jpage.sid http://localhost:8858/api/skills
 {
   "skills": [
     {
-      "name": "jpage-upload",
-      "title": "jpage-upload",
-      "description": "将 HTML / Markdown 字符串上传到本地 jpage 服务…",
+      "name": "jpage",
+      "title": "jpage",
+      "description": "即页统一技能：生成 HTML / Markdown 内容、制作幻灯片、使用模板市场、上传文件…",
       "version": "",
       "author": "",
       "fileCount": 1,
@@ -401,7 +401,7 @@ curl -b jpage.sid http://localhost:8858/api/skills
 ### `GET /api/skills/:name`
 
 ```bash
-curl -b jpage.sid http://localhost:8858/api/skills/jpage-upload
+curl -b jpage.sid http://localhost:8858/api/skills/jpage
 ```
 
 返回：`{name, title, description, version, author, fileCount, totalSize, files: [...], body: "<SKILL.md 正文 markdown>"}`
@@ -409,10 +409,10 @@ curl -b jpage.sid http://localhost:8858/api/skills/jpage-upload
 ### `GET /api/skills/:name/download`
 
 ```bash
-curl -b jpage.sid -OJ http://localhost:8858/api/skills/jpage-upload/download
+curl -b jpage.sid -OJ http://localhost:8858/api/skills/jpage/download
 ```
 
-下载 `jpage-upload.zip`，解压后是完整的 skill 目录（顶层目录名为 skill 名），可直接复制到 `~/.claude/skills/`。
+下载 `jpage.zip`，解压后是完整的 skill 目录（顶层目录名为 skill 名），可直接复制到 `~/.claude/skills/`。
 
 ---
 

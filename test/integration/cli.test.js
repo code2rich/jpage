@@ -255,17 +255,17 @@ test('CLI skills: ls / get / download', async () => {
   const lsS = makeSinks();
   await run(['skills', 'ls', '--token', token], ctx(lsS));
   assert.strictEqual(lsS.code(), 0);
-  assert.match(lsS.out(), /jpage-upload/);
+  assert.match(lsS.out(), /jpage/);
 
   const getS = makeSinks();
-  await run(['skills', 'get', 'jpage-upload', '--token', token], ctx(getS));
+  await run(['skills', 'get', 'jpage', '--token', token], ctx(getS));
   assert.strictEqual(getS.code(), 0);
-  assert.match(getS.out(), /jpage-upload/);
+  assert.match(getS.out(), /jpage/);
 
   // download：写到 env.dataDir，避免污染仓库
   const outFile = path.join(env.dataDir, 'skill.zip');
   const dlS = makeSinks();
-  await run(['skills', 'download', 'jpage-upload', '--out', outFile, '--token', token], ctx(dlS));
+  await run(['skills', 'download', 'jpage', '--out', outFile, '--token', token], ctx(dlS));
   assert.strictEqual(dlS.code(), 0);
   assert.match(dlS.out(), /已下载/);
   assert.ok(fs.existsSync(outFile));

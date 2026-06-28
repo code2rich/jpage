@@ -4608,11 +4608,26 @@ html:not(.light) .btn-danger-soft {
   line-height: 1.5;
 }
 .use-template-field { display: flex; flex-direction: column; gap: 8px; }
-.use-template-field label {
+.use-template-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.use-template-field-header label {
   font-size: 12px;
   font-weight: 600;
   color: var(--text);
+  margin: 0;
 }
+.btn-copy-prompt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+}
+.btn-copy-prompt svg { width: 14px; height: 14px; }
 .use-template-textarea {
   width: 100%;
   min-height: 160px;

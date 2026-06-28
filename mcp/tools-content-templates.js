@@ -1,4 +1,4 @@
-// MCP 内容模板类工具：list_content_templates / get_content_template。
+// MCP 内容模板类工具：list_content_templates / get_content_template / instantiate_content_template。
 //
 // 重构后调用市场公开端点（/market），保证只返回已审核且展示的市场内容。
 // 旧 scene 参数保留为兼容入口（映射到 category）；新逻辑以 category 为主。
@@ -6,7 +6,7 @@
 const { z } = require('zod');
 const { textResult } = require('./util');
 
-function registerContentTemplateTools(server, { api }) {
+function registerContentTemplateTools(server, { api, port, mcpIp, protocol }) {
   // --- list_content_templates ---
   server.registerTool(
     'list_content_templates',
@@ -56,13 +56,39 @@ function registerContentTemplateTools(server, { api }) {
     },
     async ({ id }) => {
       const data = await api.get(`/api/content-templates/market/${id}/preview`);
-      await api.post(`/api/content-templates/${id}/use`).catch(() => {});
       return textResult({
         id: data.id,
         title: data.title,
         file_type: data.file_type,
         content: data.content,
         hint: '请学习此样例的风格和结构，生成风格一致但内容全新的作品。不要复制样例的具体文字内容。生成 HTML 时保持单一自包含文件（CSS/JS 内联、图片 data URI 或在线 URL），不要拆成多文件再打包。',
+      });
+    }
+  );
+
+  // --- instantiate_content_template ---
+  server.registerTool(
+    'instantiate_content_template',
+    {
+      title: 'Instantiate Content Template',
+      description: '使用指定内容模板在当前 Token 所属用户下创建一个新文件。调用会消耗用户存储空间，并记录模板使用热度。',
+      inputSchema: {
+        id: z.number().int().positive().describe('模板 ID'),
+        originalName: z.string().optional().describe('实例化后的文件名，默认使用模板标题'),
+        isPublic: z.boolean().optional().describe('是否设为公开文件，默认 false'),
+      },
+    },
+    async ({ id, originalName, isPublic }) => {
+      const data = await api.post(`/api/content-templates/${id}/instantiate`, {
+        originalName,
+        isPublic,
+      });
+      return textResult({
+        success: true,
+        fileId: data.fileId,
+        templateId: data.templateId,
+        url: `${protocol}://${mcpIp}:${port}/s/${data.shareKey || data.fileId}`,
+        hint: '文件已创建到您的文件列表，可直接编辑或分享。',
       });
     }
   );

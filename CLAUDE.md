@@ -280,7 +280,7 @@ docker-compose.yml       # port 8858, ./data:/app/data volume
 .env.example             # 环境变量模板
 .mcp.json                # Claude Code / Desktop MCP 客户端配置示例
 docs/api.md              # REST API 完整参考
-skills/jpage-upload/     # Claude Code / Desktop skill
+skills/jpage/            # Claude Code / Desktop 统一技能
   SKILL.md
 public/
   index.html             # 两个 <template>: home + preview

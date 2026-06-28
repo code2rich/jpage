@@ -209,7 +209,7 @@ jpage/
 │   ├── api.md          # Complete REST API reference
 │   └── design/         # Design documents
 ├── skills/
-│   └── jpage-upload/   # Claude Code / Desktop skill
+│   └── jpage/          # Claude Code / Desktop unified skill: upload, generate content, presentations, templates
 │       └── SKILL.md
 ├── test/               # Unit + integration tests (node:test + supertest) + e2e harness
 ├── data/               # SQLite databases, uploaded files & sessions (auto-created)
@@ -364,10 +364,10 @@ MCP_TOKEN=your-secret-token
 
 ### Companion Skill
 
-The repo includes `skills/jpage-upload/SKILL.md`, a ready-to-use skill for Claude Code / Desktop. Once installed, AI-generated HTML, Markdown, reports, and visualizations are automatically uploaded to jpage with a preview link.
+The repo includes `skills/jpage/SKILL.md`, a ready-to-use skill for Claude Code / Desktop. Once installed, AI-generated HTML, Markdown, reports, visualizations, presentations, and template-market-styled content are automatically uploaded to jpage with a preview link.
 
 ```bash
-ln -s "$(pwd)/skills/jpage-upload" ~/.claude/skills/jpage-upload
+ln -s "$(pwd)/skills/jpage" ~/.claude/skills/jpage
 ```
 
 ### Web Management

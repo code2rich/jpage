@@ -9,7 +9,7 @@
       "cmds": ["即页", "jpage"]
     },
     {
-      "code": "jpage-upload",
+      "code": "jpage",
       "explain": "拖拽上传到即页 · 生成分享链接",
       "cmds": [
         {

@@ -80,7 +80,7 @@ CLI 需要一个 token（\`jp_\` 用户 token 或全局 \`MCP_TOKEN\`）。优�
 | \`rm <id> [--yes]\` | 删除 |
 | \`star <id>\` / \`unstar <id>\` | 收藏 / 取消收藏 |
 | \`tags <id> [add|set|clear] [名,名,...]\` | 标签（追加/替换/清空） |
-| \`skills ls | get <名> | download <名>\` | Skill 包 |
+| \`skills ls | get <名> | download <名>\` | Skill 包（统一 \`jpage\` Skill） |
 | \`whoami\` | 校验 token 是否有效 |
 | \`update [--check] [--registry <url>]\` | 自更新到最新版（**不需 token**） |
 

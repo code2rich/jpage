@@ -1,6 +1,6 @@
 // Skills 集成测试：列表 / 详情 / 下载 zip / mcp/config 结构 / cli 指南。全部 requireAuth。
 // 挂载点 /api（/skills、/skills/:name、/skills/:name/download、/mcp/config、/cli/guide）。
-// 依赖仓库内 skills/jpage-upload/SKILL.md（内置 skill）。
+// 依赖仓库内 skills/jpage/SKILL.md（内置 skill）。
 const test = require('node:test');
 const assert = require('node:assert');
 const request = require('supertest');
@@ -34,19 +34,19 @@ test('未登录 GET /api/skills → 401', async () => {
 });
 
 // --- 列表 ---
-test('GET /api/skills → 200，含内置 jpage-upload skill', async () => {
+test('GET /api/skills → 200，含内置 jpage skill', async () => {
   const res = await agent.get('/api/skills');
   assert.strictEqual(res.status, 200);
   assert.ok(Array.isArray(res.body.skills));
-  // 仓库内置 jpage-upload skill 应被发现
-  assert.ok(res.body.skills.some(s => s.name === 'jpage-upload'), '应含 jpage-upload skill');
+  // 仓库内置 jpage skill 应被发现
+  assert.ok(res.body.skills.some(s => s.name === 'jpage'), '应含 jpage skill');
 });
 
 // --- 详情 ---
-test('GET /api/skills/jpage-upload → 200', async () => {
-  const res = await agent.get('/api/skills/jpage-upload');
+test('GET /api/skills/jpage → 200', async () => {
+  const res = await agent.get('/api/skills/jpage');
   assert.strictEqual(res.status, 200);
-  assert.strictEqual(res.body.name, 'jpage-upload');
+  assert.strictEqual(res.body.name, 'jpage');
 });
 
 test('GET /api/skills/不存在 → 404', async () => {
@@ -55,8 +55,8 @@ test('GET /api/skills/不存在 → 404', async () => {
 });
 
 // --- 下载 ---
-test('GET /api/skills/jpage-upload/download → 200，application/zip', async () => {
-  const res = await agent.get('/api/skills/jpage-upload/download').buffer(true).parse(binaryParser);
+test('GET /api/skills/jpage/download → 200，application/zip', async () => {
+  const res = await agent.get('/api/skills/jpage/download').buffer(true).parse(binaryParser);
   assert.strictEqual(res.status, 200);
   assert.match(res.headers['content-type'] || '', /application\/zip/);
   // Content-Disposition 是附件

@@ -3,6 +3,7 @@
 //
 // 注册顺序 = 原文件顺序（list/upload/content/delete/rename/url/versions/tags/star/
 // categories/resources/content-templates）。顺序对 MCP 协议无影响，仅为对照方便。
+// 当前共 18 tools + 2 resources。
 
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const pkgVersion = require('../package.json').version;

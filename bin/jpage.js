@@ -30,6 +30,7 @@ const COMMANDS = {
   unstar: () => require('./commands/star'),
   tags: () => require('./commands/tags'),
   skills: () => require('./commands/skills'),
+  template: () => require('./commands/template'),
   whoami: () => require('./commands/whoami'),
   update: () => require('./commands/update'),
 };
@@ -54,6 +55,11 @@ const HELP = `jpage —— 即页命令行
   tags <id> [add|set|clear] [名,名,...]        查看 / 追加 / 替换 / 清空标签
   skills ls | get <名> | download <名> [--out 文件]
                                               列出 / 查看 / 下载 Skill
+  template ls [--category <slug> --file-type html|markdown --kw <词> --limit N]
+                                              浏览内容模板市场
+  template get <id>                           查看模板完整内容
+  template use <id> [--name <文件名>] [--public]
+                                              使用模板创建文件
   whoami                                      校验 token 是否有效
   update [--registry <url>] [--check]         自更新到最新版（不需 token）
 
@@ -72,7 +78,8 @@ base  优先级：--base  > JPAGE_BASE  环境变量 > 默认 http://localhost:8
   jpage ls --kw 季度 --limit 5
   jpage cat 8
   jpage tags 8 add 季度,财报
-  jpage skills download jpage-upload
+  jpage skills download jpage
+  jpage template use 12 --name 季度汇报.html --public
 
 详细文档：https://github.com/code2rich/jpage`;
 
