@@ -149,7 +149,7 @@ async function run() {
   check('GET /api/categories → 200', r.status === 200, `status=${r.status}`);
 
   // 14. 静态资源缓存头（优化后应为长缓存）
-  r = await req('GET', '/css/style.css?v=1.5.0');
+  r = await req('GET', '/css/style.css?v=1.6.0');
   check('GET /css/style.css → 200', r.status === 200, `status=${r.status}`);
   const cssCache = r.headers['cache-control'] || '';
   console.log(`    (css cache-control: "${cssCache}")`);

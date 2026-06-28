@@ -85,7 +85,7 @@ async function run() {
   console.log('2) 文件列表延迟 (ms):', stats(listSamples), '\n');
 
   // --- 3) 静态资源缓存头 ---
-  r = await req('GET', '/css/style.css?v=1.5.0');
+  r = await req('GET', '/css/style.css?v=1.6.0');
   console.log('3) 静态资源 Cache-Control:', JSON.stringify(r.headers['cache-control']));
   console.log('   包含 immutable:', (r.headers['cache-control'] || '').includes('immutable'), '\n');
 
