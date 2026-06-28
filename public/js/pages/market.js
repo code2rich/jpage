@@ -102,7 +102,11 @@ export function renderMarket(container, hash, navigate) {
     body.innerHTML = '<div class="ct-empty">上架入口已移至文件列表。请在首页文件列表对某个文件点「⋯ → 上架到市场」。</div>';
     return;
   }
-  if (path === '/market/my')     { renderMine(container, navigate); return; }
+  if (path === '/market/my') {
+    if (!state.currentUser) { navigate('/login'); return; }
+    renderMine(container, navigate);
+    return;
+  }
   if (path === '/market/admin') {
     if (!state.currentUser || state.currentUser.role !== 'admin') {
       toast('需要管理员权限', 'error');
@@ -121,6 +125,7 @@ export function renderMarket(container, hash, navigate) {
 // ============================================================
 
 function renderMarketShell(container, { active, navigate }) {
+  const isLoggedIn = !!state.currentUser;
   const isAdmin = state.currentUser && state.currentUser.role === 'admin';
   const go = typeof navigate === 'function' ? navigate : (path) => { location.hash = path; };
   container.innerHTML = `
@@ -134,13 +139,14 @@ function renderMarketShell(container, { active, navigate }) {
           <a href="#/market" class="${active === 'home' ? 'active' : ''}">首页</a>
           <div id="mw-side-cats"></div>
         </nav>
+        ${isLoggedIn ? `
         <div class="mw-side-section">
           <div class="mw-side-title">管理</div>
           <a href="#/market/my" class="${active === 'my' ? 'active' : ''}">我的上架</a>
           ${isAdmin ? '<a href="#/market/admin" class="' + (active === 'admin' ? 'active admin-only' : 'admin-only') + '">市场管理</a>' : ''}
-        </div>
+        </div>` : ''}
         <div class="mw-side-footer">
-          <a href="#/">返回我的页面</a>
+          <a href="#/">${isLoggedIn ? '返回我的页面' : '返回首页'}</a>
         </div>
       </aside>
       <main class="mw-main" id="market-body"></main>
@@ -766,6 +772,21 @@ async function loadDetail(body, id, _navigate) {
     const cat = meta.category_name ? `<span class="ct-badge ct-badge-scene">${escapeHtml(meta.category_name)}</span>` : '';
     const featured = meta.featured ? '<span class="ct-badge ct-badge-featured">精选</span>' : '';
 
+    const isLoggedIn = !!state.currentUser;
+    const loggedInActions = isLoggedIn ? `
+      <button class="mw-icon-btn" id="detail-star" data-tip="收藏" aria-label="收藏" data-starred="${meta.starred ? '1' : '0'}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 17.3 5.8 20.9l1.6-6.8L2.2 8.9l6.9-.6L12 2z"/></svg>
+      </button>
+      <button class="mw-icon-btn" id="detail-download" data-tip="下载" aria-label="下载">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a1 1 0 011 1v9.6l3.3-3.3a1 1 0 011.4 1.4l-5 5a1 1 0 01-1.4 0l-5-5a1 1 0 111.4-1.4L11 13.6V4a1 1 0 011-1zM5 19a1 1 0 011-1h12a1 1 0 110 2H6a1 1 0 01-1-1z"/></svg>
+      </button>
+      <button class="mw-icon-btn" id="detail-copy-url" data-tip="复制公开链接" aria-label="复制公开链接">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.6 13.4a1 1 0 010-1.4l3-3a1 1 0 011.4 1.4l-1.3 1.3 1.4 1.4 1.3-1.3a3 3 0 10-4.2-4.2l-3 3a3 3 0 000 4.2 1 1 0 001.4-1.4zM13.4 10.6a1 1 0 010 1.4l-3 3a1 1 0 01-1.4-1.4l1.3-1.3-1.4-1.4-1.3 1.3a3 3 0 104.2 4.2l3-3a1 1 0 000-1.4 1 1 0 00-1.4 0z"/></svg>
+      </button>
+      <button class="mw-icon-btn" id="detail-view-public" data-tip="查看公链" aria-label="查看公链">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
+      </button>` : '';
+
     body.innerHTML = `
       <div class="market-detail">
         <div class="market-detail-preview">
@@ -784,18 +805,7 @@ async function loadDetail(body, id, _navigate) {
           </div>
           <div class="market-detail-actions mw-icon-actions">
             <button class="btn btn-small btn-primary" id="detail-use-template">使用此模板</button>
-            <button class="mw-icon-btn" id="detail-star" data-tip="收藏" aria-label="收藏" data-starred="${meta.starred ? '1' : '0'}">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 17.3 5.8 20.9l1.6-6.8L2.2 8.9l6.9-.6L12 2z"/></svg>
-            </button>
-            <button class="mw-icon-btn" id="detail-download" data-tip="下载" aria-label="下载">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a1 1 0 011 1v9.6l3.3-3.3a1 1 0 011.4 1.4l-5 5a1 1 0 01-1.4 0l-5-5a1 1 0 111.4-1.4L11 13.6V4a1 1 0 011-1zM5 19a1 1 0 011-1h12a1 1 0 110 2H6a1 1 0 01-1-1z"/></svg>
-            </button>
-            <button class="mw-icon-btn" id="detail-copy-url" data-tip="复制公开链接" aria-label="复制公开链接">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.6 13.4a1 1 0 010-1.4l3-3a1 1 0 011.4 1.4l-1.3 1.3 1.4 1.4 1.3-1.3a3 3 0 10-4.2-4.2l-3 3a3 3 0 000 4.2 1 1 0 001.4-1.4zM13.4 10.6a1 1 0 010 1.4l-3 3a1 1 0 01-1.4-1.4l1.3-1.3-1.4-1.4-1.3 1.3a3 3 0 104.2 4.2l3-3a1 1 0 000-1.4 1 1 0 00-1.4 0z"/></svg>
-            </button>
-            <button class="mw-icon-btn" id="detail-view-public" data-tip="查看公链" aria-label="查看公链">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
-            </button>
+            ${loggedInActions}
           </div>
         </aside>
       </div>
@@ -809,53 +819,64 @@ async function loadDetail(body, id, _navigate) {
       await showTemplateUseGuide({ id, title: meta.title });
     };
 
-    // 收藏（toggle）
-    body.querySelector('#detail-star').onclick = async () => {
-      try {
-        const data = await api(`/api/content-templates/${id}/star`, { method: 'POST' });
-        const btn = body.querySelector('#detail-star');
-        btn.dataset.starred = data.starred ? '1' : '0';
-        const prefix = meta.title ? `《${meta.title}》` : '该模板';
-        toast(data.starred ? `已收藏 ${prefix}` : `已取消收藏 ${prefix}`);
-      } catch (e) {
-        toast(e.status === 401 ? '请先登录' : (e.message || '操作失败'), 'error');
-      }
-    };
+    // 收藏（toggle，仅登录用户可见）
+    const starBtn = body.querySelector('#detail-star');
+    if (starBtn) {
+      starBtn.onclick = async () => {
+        try {
+          const data = await api(`/api/content-templates/${id}/star`, { method: 'POST' });
+          starBtn.dataset.starred = data.starred ? '1' : '0';
+          const prefix = meta.title ? `《${meta.title}》` : '该模板';
+          toast(data.starred ? `已收藏 ${prefix}` : `已取消收藏 ${prefix}`);
+        } catch (e) {
+          toast(e.status === 401 ? '请先登录' : (e.message || '操作失败'), 'error');
+        }
+      };
+    }
 
-    // 下载
-    body.querySelector('#detail-download').onclick = () => {
-      window.open(`/api/content-templates/${id}/download`, '_blank');
-    };
+    // 下载（仅登录用户可见）
+    const downloadBtn = body.querySelector('#detail-download');
+    if (downloadBtn) {
+      downloadBtn.onclick = () => {
+        window.open(`/api/content-templates/${id}/download`, '_blank');
+      };
+    }
 
-    // 复制公开短链（首次生成，之后复用）
-    body.querySelector('#detail-copy-url').onclick = async () => {
-      try {
-        const data = await api(`/api/content-templates/${id}/share`, { method: 'POST' });
-        const url = `${location.origin}/t/${data.key}`;
-        const ok = await copyToClipboard(url);
-        toast(ok ? `已复制公开链接：${url}` : '复制失败，请手动复制', ok ? 'success' : 'error');
-      } catch (e) {
-        toast(e.message || '生成链接失败', 'error');
-      }
-    };
-
-    // 跳转：打开 /t/:key 公开页
-    body.querySelector('#detail-view-public').onclick = async () => {
-      try {
-        let key = meta.share_key;
-        if (!key) {
+    // 复制公开短链（仅登录用户可见）
+    const copyUrlBtn = body.querySelector('#detail-copy-url');
+    if (copyUrlBtn) {
+      copyUrlBtn.onclick = async () => {
+        try {
           const data = await api(`/api/content-templates/${id}/share`, { method: 'POST' });
-          key = data.key;
+          const url = `${location.origin}/t/${data.key}`;
+          const ok = await copyToClipboard(url);
+          toast(ok ? `已复制公开链接：${url}` : '复制失败，请手动复制', ok ? 'success' : 'error');
+        } catch (e) {
+          toast(e.message || '生成链接失败', 'error');
         }
-        if (key) {
-          window.open(`${location.origin}/t/${key}`, '_blank');
-        } else {
-          toast('未找到公开链接', 'error');
+      };
+    }
+
+    // 跳转：打开 /t/:key 公开页（仅登录用户可见）
+    const viewPublicBtn = body.querySelector('#detail-view-public');
+    if (viewPublicBtn) {
+      viewPublicBtn.onclick = async () => {
+        try {
+          let key = meta.share_key;
+          if (!key) {
+            const data = await api(`/api/content-templates/${id}/share`, { method: 'POST' });
+            key = data.key;
+          }
+          if (key) {
+            window.open(`${location.origin}/t/${key}`, '_blank');
+          } else {
+            toast('未找到公开链接', 'error');
+          }
+        } catch (e) {
+          toast(e.message || '打开公链失败', 'error');
         }
-      } catch (e) {
-        toast(e.message || '打开公链失败', 'error');
-      }
-    };
+      };
+    }
 
   } catch (e) {
     body.innerHTML = '<div class="ct-empty">加载失败或模板未上架</div>';
