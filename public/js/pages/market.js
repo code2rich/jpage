@@ -537,7 +537,7 @@ function createTemplateCard(t) {
     <p class="ct-card-desc">${escapeHtml(t.description || '').slice(0, 100)}</p>
     <div class="mw-card-author">${escapeHtml(t.uploader_name || '匿名创作者')}</div>
     <div class="ct-card-footer">
-      <span class="ct-use-count">${t.instantiation_count || 0} 次使用</span>
+      <span class="ct-use-count">${(t.use_count || 0) + (t.instantiation_count || 0)} 次使用</span>
     </div>
   </div>`;
 }
@@ -829,7 +829,7 @@ async function loadDetail(body, id, _navigate) {
           </div>
           ${meta.description ? `<p class="ct-desc">${escapeHtml(meta.description)}</p>` : ''}
           <div class="ct-meta-info">
-            作者：${escapeHtml(meta.uploader_name || '匿名')} · ${meta.instantiation_count || 0} 次使用 · ${relativeTime(meta.published_at || meta.created_at)}
+            作者：${escapeHtml(meta.uploader_name || '匿名')} · ${(meta.use_count || 0) + (meta.instantiation_count || 0)} 次使用 · ${relativeTime(meta.published_at || meta.created_at)}
           </div>
           <div class="market-detail-actions mw-icon-actions">
             <button class="btn btn-small btn-primary" id="detail-use-template">使用此模板</button>
@@ -1036,8 +1036,8 @@ function renderStarred(container, navigate) {
     <div class="market-section-header" style="margin-bottom:16px;">
       <h1 class="market-title">我的收藏</h1>
     </div>
-    <div id="starred-grid" class="market-grid"></div>
-    <div id="starred-load-more" class="market-load-more-wrap"></div>
+    <div id="starred-grid" class="ct-grid mw-grid"></div>
+    <div id="starred-load-more" class="mw-load-more-wrap"></div>
   `;
   starredState.page = 1;
   loadStarredList(body, navigate);
