@@ -515,6 +515,9 @@ function createTemplateCard(t) {
         <button type="button" class="mw-icon-btn" data-act="copy" data-tip="复制链接" aria-label="复制链接" ${!isLoggedIn ? 'hidden' : ''}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
         </button>
+        <button type="button" class="mw-icon-btn" data-act="star" data-tip="${t.starred ? '取消收藏' : '收藏'}" aria-label="${t.starred ? '取消收藏' : '收藏'}" data-starred="${t.starred ? '1' : '0'}" ${!isLoggedIn ? 'hidden' : ''}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 17.3 5.8 20.9l1.6-6.8L2.2 8.9l6.9-.6L12 2z"/></svg>
+        </button>
       </div>
       <div class="mw-card-actions">
         <button type="button" data-act="preview">查看详情</button>
@@ -624,6 +627,25 @@ function setupCardInteractions(grid, navigate) {
       if (act === 'preview') {
         try { sessionStorage.setItem('marketScrollY', String(window.scrollY)); } catch (_) {}
         navigate(`/market/${id}`);
+        return;
+      }
+      if (act === 'star') {
+        if (!state.currentUser) {
+          toast('请先登录后收藏', 'error');
+          return;
+        }
+        btn.classList.add('is-loading');
+        try {
+          const data = await api(`/api/content-templates/${id}/star`, { method: 'POST' });
+          btn.dataset.starred = data.starred ? '1' : '0';
+          btn.setAttribute('aria-label', data.starred ? '取消收藏' : '收藏');
+          btn.setAttribute('data-tip', data.starred ? '取消收藏' : '收藏');
+          toast(data.starred ? `已收藏《${title}》` : `已取消收藏《${title}》`);
+        } catch (err) {
+          toast(err.status === 401 ? '请先登录' : (err.message || '操作失败'), 'error');
+        } finally {
+          btn.classList.remove('is-loading');
+        }
         return;
       }
     }

@@ -15,6 +15,7 @@ const { generateStoredName, uploadLimiter } = require('./files/_shared');
 const { isFtsIndexable, indexFileContent } = require('../lib/fts');
 const { addUserStorage } = require('../lib/usage');
 const { renderTemplateContent } = require('../lib/render');
+const { marketListerLimiter, marketPreviewLimiter, marketBotFilter, marketRobotsTag } = require('../lib/market-guard');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -40,7 +41,7 @@ function parsePaging(req, defaultLimit = 12) {
 // ============================================================
 
 // 公开分类列表（仅启用分类）
-router.get('/categories', async (req, res) => {
+router.get('/categories', marketBotFilter, marketListerLimiter, marketRobotsTag, async (req, res) => {
   try {
     const rows = await dbAll(
       `SELECT id, slug, name, description FROM template_market_categories
@@ -53,8 +54,8 @@ router.get('/categories', async (req, res) => {
   }
 });
 
-// 市场首页列表（匿名）
-router.get('/market', async (req, res) => {
+// 市场首页列表（匿名，登录用户附带收藏状态）
+router.get('/market', loadSession, marketBotFilter, marketListerLimiter, marketRobotsTag, async (req, res) => {
   try {
     const { page, limit, offset } = parsePaging(req);
     const { category, keyword, fileType, sort } = req.query;
@@ -88,17 +89,21 @@ router.get('/market', async (req, res) => {
        LEFT JOIN users u ON ct.uploaded_by = u.id ${where}`,
       params
     );
+    const starSelect = req.userId
+      ? '(SELECT 1 FROM starred_templates st WHERE st.user_id = ? AND st.template_id = ct.id) AS starred'
+      : '0 AS starred';
     const templates = await dbAll(
       `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.use_count, ct.featured,
               ct.created_at, ct.published_at, ct.category_id, ct.share_key,
               c.slug AS category_slug, c.name AS category_name,
               u.username AS uploader_name,
-              (SELECT COUNT(*) FROM content_template_installs i WHERE i.template_id = ct.id) AS instantiation_count
+              (SELECT COUNT(*) FROM content_template_installs i WHERE i.template_id = ct.id) AS instantiation_count,
+              ${starSelect}
        FROM content_templates ct
        LEFT JOIN template_market_categories c ON ct.category_id = c.id
        LEFT JOIN users u ON ct.uploaded_by = u.id
        ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
+      req.userId ? [...params, req.userId, limit, offset] : [...params, limit, offset]
     );
     res.json({
       templates,
@@ -111,7 +116,7 @@ router.get('/market', async (req, res) => {
 });
 
 // 市场详情（匿名，仅 approved+visible）
-router.get('/market/:id', loadSession, async (req, res) => {
+router.get('/market/:id', loadSession, marketBotFilter, marketPreviewLimiter, marketRobotsTag, async (req, res) => {
   try {
     const t = await dbGet(
       `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.use_count, ct.featured,
@@ -140,7 +145,7 @@ router.get('/market/:id', loadSession, async (req, res) => {
 });
 
 // 市场预览内容（匿名，用于 iframe 缩略图/详情页）
-router.get('/market/:id/preview', async (req, res) => {
+router.get('/market/:id/preview', loadSession, marketBotFilter, marketPreviewLimiter, marketRobotsTag, async (req, res) => {
   try {
     const t = await dbGet(
       `SELECT ct.id, ct.title, ct.file_type, ct.content
@@ -157,7 +162,7 @@ router.get('/market/:id/preview', async (req, res) => {
 });
 
 // 市场预览 HTML（用于 iframe src，避免 srcdoc 继承父页严格 CSP 导致内联脚本被拦截）
-router.get('/market/:id/preview-html', async (req, res) => {
+router.get('/market/:id/preview-html', loadSession, marketBotFilter, marketPreviewLimiter, marketRobotsTag, async (req, res) => {
   try {
     const t = await dbGet(
       `SELECT ct.title, ct.file_type, ct.content
@@ -556,7 +561,7 @@ router.post('/:id/instantiate', uploadLimiter, requireAuth, requireTokenAuth, as
 
 // 公开端点：返回某模板的 CLI/MCP 使用引导命令，供 Web UI「使用此模板」按钮展示。
 // 匿名可访问，因为只是命令文本，不创建文件。
-router.get('/:id/use-guide', async (req, res) => {
+router.get('/:id/use-guide', loadSession, marketBotFilter, marketPreviewLimiter, marketRobotsTag, async (req, res) => {
   try {
     const t = await dbGet(
       `SELECT ct.id, ct.title, ct.file_type, ct.share_key

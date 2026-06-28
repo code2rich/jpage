@@ -654,4 +654,44 @@ test('短链：不存在的 key → 404', async () => {
   assert.strictEqual(res.status, 404);
 });
 
+// ============================================================
+// 市场反爬
+// ============================================================
+
+test('robots.txt 存在且禁止 /api/ 和 /mcp', async () => {
+  const res = await request(env.app).get('/robots.txt');
+  assert.strictEqual(res.status, 200);
+  assert.ok(res.text.includes('Disallow: /api/'));
+  assert.ok(res.text.includes('Disallow: /mcp'));
+});
+
+test('市场列表：空 User-Agent 视为 bot 拦截', async () => {
+  const res = await request(env.app)
+    .get('/api/content-templates/market')
+    .set('User-Agent', '');
+  assert.strictEqual(res.status, 403);
+});
+
+test('市场列表：常见爬虫 UA 被拦截', async () => {
+  const res = await request(env.app)
+    .get('/api/content-templates/market')
+    .set('User-Agent', 'python-requests/2.31.0');
+  assert.strictEqual(res.status, 403);
+});
+
+test('市场列表：登录用户绕过 bot 检测', async () => {
+  const res = await userAgent.get('/api/content-templates/market').set('User-Agent', 'python-requests/2.31.0');
+  assert.strictEqual(res.status, 200);
+});
+
+test('市场响应头含 X-Robots-Tag: noindex', async () => {
+  const submit = await userAgent.post('/api/content-templates').send({
+    title: '反爬响应头测试', fileType: 'html', categoryId: 2, content: '<p>x</p>',
+  });
+  await adminAgent.post(`/api/content-templates/${submit.body.id}/review`).send({ status: 'approved', visibility: 'visible' });
+  const res = await request(env.app).get('/api/content-templates/market');
+  assert.strictEqual(res.status, 200);
+  assert.ok((res.headers['x-robots-tag'] || '').includes('noindex'));
+});
+
 

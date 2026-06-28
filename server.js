@@ -163,6 +163,18 @@ app.get('/health', async (req, res) => {
   });
 });
 
+// --- robots.txt：引导爬虫不要直接抓取数据接口 ---
+app.get('/robots.txt', (req, res) => {
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.send(
+    'User-agent: *\n' +
+    'Disallow: /api/\n' +
+    'Disallow: /mcp\n' +
+    'Crawl-delay: 5\n' +
+    'Allow: /\n'
+  );
+});
+
 // --- 路由挂载 ---
 // 先挂载用量采集，使其位于所有 /api 请求之前；后续具体路由的鉴权会填充 req.userId。
 app.use('/api', recordUsage);
