@@ -103,7 +103,7 @@ router.get('/market', loadSession, marketBotFilter, marketListerLimiter, marketR
        LEFT JOIN template_market_categories c ON ct.category_id = c.id
        LEFT JOIN users u ON ct.uploaded_by = u.id
        ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
-      req.userId ? [...params, req.userId, limit, offset] : [...params, limit, offset]
+      req.userId ? [req.userId, ...params, limit, offset] : [...params, limit, offset]
     );
     res.json({
       templates,

@@ -149,6 +149,27 @@ test('市场搜索支持按创作者用户名查找', async () => {
   assert.ok(!empty.body.templates.some(t => t.id === id));
 });
 
+test('市场 fileType 筛选在登录态下生效', async () => {
+  const htmlSubmit = await userAgent.post('/api/content-templates').send({
+    title: 'HTML 筛选测试', fileType: 'html', categoryId: 2, content: SAMPLE_HTML,
+  });
+  const mdSubmit = await userAgent.post('/api/content-templates').send({
+    title: 'MD 筛选测试', fileType: 'markdown', categoryId: 2, content: '# Markdown',
+  });
+  await adminAgent.post(`/api/content-templates/${htmlSubmit.body.id}/review`).send({ status: 'approved', visibility: 'visible' });
+  await adminAgent.post(`/api/content-templates/${mdSubmit.body.id}/review`).send({ status: 'approved', visibility: 'visible' });
+
+  // 登录用户筛选 html，应只命中 html 模板
+  const htmlRes = await userAgent.get('/api/content-templates/market?fileType=html');
+  assert.ok(htmlRes.body.templates.some(t => t.id === htmlSubmit.body.id), 'html 筛选应命中 html 模板');
+  assert.ok(!htmlRes.body.templates.some(t => t.id === mdSubmit.body.id), 'html 筛选不应命中 md 模板');
+
+  // 登录用户筛选 markdown，应只命中 md 模板
+  const mdRes = await userAgent.get('/api/content-templates/market?fileType=markdown');
+  assert.ok(mdRes.body.templates.some(t => t.id === mdSubmit.body.id), 'markdown 筛选应命中 md 模板');
+  assert.ok(!mdRes.body.templates.some(t => t.id === htmlSubmit.body.id), 'markdown 筛选不应命中 html 模板');
+});
+
 test('管理员通过但隐藏 → 不出现在市场', async () => {
   const submit = await userAgent.post('/api/content-templates').send({
     title: '通过但隐藏', fileType: 'html', categoryId: 1, content: '<p>hidden</p>',
