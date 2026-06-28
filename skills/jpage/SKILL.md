@@ -21,6 +21,17 @@ author: jpage
 
 ---
 
+# 入口优先级：CLI 优先，MCP 兜底
+
+本 Skill 同时对应 **jpage CLI（命令行）** 与 **MCP 工具** 两套入口。执行上传、模板实例化、批量管理等任何操作时：
+
+1. **优先使用 jpage CLI**。只要当前环境能调用 `jpage` 命令（或可通过 npm/pnpm 安装），就先走 CLI：二进制流式上传、base64 不进模型、速度最快、token 消耗最少。
+2. **CLI 不可用时，再调用 MCP 工具**。纯 MCP 客户端（无 Bash、无法执行命令、无法安装 CLI）才通过 `upload_file`、`instantiate_content_template` 等 tool 完成。
+
+> 判断标准：能否在当前环境执行 `jpage --version` 并成功返回版本号？能 → CLI；不能 → MCP。
+
+---
+
 # 触发场景
 
 - 「上传到即页」「发到即页」「生成链接」
@@ -301,6 +312,34 @@ upload_file(
 4. 告知用户已提交，等待审核
 ```
 
+## 场景四：使用模板市场模板（直接实例化出文件）
+
+当用户说「使用这个模板」「按这个模板生成一份」「把这个模板给我用」时，表示要在当前账户下创建一份基于模板内容的文件。该操作**必须通过 Token 完成**，Web 端按钮只能查看命令引导。
+
+**有 CLI 时优先走 CLI**（速度最快、token 消耗最少）：
+
+```bash
+# 查看市场模板列表
+jpage template ls --category html-book --limit 5
+
+# 使用指定模板实例化（默认私有）
+jpage template use 42 --name "我的报告.html" --public
+```
+
+**CLI 不可用时，再调用 MCP 工具**：
+
+```python
+instantiate_content_template(
+  id=42,
+  originalName="我的报告.html",
+  isPublic=True
+)
+```
+
+> 注意：
+> - `instantiate_content_template` 需要有效的 API Token（`jp_...`）或 `MCP_TOKEN`，Session Cookie 会被拒绝。
+> - 实例化成功后会在用户账户下创建一个真实文件，返回 `url` 可直接分享。
+
 ## 分类与关键词对照
 
 | 用户可能说的 | category 参数 | 说明 |
@@ -493,3 +532,4 @@ jpage upload site.zip --public
 - `list_categories` / `create_category` / `set_file_category` — 分类
 - `list_content_templates` — 查询内容模板市场
 - `get_content_template` — 获取模板完整内容（学习风格用）
+- `instantiate_content_template` — 用模板实例化文件（CLI 不可用时兜底）
