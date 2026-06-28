@@ -105,8 +105,20 @@ router.get('/market', loadSession, marketBotFilter, marketListerLimiter, marketR
        ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
       req.userId ? [req.userId, ...params, limit, offset] : [...params, limit, offset]
     );
+
+    const templatesWithHeat = templates.map(t => {
+      const viewCount = t.view_count || 0;
+      const useCount = t.use_count || 0;
+      const instantiationCount = t.instantiation_count || 0;
+      const featuredBonus = t.featured ? 20 : 0;
+      return {
+        ...t,
+        heat_score: viewCount + useCount * 5 + instantiationCount * 3 + featuredBonus
+      };
+    });
+
     res.json({
-      templates,
+      templates: templatesWithHeat,
       pagination: { page, limit, total: total.count, totalPages: Math.ceil(total.count / limit) }
     });
   } catch (e) {

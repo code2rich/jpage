@@ -507,6 +507,13 @@ async function loadHomeList(body, navigate, { reset = false } = {}) {
   }
 }
 
+function renderHeatLabel(score) {
+  if (!score) return '<span class="ct-heat-new">新品</span>';
+  if (score < 10) return '<span class="ct-heat-low">较热</span>';
+  if (score < 50) return '<span class="ct-heat-mid">热门</span>';
+  return '<span class="ct-heat-high">爆款</span>';
+}
+
 function createTemplateCard(t) {
   const typeClass = t.file_type === 'markdown' ? 'ct-badge-md' : 'ct-badge-html';
   const typeLabel = t.file_type === 'markdown' ? 'MD' : 'HTML';
@@ -537,7 +544,7 @@ function createTemplateCard(t) {
     <p class="ct-card-desc">${escapeHtml(t.description || '').slice(0, 100)}</p>
     <div class="mw-card-author">${escapeHtml(t.uploader_name || '匿名创作者')}</div>
     <div class="ct-card-footer">
-      <span class="ct-use-count">${t.view_count || 0} 次查看</span>
+      ${renderHeatLabel(t.heat_score)}
     </div>
   </div>`;
 }
