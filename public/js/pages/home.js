@@ -312,7 +312,7 @@ function renderHome(container) {
       settingsBtn.setAttribute('aria-expanded', 'false');
       openSkillsListModal();
     });
-    settingsDropdown.querySelector('#menu-item-content-templates').addEventListener('click', () => {
+    settingsDropdown.querySelector('#menu-item-content-templates')?.addEventListener('click', () => {
       settingsDropdown.classList.remove('open');
       settingsBtn.setAttribute('aria-expanded', 'false');
       navigate('/market');

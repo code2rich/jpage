@@ -68,9 +68,8 @@ function route() {
     return;
   }
 
-  // 内容模板市场（独立路由，需登录）
+  // 内容模板市场（独立路由，允许匿名浏览；写操作在页面内单独鉴权）
   if (hash === '/market' || hash.startsWith('/market/')) {
-    if (!state.currentUser) { navigate('/login'); return; }
     loadMarket().then((renderMarket) => {
       renderMarket(appEl, hash, navigate);
       setupThemeToggle(appEl);
