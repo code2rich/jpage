@@ -60,7 +60,7 @@ const HELP = `jpage —— 即页命令行
   skill install [--dir <路径>]                安装本包内置的 jpage Skill 到 Claude
   skill update                                更新本地 jpage Skill（install 别名）
   skill uninstall [--dir <路径>]              卸载本地 jpage Skill
-  version bump [--type patch|minor|major] [--yes] [--dry-run]
+  version bump [--type patch|minor|major] [--target x.y.z] [--yes] [--dry-run]
                                               交互式升级项目版本号并同步所有文件
   template ls [--category <slug> --file-type html|markdown --kw <词> --limit N]
                                               浏览内容模板市场

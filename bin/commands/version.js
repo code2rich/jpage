@@ -1,8 +1,8 @@
 // version 命令：交互式升级项目版本号，自动同步所有相关文件并打 tag。
 //
-//   jpage version bump [--type patch|minor|major] [--yes]
+//   jpage version bump [--type patch|minor|major] [--target x.y.z] [--yes] [--dry-run]
 //
-// 默认会询问确认；--yes 用于脚本/CI 场景。
+// --type 与 --target 二选一；默认会询问确认；--yes 用于脚本/CI 场景。
 
 const fs = require('fs');
 const path = require('path');
@@ -57,9 +57,13 @@ async function prompt(q) {
 }
 
 function usageError(msg) {
-  const e = new Error(msg || '用法：jpage version bump [--type patch|minor|major] [--yes]');
+  const e = new Error(msg || '用法：jpage version bump [--type patch|minor|major] [--target x.y.z] [--yes] [--dry-run]');
   e.name = 'UsageError';
   return e;
+}
+
+function isValidSemver(v) {
+  return /^\d+\.\d+\.\d+$/.test(v);
 }
 
 function readPkgVersion() {
@@ -97,17 +101,25 @@ async function run(client, args) {
   }
 
   const current = readPkgVersion();
+  const target = args.opts.target;
   let type = args.opts.type;
+  let next;
 
-  if (!type) {
-    type = await prompt(`当前版本 ${current}，请选择升级类型 [patch/minor/major]： `);
+  if (target) {
+    if (!isValidSemver(target)) {
+      throw usageError(`非法版本号：${target}，应为 x.y.z 格式`);
+    }
+    next = target;
+  } else {
+    if (!type) {
+      type = await prompt(`当前版本 ${current}，请选择升级类型 [patch/minor/major]： `);
+    }
+    if (!['patch', 'minor', 'major'].includes(type)) {
+      throw usageError(`非法类型：${type}，仅支持 patch/minor/major`);
+    }
+    next = bumpSemver(current, type);
   }
 
-  if (!['patch', 'minor', 'major'].includes(type)) {
-    throw usageError(`非法类型：${type}，仅支持 patch/minor/major`);
-  }
-
-  const next = bumpSemver(current, type);
   const dryRun = args.opts['dry-run'] || args.opts.dryRun;
 
   if (!args.opts.yes) {
@@ -125,7 +137,7 @@ async function run(client, args) {
   }
 
   // 1. npm version 更新 package.json / package-lock.json
-  runCmd(`npm version ${type} --no-git-tag-version`);
+  runCmd(`npm version ${next} --no-git-tag-version`);
 
   // 2. 同步其他文件
   const changed = syncFiles(current, next);

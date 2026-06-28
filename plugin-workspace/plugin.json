@@ -24,7 +24,7 @@
   ],
   "platform": ["darwin", "win32", "linux"],
   "description": "即页 uTools 插件：登录即页服务器，在 uTools 内直接管理你的 HTML/Markdown 文件——搜索、上传、预览、分享、版本历史、标签分类。",
-  "version": "1.6.0",
+  "version": "1.6.5",
   "author": "jpage",
   "homepage": "https://www.jpage.cn"
 }

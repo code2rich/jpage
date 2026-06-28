@@ -1,6 +1,6 @@
 {
   "name": "@code2rich/jpage",
-  "version": "1.6.0",
+  "version": "1.6.5",
   "description": "即页 — 零配置 HTML/Markdown 即时预览与分享工具",
   "main": "server.js",
   "bin": {
