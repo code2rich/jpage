@@ -30,13 +30,14 @@ const COMMANDS = {
   unstar: () => require('./commands/star'),
   tags: () => require('./commands/tags'),
   skills: () => require('./commands/skills'),
+  skill: () => require('./commands/skill'),
   template: () => require('./commands/template'),
   whoami: () => require('./commands/whoami'),
   update: () => require('./commands/update'),
 };
 
 // 这些命令纯本地执行（不调后端 API），不强制要求 token。
-const NO_TOKEN = new Set(['update']);
+const NO_TOKEN = new Set(['update', 'skill']);
 
 const HELP = `jpage —— 即页命令行
 
@@ -54,7 +55,10 @@ const HELP = `jpage —— 即页命令行
   star <id> / unstar <id>                     收藏 / 取消收藏
   tags <id> [add|set|clear] [名,名,...]        查看 / 追加 / 替换 / 清空标签
   skills ls | get <名> | download <名> [--out 文件]
-                                              列出 / 查看 / 下载 Skill
+                                              列出 / 查看 / 下载 Skill（服务器端 skills）
+  skill install [--dir <路径>]                安装本包内置的 jpage Skill 到 Claude
+  skill update                                更新本地 jpage Skill（install 别名）
+  skill uninstall [--dir <路径>]              卸载本地 jpage Skill
   template ls [--category <slug> --file-type html|markdown --kw <词> --limit N]
                                               浏览内容模板市场
   template get <id>                           查看模板完整内容

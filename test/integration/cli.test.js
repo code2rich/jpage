@@ -405,3 +405,41 @@ test('CLI update: 不需要 token（无 token 也能跑）', async () => {
   assert.strictEqual(s.code(), 0);
   assert.doesNotMatch(s.err(), /token/);
 });
+
+// --- skill install/update/uninstall（纯本地，不依赖后端）---
+const skillTestDir = path.join(os.tmpdir(), `jpage-cli-skill-test-${process.pid}`);
+
+test('CLI skill install: 安装内置 jpage Skill 到指定目录', async () => {
+  const target = path.join(skillTestDir, 'install');
+  const s = makeSinks();
+  await run(['skill', 'install', '--dir', target], ctx(s));
+  assert.strictEqual(s.code(), 0, s.err());
+  assert.ok(fs.existsSync(path.join(target, 'SKILL.md')), '应复制 SKILL.md');
+  assert.ok(fs.existsSync(path.join(target, 'assets', 'reveal.js')), '应复制 assets');
+  assert.match(s.out(), /已安装 jpage Skill v1\.6\.0/);
+});
+
+test('CLI skill update: install 别名，覆盖旧版本', async () => {
+  const target = path.join(skillTestDir, 'update');
+  fs.mkdirSync(target, { recursive: true });
+  fs.writeFileSync(path.join(target, 'old-file.txt'), 'should be removed');
+  const s = makeSinks();
+  await run(['skill', 'update', '--dir', target], ctx(s));
+  assert.strictEqual(s.code(), 0, s.err());
+  assert.ok(!fs.existsSync(path.join(target, 'old-file.txt')), '旧残留文件应被清理');
+  assert.ok(fs.existsSync(path.join(target, 'SKILL.md')));
+});
+
+test('CLI skill uninstall: 卸载指定目录的 Skill', async () => {
+  const target = path.join(skillTestDir, 'uninstall');
+  fs.mkdirSync(target, { recursive: true });
+  fs.writeFileSync(path.join(target, 'SKILL.md'), 'placeholder');
+  const s = makeSinks();
+  await run(['skill', 'uninstall', '--dir', target], ctx(s));
+  assert.strictEqual(s.code(), 0, s.err());
+  assert.ok(!fs.existsSync(target));
+});
+
+test.after(() => {
+  fs.rmSync(skillTestDir, { recursive: true, force: true });
+});

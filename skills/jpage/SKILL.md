@@ -50,6 +50,26 @@ jpage whoami --token jp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 > 没有 npm / 无法安装 CLI / 没有 Bash 能力的纯 MCP 客户端，直接调用下方的 MCP 工具即可，无需安装。
 
+## 同步 Skill 到 Claude
+
+CLI 安装好后，把本 Skill 同步到 Claude Code / Desktop 的 skills 目录：
+
+```bash
+# 自动安装到默认 skills 目录（按 ~/.claude/skills → ~/.claude-code/skills → ~/.agents/skills 顺序检测）
+jpage skill install
+
+# 或指定目录
+jpage skill install --dir ~/.claude/skills/jpage
+```
+
+后续升级 jpage 后，用同一条命令覆盖更新：
+
+```bash
+jpage skill update
+```
+
+> 该命令会把 npm 包内置的 `skills/jpage/` 完整复制到目标目录，包括 SKILL.md 和 assets/ 资源。
+
 ---
 
 # 入口优先级：CLI 优先，MCP 兜底

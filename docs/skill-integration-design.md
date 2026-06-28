@@ -284,6 +284,31 @@ author: jpage
 
 ---
 
+## 5. Skill 分发与更新机制
+
+为避免用户每次手动复制 SKILL.md，统一通过 **jpage CLI** 分发和更新：
+
+```bash
+# 安装 jpage CLI 后，一键把内置 jpage Skill 同步到 Claude 的 skills 目录
+jpage skill install
+
+# 升级 CLI 后，用同一条命令覆盖更新本地 Skill
+jpage skill update
+
+# 指定目录（例如 Claude Code 的自定义 skills 路径）
+jpage skill install --dir ~/.claude/skills/jpage
+```
+
+实现：
+- `bin/commands/skill.js` 纯本地命令，不依赖后端 token。
+- 源目录为 npm 包内的 `skills/jpage/`（含 SKILL.md + assets/）。
+- 目标目录按 `~/.claude/skills` → `~/.claude-code/skills` → `~/.agents/skills` 顺序自动检测，也可通过 `--dir` 显式指定。
+- 每次安装先清空旧目录再复制，避免残留文件导致版本混乱。
+
+这样 Skill 版本与 npm 包版本保持一致：升级 `npm install -g @code2rich/jpage` 后执行 `jpage skill update` 即可。
+
+---
+
 ## 5. Phase 2 设计概要（editorial + clone-ui）
 
 Phase 1 验证「Bundle Skill + 模板双轨」模式跑通后，Phase 2 按同模式增量。
