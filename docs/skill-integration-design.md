@@ -230,7 +230,7 @@ reveal.js 主题 = 30+ CSS 变量。四套主题的差异化全靠调这些变�
 name: jpage
 description: 即页统一技能：生成 HTML/Markdown 内容、制作 reveal.js 幻灯片、
   使用内容模板市场风格、上传到即页并管理文件。
-version: 1.6.0
+version: 1.6.1
 author: jpage
 ---
 

@@ -416,7 +416,7 @@ test('CLI skill install: 安装内置 jpage Skill 到指定目录', async () => 
   assert.strictEqual(s.code(), 0, s.err());
   assert.ok(fs.existsSync(path.join(target, 'SKILL.md')), '应复制 SKILL.md');
   assert.ok(fs.existsSync(path.join(target, 'assets', 'reveal.js')), '应复制 assets');
-  assert.match(s.out(), /已安装 jpage Skill v1\.6\.0/);
+  assert.match(s.out(), /已安装 jpage Skill v\d+\.\d+\.\d+/);
 });
 
 test('CLI skill update: install 别名，覆盖旧版本', async () => {

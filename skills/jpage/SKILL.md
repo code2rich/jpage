@@ -1,7 +1,7 @@
 ---
 name: jpage
 description: 即页（jpage）统一技能：生成 HTML/Markdown 内容、制作 reveal.js 幻灯片、使用内容模板市场风格、上传到即页并管理文件。所有内容生产与文件管理操作都通过本技能完成。
-version: 1.6.0
+version: 1.6.1
 author: jpage
 ---
 
