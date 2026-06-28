@@ -785,6 +785,23 @@ function renderHomeGrid(grid, templates, pg, navigate, { append = false } = {}) 
 // 详情页
 // ============================================================
 
+function renderRelatedList(related, _navigate) {
+  if (!related.length) {
+    return '<div class="market-detail-empty-small">暂无同系列推荐</div>';
+  }
+  return related.map(t => {
+    const typeLabel = t.file_type === 'markdown' ? 'MD' : 'HTML';
+    const typeClass = t.file_type === 'markdown' ? 'ct-badge-md' : 'ct-badge-html';
+    const cat = t.category_name ? `<span class="ct-badge ct-badge-scene">${escapeHtml(t.category_name)}</span>` : '';
+    return `<button type="button" class="market-detail-related-item" data-id="${t.id}" aria-label="查看 ${escapeHtml(t.title)}">
+      <div class="market-detail-related-info">
+        <div class="market-detail-related-title">${escapeHtml(t.title)}</div>
+        <div class="market-detail-related-meta">${cat}<span class="ct-badge ${typeClass}">${typeLabel}</span><span>${t.view_count || 0} 次查看</span></div>
+      </div>
+    </button>`;
+  }).join('');
+}
+
 function renderDetail(container, id, navigate) {
   const body = renderMarketShell(container, { active: 'home', navigate });
   body.innerHTML = '<div class="ct-loading">加载中...</div>';
@@ -792,7 +809,7 @@ function renderDetail(container, id, navigate) {
   loadDetail(body, id, navigate);
 }
 
-async function loadDetail(body, id, _navigate) {
+async function loadDetail(body, id, navigate) {
   try {
     const meta = await api(`/api/content-templates/market/${id}`);
 
@@ -821,19 +838,39 @@ async function loadDetail(body, id, _navigate) {
           <iframe class="market-detail-iframe" sandbox="allow-scripts"></iframe>
         </div>
         <aside class="market-detail-meta">
-          <h2 class="market-detail-title">${escapeHtml(meta.title)}</h2>
-          <div class="ct-meta-row">
-            ${cat}
-            <span class="ct-badge ${meta.file_type === 'markdown' ? 'ct-badge-md' : 'ct-badge-html'}">${typeLabel}</span>
-            ${featured}
+          <div class="market-detail-section">
+            <h2 class="market-detail-title">${escapeHtml(meta.title)}</h2>
+            <div class="ct-meta-row">
+              ${cat}
+              <span class="ct-badge ${meta.file_type === 'markdown' ? 'ct-badge-md' : 'ct-badge-html'}">${typeLabel}</span>
+              ${featured}
+            </div>
           </div>
-          ${meta.description ? `<p class="ct-desc">${escapeHtml(meta.description)}</p>` : ''}
-          <div class="ct-meta-info">
-            作者：${escapeHtml(meta.uploader_name || '匿名')} · ${meta.view_count || 0} 次查看 · ${relativeTime(meta.published_at || meta.created_at)}
+          ${meta.description ? `
+          <div class="market-detail-section">
+            <h3 class="market-detail-section-title">简介</h3>
+            <p class="ct-desc">${escapeHtml(meta.description)}</p>
+          </div>` : ''}
+          <div class="market-detail-section">
+            <h3 class="market-detail-section-title">信息</h3>
+            <div class="market-detail-stats">
+              <div class="market-detail-stat"><span>作者</span><strong>${escapeHtml(meta.uploader_name || '匿名')}</strong></div>
+              <div class="market-detail-stat"><span>查看</span><strong>${meta.view_count || 0}</strong></div>
+              <div class="market-detail-stat"><span>发布</span><strong>${relativeTime(meta.published_at || meta.created_at)}</strong></div>
+            </div>
           </div>
-          <div class="market-detail-actions mw-icon-actions">
-            <button class="btn btn-small btn-primary" id="detail-use-template">使用此模板</button>
-            ${loggedInActions}
+          <div class="market-detail-section market-detail-section-actions">
+            <h3 class="market-detail-section-title">操作</h3>
+            <div class="market-detail-actions mw-icon-actions">
+              <button class="btn btn-primary" id="detail-use-template">使用此模板</button>
+              ${loggedInActions}
+            </div>
+          </div>
+          <div class="market-detail-section">
+            <h3 class="market-detail-section-title">同系列推荐</h3>
+            <div class="market-detail-related" id="detail-related-list">
+              ${renderRelatedList(meta.related || [], navigate)}
+            </div>
           </div>
         </aside>
       </div>
@@ -904,6 +941,17 @@ async function loadDetail(body, id, _navigate) {
           toast(e.message || '打开公链失败', 'error');
         }
       };
+    }
+
+    // 同系列推荐点击
+    const relatedList = body.querySelector('#detail-related-list');
+    if (relatedList) {
+      relatedList.addEventListener('click', (e) => {
+        const item = e.target.closest('.market-detail-related-item');
+        if (item) {
+          navigate(`/market/${item.dataset.id}`);
+        }
+      });
     }
 
   } catch (e) {

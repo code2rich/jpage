@@ -139,7 +139,20 @@ router.get('/market/:id', loadSession, marketBotFilter, marketPreviewLimiter, ma
       const row = await dbGet('SELECT 1 FROM starred_templates WHERE user_id = ? AND template_id = ?', [req.userId, req.params.id]);
       starred = !!row;
     }
-    res.json({ ...t, starred });
+
+    // 同系列推荐：同一分类下其他已上架可见模板
+    const related = await dbAll(
+      `SELECT ct.id, ct.title, ct.file_type, ct.view_count, ct.featured,
+              c.name AS category_name, ct.share_key
+       FROM content_templates ct
+       LEFT JOIN template_market_categories c ON ct.category_id = c.id
+       WHERE ct.id != ? AND ct.category_id = ? AND ${MARKET_VISIBLE_COND}
+       ORDER BY ct.featured DESC, ct.use_count DESC, ct.created_at DESC
+       LIMIT 4`,
+      [req.params.id, t.category_id]
+    );
+
+    res.json({ ...t, starred, related });
   } catch (e) {
     logger.error({ type: 'app', msg: '获取市场模板详情失败', error: e.message });
     res.status(500).json({ error: '获取模板详情失败' });

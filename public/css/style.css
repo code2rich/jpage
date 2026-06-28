@@ -3600,16 +3600,42 @@ html:not(.light) .btn-danger-soft {
 }
 
 /* 详情页 */
-.market-detail { display: grid; grid-template-columns: 1fr 320px; gap: 20px; }
+.market-detail { display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start; }
 @media (max-width: 768px) { .market-detail { grid-template-columns: 1fr; } }
 .market-detail-preview { min-height: 400px; }
 .market-detail-iframe {
-  width: 100%; min-height: 60vh; border: 1px solid var(--border);
-  border-radius: 8px; background: #fff;
+  width: 100%; height: calc(100vh - 140px); min-height: 500px;
+  border: 1px solid var(--border); border-radius: 8px; background: #fff;
 }
-.market-detail-meta { display: flex; flex-direction: column; gap: 12px; }
-.market-detail-title { font-size: 20px; font-weight: 700; margin: 0; color: var(--text); }
-.market-detail-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.market-detail-meta { display: flex; flex-direction: column; gap: 0; }
+.market-detail-title { font-size: 20px; font-weight: 700; margin: 0 0 8px; color: var(--text); line-height: 1.35; }
+.market-detail-section { padding: 16px 0; border-bottom: 1px solid var(--border); }
+.market-detail-section:first-child { padding-top: 0; }
+.market-detail-section:last-child { border-bottom: 0; padding-bottom: 0; }
+.market-detail-section-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.03em; margin: 0 0 10px; }
+.market-detail-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.market-detail-stat { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.market-detail-stat span { color: var(--text-secondary); font-size: 12px; }
+.market-detail-stat strong { color: var(--text); font-weight: 600; }
+.market-detail-actions.mw-icon-actions { display: flex; flex-direction: column; gap: 10px; }
+.market-detail-actions.mw-icon-actions .btn-primary { width: 100%; justify-content: center; height: 40px; font-size: 14px; }
+.market-detail-actions.mw-icon-actions > .mw-icon-btn { width: 44px; height: 44px; }
+.market-detail-related { display: flex; flex-direction: column; gap: 8px; }
+.market-detail-related-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: transparent; cursor: pointer; transition: all .15s; text-align: left; width: 100%; font: inherit; color: inherit;
+}
+.market-detail-related-item:hover { background: var(--primary-soft); border-color: var(--primary); }
+.market-detail-related-thumb {
+  width: 48px; height: 48px; border-radius: 6px; border: 1px solid var(--border);
+  background: #fff; flex-shrink: 0; overflow: hidden;
+}
+.market-detail-related-thumb iframe { width: 100%; height: 100%; border: 0; pointer-events: none; }
+.market-detail-related-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.market-detail-related-title { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.market-detail-related-meta { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); }
+.market-detail-empty-small { font-size: 13px; color: var(--text-secondary); padding: 8px 0; }
 
 /* 详情页图标按钮组 */
 .mw-icon-actions { gap: 6px; }
@@ -4155,7 +4181,8 @@ html:not(.light) .btn-danger-soft {
 }
 
 .mw-main .market-detail {
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
   align-items: start;
 }
 
@@ -4177,11 +4204,21 @@ html:not(.light) .btn-danger-soft {
   padding: 18px;
 }
 
+.mw-main .market-detail-meta {
+  position: sticky;
+  top: 20px;
+  align-self: start;
+  min-height: calc(100vh - 140px);
+}
+
 .mw-main .market-detail-iframe {
   border-color: #e5e7eb;
   border-radius: 14px;
   background: #fff;
 }
+.mw-main .market-detail-related-item { border-color: #e5e7eb; }
+.mw-main .market-detail-related-item:hover { background: #f3f4f6; border-color: var(--primary); }
+.mw-main .market-detail-related-thumb { border-color: #e5e7eb; }
 
 .mw-main .filter-chips {
   margin-bottom: 16px;
@@ -4249,6 +4286,11 @@ html:not(.light) .btn-danger-soft {
   .mw-hero-grid,
   .mw-main .market-detail {
     grid-template-columns: 1fr;
+  }
+
+  .mw-main .market-detail-meta {
+    position: static;
+    min-height: auto;
   }
 }
 
