@@ -666,17 +666,29 @@ test('robots.txt 存在且禁止 /api/ 和 /mcp', async () => {
 });
 
 test('市场列表：空 User-Agent 视为 bot 拦截', async () => {
-  const res = await request(env.app)
-    .get('/api/content-templates/market')
-    .set('User-Agent', '');
-  assert.strictEqual(res.status, 403);
+  const prev = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'development';
+  try {
+    const res = await request(env.app)
+      .get('/api/content-templates/market')
+      .set('User-Agent', '');
+    assert.strictEqual(res.status, 403);
+  } finally {
+    process.env.NODE_ENV = prev;
+  }
 });
 
 test('市场列表：常见爬虫 UA 被拦截', async () => {
-  const res = await request(env.app)
-    .get('/api/content-templates/market')
-    .set('User-Agent', 'python-requests/2.31.0');
-  assert.strictEqual(res.status, 403);
+  const prev = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'development';
+  try {
+    const res = await request(env.app)
+      .get('/api/content-templates/market')
+      .set('User-Agent', 'python-requests/2.31.0');
+    assert.strictEqual(res.status, 403);
+  } finally {
+    process.env.NODE_ENV = prev;
+  }
 });
 
 test('市场列表：登录用户绕过 bot 检测', async () => {
