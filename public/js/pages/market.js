@@ -537,7 +537,7 @@ function createTemplateCard(t) {
     <p class="ct-card-desc">${escapeHtml(t.description || '').slice(0, 100)}</p>
     <div class="mw-card-author">${escapeHtml(t.uploader_name || '匿名创作者')}</div>
     <div class="ct-card-footer">
-      <span class="ct-use-count">${(t.use_count || 0) + (t.instantiation_count || 0)} 次使用</span>
+      <span class="ct-use-count">${t.view_count || 0} 次查看</span>
     </div>
   </div>`;
 }
@@ -829,7 +829,7 @@ async function loadDetail(body, id, _navigate) {
           </div>
           ${meta.description ? `<p class="ct-desc">${escapeHtml(meta.description)}</p>` : ''}
           <div class="ct-meta-info">
-            作者：${escapeHtml(meta.uploader_name || '匿名')} · ${(meta.use_count || 0) + (meta.instantiation_count || 0)} 次使用 · ${relativeTime(meta.published_at || meta.created_at)}
+            作者：${escapeHtml(meta.uploader_name || '匿名')} · ${meta.view_count || 0} 次查看 · ${relativeTime(meta.published_at || meta.created_at)}
           </div>
           <div class="market-detail-actions mw-icon-actions">
             <button class="btn btn-small btn-primary" id="detail-use-template">使用此模板</button>
@@ -1208,6 +1208,7 @@ function renderAdmin(container, navigate) {
         <button class="btn btn-small" id="admin-category-mgr">分类管理</button>
       </div>
       <div id="admin-list" class="market-list"></div>
+      <div id="admin-pagination" class="pagination"></div>
     </div>
   `;
 
@@ -1257,9 +1258,8 @@ async function loadAdminList(body, navigate) {
 function renderAdminList(list, templates, pg, navigate, body) {
   if (!templates.length) {
     list.innerHTML = '<div class="ct-empty mw-empty"><strong>暂无待处理作品</strong><span>当前筛选条件下没有市场作品。</span></div>';
-    return;
-  }
-  list.innerHTML = templates.map(t => {
+  } else {
+    list.innerHTML = templates.map(t => {
     const statusBadge = STATUS_BADGE[t.status] || '';
     const cat = t.category_name ? escapeHtml(t.category_name) : '未分类';
     const reviewNote = t.review_note ? `<div class="mine-review-note">审核意见：${escapeHtml(t.review_note)}</div>` : '';
@@ -1335,6 +1335,60 @@ function renderAdminList(list, templates, pg, navigate, body) {
       };
     });
   });
+  }
+  renderAdminPagination(body, pg, navigate);
+}
+
+function renderAdminPagination(body, pg, navigate) {
+  const wrap = body.querySelector('#admin-pagination');
+  if (!wrap || !pg) return;
+  wrap.innerHTML = '';
+  const { page, totalPages } = pg;
+  if (totalPages <= 1) return;
+
+  const makeBtn = (label, targetPage, disabled, active) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pagination-btn' + (active ? ' active' : '');
+    btn.textContent = label;
+    btn.disabled = !!disabled;
+    if (!disabled && targetPage !== page) {
+      btn.addEventListener('click', () => {
+        adminState.page = targetPage;
+        loadAdminList(body, navigate);
+        body.querySelector('#admin-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+    return btn;
+  };
+
+  wrap.appendChild(makeBtn('上一页', page - 1, page <= 1, false));
+
+  const pages = [];
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    if (page > 3) pages.push('...');
+    const start = Math.max(2, page - 1);
+    const end = Math.min(totalPages - 1, page + 1);
+    for (let i = start; i <= end; i++) pages.push(i);
+    if (page < totalPages - 2) pages.push('...');
+    pages.push(totalPages);
+  }
+
+  pages.forEach(p => {
+    if (p === '...') {
+      const span = document.createElement('span');
+      span.className = 'pagination-ellipsis';
+      span.textContent = '...';
+      wrap.appendChild(span);
+    } else {
+      wrap.appendChild(makeBtn(String(p), p, false, p === page));
+    }
+  });
+
+  wrap.appendChild(makeBtn('下一页', page + 1, page >= totalPages, false));
 }
 
 function previewInDialog(data) {

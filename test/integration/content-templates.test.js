@@ -515,12 +515,24 @@ test('instantiate：不同用户实例化 → instantiation_count 累加', async
   assert.strictEqual(meta.body.instantiation_count, 2, '两个不同用户应各记一条 install');
 });
 
-test('GET /market 列表项含 instantiation_count 字段', async () => {
+test('GET /market 列表项含 view_count 字段', async () => {
   const id = await createPublishedTemplate(userAgent, '列表字段');
   const market = await request(env.app).get('/api/content-templates/market');
   const found = market.body.templates.find(t => t.id === id);
   assert.ok(found, '模板应在市场列表中');
-  assert.strictEqual(typeof found.instantiation_count, 'number', '列表项应含 instantiation_count');
+  assert.strictEqual(typeof found.view_count, 'number', '列表项应含 view_count');
+});
+
+test('GET /market/:id 每次访问详情 view_count +1', async () => {
+  const id = await createPublishedTemplate(userAgent, '查看计数');
+  const before = await request(env.app).get(`/api/content-templates/market/${id}`);
+  assert.strictEqual(before.body.view_count, 1);
+
+  await request(env.app).get(`/api/content-templates/market/${id}`);
+  await request(env.app).get(`/api/content-templates/market/${id}`);
+
+  const after = await request(env.app).get(`/api/content-templates/market/${id}`);
+  assert.strictEqual(after.body.view_count, 4);
 });
 
 test('instantiate：创建的文件内容 = 模板内容快照', async () => {

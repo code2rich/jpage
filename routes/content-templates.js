@@ -93,7 +93,7 @@ router.get('/market', loadSession, marketBotFilter, marketListerLimiter, marketR
       ? '(SELECT 1 FROM starred_templates st WHERE st.user_id = ? AND st.template_id = ct.id) AS starred'
       : '0 AS starred';
     const templates = await dbAll(
-      `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.use_count, ct.featured,
+      `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.use_count, ct.view_count, ct.featured,
               ct.created_at, ct.published_at, ct.category_id, ct.share_key,
               c.slug AS category_slug, c.name AS category_name,
               u.username AS uploader_name,
@@ -116,10 +116,12 @@ router.get('/market', loadSession, marketBotFilter, marketListerLimiter, marketR
 });
 
 // 市场详情（匿名，仅 approved+visible）
+// 每次访问详情页，view_count +1，用于在市场展示热度。
 router.get('/market/:id', loadSession, marketBotFilter, marketPreviewLimiter, marketRobotsTag, async (req, res) => {
   try {
+    await dbRun('UPDATE content_templates SET view_count = view_count + 1 WHERE id = ?', [req.params.id]);
     const t = await dbGet(
-      `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.use_count, ct.featured,
+      `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.use_count, ct.view_count, ct.featured,
               ct.created_at, ct.published_at, ct.category_id, ct.share_key,
               c.slug AS category_slug, c.name AS category_name,
               u.username AS uploader_name,
