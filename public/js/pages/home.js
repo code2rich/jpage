@@ -629,6 +629,7 @@ function updateBatchToolbar(container) {
 }
 
 function toggleFileCheckbox(fileId, el, isChecked) {
+  if (!el) return;
   if (isChecked) {
     selectedFileIds.add(fileId);
     el.classList.add('selected');
@@ -644,7 +645,8 @@ function clearSelection(container) {
   lastCheckedIndex = -1;
   container.querySelectorAll('.file-checkbox').forEach(cb => {
     cb.checked = false;
-    cb.closest('.file-item').classList.remove('selected');
+    const item = cb.closest('.file-item') || cb.closest('.file-card');
+    if (item) item.classList.remove('selected');
   });
   const selectAll = container.querySelector('#select-all-checkbox');
   if (selectAll) selectAll.checked = false;
