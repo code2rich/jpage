@@ -21,6 +21,37 @@ author: jpage
 
 ---
 
+# 安装 CLI
+
+本 Skill 推荐配合 **jpage CLI** 使用。只要当前环境有 Node.js ≥ 20，就可以全局安装：
+
+```bash
+npm install -g @code2rich/jpage
+```
+
+安装后验证：
+
+```bash
+jpage --version
+```
+
+配置 Token（三选一即可）：
+
+```bash
+# 1. 环境变量
+export JPAGE_TOKEN="jp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# 2. 当前目录 .env
+# echo 'JPAGE_TOKEN=jp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' > .env
+
+# 3. 临时命令参数
+jpage whoami --token jp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+> 没有 npm / 无法安装 CLI / 没有 Bash 能力的纯 MCP 客户端，直接调用下方的 MCP 工具即可，无需安装。
+
+---
+
 # 入口优先级：CLI 优先，MCP 兜底
 
 本 Skill 同时对应 **jpage CLI（命令行）** 与 **MCP 工具** 两套入口。执行上传、模板实例化、批量管理等任何操作时：
