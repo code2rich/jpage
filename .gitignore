@@ -47,3 +47,7 @@ article/
 
 env/
 .npmrc
+
+# Operations docs containing credentials
+docs/market-operations.md
+
