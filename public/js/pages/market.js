@@ -107,6 +107,11 @@ export function renderMarket(container, hash, navigate) {
     renderMine(container, navigate);
     return;
   }
+  if (path === '/market/starred') {
+    if (!state.currentUser) { navigate('/login'); return; }
+    renderStarred(container, navigate);
+    return;
+  }
   if (path === '/market/admin') {
     if (!state.currentUser || state.currentUser.role !== 'admin') {
       toast('需要管理员权限', 'error');
@@ -143,6 +148,7 @@ function renderMarketShell(container, { active, navigate }) {
         <div class="mw-side-section">
           <div class="mw-side-title">管理</div>
           <a href="#/market/my" class="${active === 'my' ? 'active' : ''}">我的上架</a>
+          <a href="#/market/starred" class="${active === 'starred' ? 'active' : ''}">我的收藏</a>
           ${isAdmin ? '<a href="#/market/admin" class="' + (active === 'admin' ? 'active admin-only' : 'admin-only') + '">市场管理</a>' : ''}
         </div>` : ''}
         <div class="mw-side-footer">
@@ -1015,6 +1021,90 @@ function renderMineList(list, templates, pg, navigate) {
         }
       };
     });
+  });
+}
+
+// ============================================================
+// 我的收藏
+// ============================================================
+
+const starredState = { page: 1 };
+
+function renderStarred(container, navigate) {
+  const body = renderMarketShell(container, { active: 'starred', navigate });
+  body.innerHTML = `
+    <div class="market-section-header" style="margin-bottom:16px;">
+      <h1 class="market-title">我的收藏</h1>
+    </div>
+    <div id="starred-grid" class="market-grid"></div>
+    <div id="starred-load-more" class="market-load-more-wrap"></div>
+  `;
+  starredState.page = 1;
+  loadStarredList(body, navigate);
+}
+
+async function loadStarredList(body, navigate) {
+  const grid = body.querySelector('#starred-grid');
+  const loadMoreWrap = body.querySelector('#starred-load-more');
+  const hasContent = grid.querySelectorAll('.ct-card').length > 0;
+  if (!hasContent) {
+    renderLoading(grid);
+  } else if (loadMoreWrap) {
+    loadMoreWrap.innerHTML = '<div class="ct-list-loading">加载中…</div>';
+  }
+
+  try {
+    const params = new URLSearchParams({ page: String(starredState.page), limit: '12' });
+    const data = await api('/api/content-templates/mine/starred?' + params.toString());
+    renderStarredGrid(grid, data.templates || [], data.pagination, navigate);
+    renderStarredLoadMore(loadMoreWrap, data.pagination, body, navigate);
+  } catch (e) {
+    if (!hasContent) {
+      renderError(grid, { message: e.message || '加载失败', retry: () => loadStarredList(body, navigate) });
+    } else if (loadMoreWrap) {
+      loadMoreWrap.innerHTML = '<button type="button" class="mw-load-more-btn" id="starred-retry">加载失败，点击重试</button>';
+      loadMoreWrap.querySelector('#starred-retry')?.addEventListener('click', () => loadStarredList(body, navigate));
+    }
+  }
+}
+
+function renderStarredGrid(grid, templates, pg, navigate) {
+  const isFirstPage = pg.page === 1;
+  if (!templates.length && isFirstPage) {
+    renderEmpty(grid, {
+      title: '还没有收藏任何模板',
+      desc: '在市场首页点击卡片右上角的星标，即可把喜欢的模板收藏到这里。',
+      actionHtml: '<div class="ct-empty-action"><a href="#/market" class="btn btn-small">去市场逛逛</a></div>'
+    });
+    return;
+  }
+  const html = templates.map(t => createTemplateCard(t)).join('');
+  if (isFirstPage) {
+    grid.innerHTML = html;
+  } else {
+    grid.insertAdjacentHTML('beforeend', html);
+  }
+
+  const obs = ensureThumbObserver();
+  grid.querySelectorAll('.ct-card').forEach(card => {
+    if (!card.dataset.thumbBound) {
+      card.dataset.thumbBound = '1';
+      obs.observe(card);
+    }
+  });
+  setupCardInteractions(grid, navigate);
+}
+
+function renderStarredLoadMore(wrap, pg, body, navigate) {
+  if (!wrap) return;
+  if (!pg || pg.page >= pg.totalPages) {
+    wrap.innerHTML = pg && pg.totalPages > 1 ? '<div class="mw-end-msg">没有更多了</div>' : '';
+    return;
+  }
+  wrap.innerHTML = '<button type="button" class="mw-load-more-btn" id="starred-load-more-btn">加载更多</button>';
+  wrap.querySelector('#starred-load-more-btn').addEventListener('click', () => {
+    starredState.page++;
+    loadStarredList(body, navigate);
   });
 }
 

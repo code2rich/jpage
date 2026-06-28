@@ -610,6 +610,16 @@ test('收藏：不存在的模板 → 404', async () => {
   assert.strictEqual(res.status, 404);
 });
 
+test('收藏：GET /mine/starred 返回已收藏列表', async () => {
+  const id = await createPublishedTemplate(userAgent, '收藏列表测试');
+  await userAgent.post(`/api/content-templates/${id}/star`);
+  const res = await userAgent.get('/api/content-templates/mine/starred');
+  assert.strictEqual(res.status, 200);
+  assert.ok(Array.isArray(res.body.templates));
+  assert.ok(res.body.templates.some(t => t.id === id));
+  assert.strictEqual(res.body.templates.find(t => t.id === id).starred, 1);
+});
+
 test('下载：approved+visible → 返回文件内容，Content-Disposition 正确', async () => {
   const id = await createPublishedTemplate(userAgent, '可下载模板');
   const res = await userAgent.get(`/api/content-templates/${id}/download`);

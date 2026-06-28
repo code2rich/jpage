@@ -219,6 +219,45 @@ router.get('/mine', requireAuth, async (req, res) => {
   }
 });
 
+// 我收藏的模板列表（仅当前登录用户，approved+visible）
+router.get('/mine/starred', requireAuth, async (req, res) => {
+  try {
+    const { page, limit, offset } = parsePaging(req);
+
+    const total = await dbGet(
+      `SELECT COUNT(*) as count
+       FROM starred_templates st
+       JOIN content_templates ct ON st.template_id = ct.id
+       LEFT JOIN template_market_categories c ON ct.category_id = c.id
+       WHERE st.user_id = ? AND ${MARKET_VISIBLE_COND}`,
+      [req.userId]
+    );
+    const templates = await dbAll(
+      `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.use_count, ct.featured,
+              ct.created_at, ct.published_at, ct.category_id, ct.share_key,
+              c.slug AS category_slug, c.name AS category_name,
+              u.username AS uploader_name,
+              (SELECT COUNT(*) FROM content_template_installs i WHERE i.template_id = ct.id) AS instantiation_count,
+              1 AS starred
+       FROM starred_templates st
+       JOIN content_templates ct ON st.template_id = ct.id
+       LEFT JOIN template_market_categories c ON ct.category_id = c.id
+       LEFT JOIN users u ON ct.uploaded_by = u.id
+       WHERE st.user_id = ? AND ${MARKET_VISIBLE_COND}
+       ORDER BY st.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [req.userId, limit, offset]
+    );
+    res.json({
+      templates,
+      pagination: { page, limit, total: total.count, totalPages: Math.ceil(total.count / limit) }
+    });
+  } catch (e) {
+    logger.error({ type: 'app', msg: '获取收藏模板失败', error: e.message });
+    res.status(500).json({ error: '获取收藏模板失败' });
+  }
+});
+
 // 模板详情（作者或管理员）
 router.get('/:id', requireAuth, async (req, res) => {
   try {
