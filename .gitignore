@@ -44,6 +44,8 @@ mcp-servers/
 # Articles
 article/
 
+# Social media marketing assets (generated locally)
+social-assets/
 
 env/
 .npmrc
