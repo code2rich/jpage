@@ -552,31 +552,49 @@ function createTemplateCard(t) {
 async function showTemplateUseGuide({ id, title }) {
   try {
     const guide = await api(`/api/content-templates/${id}/use-guide`);
+    const isLoggedIn = !!state.currentUser;
+    const extLabel = guide.fileType === 'markdown' ? '.md' : '.html';
+    const downloadLink = isLoggedIn
+      ? `<a class="btn btn-primary btn-download-template" href="/api/content-templates/${id}/download" download>下载 ${extLabel} 模板</a>`
+      : `<a class="btn btn-primary btn-download-template" href="#/login">登录后下载 ${extLabel} 模板</a>`;
 
     dialogModal.alert({
       title: `使用《${title}》`,
+      panelClass: 'modal-panel-wide',
       message: `
         <div class="use-template-dialog">
-          <p class="use-template-tip">「使用模板」会创建一个可编辑文件到您的账户。该操作需通过 CLI 或 MCP 用 Token 完成，Web 端仅作引导。</p>
-          <div class="use-template-field">
-            <div class="use-template-field-header">
-              <label>CLI 命令</label>
-              <button type="button" id="btn-copy-cli" class="btn btn-small btn-copy-prompt">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2z"/><path d="M4 15V5a2 2 0 0 1 2-2h8"/></svg>
-                <span>复制</span>
-              </button>
+          <p class="use-template-tip">你可以选择以下任意一种方式使用此模板。推荐普通用户直接下载源文件后编辑；开发者可通过 CLI/MCP 自动创建到账户。</p>
+          <div class="use-template-options">
+            <div class="use-template-option">
+              <div class="option-icon" aria-hidden="true">📥</div>
+              <div class="option-title">方式一：下载源文件</div>
+              <div class="option-desc">适合大部分用户。下载后在本地用任意编辑器修改，再上传到即页即可预览分享。</div>
+              ${downloadLink}
             </div>
-            <textarea id="use-template-cli" class="use-template-textarea" readonly>${escapeHtml(guide.cliWithName || guide.cli)}</textarea>
-          </div>
-          <div class="use-template-field">
-            <div class="use-template-field-header">
-              <label>MCP 工具</label>
-              <button type="button" id="btn-copy-mcp" class="btn btn-small btn-copy-prompt">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2z"/><path d="M4 15V5a2 2 0 0 1 2-2h8"/></svg>
-                <span>复制参数</span>
-              </button>
+            <div class="use-template-option">
+              <div class="option-icon" aria-hidden="true">⌨️</div>
+              <div class="option-title">方式二：CLI 命令行</div>
+              <div class="option-desc">已安装 jpage CLI 并配置 Token 的用户，复制后在终端执行。</div>
+              <div class="use-template-field">
+                <div class="use-template-field-header">
+                  <label>CLI 命令</label>
+                  <button type="button" id="btn-copy-cli" class="btn btn-small btn-copy-prompt">复制</button>
+                </div>
+                <textarea id="use-template-cli" class="use-template-textarea" readonly>${escapeHtml(guide.cliWithName || guide.cli)}</textarea>
+              </div>
             </div>
-            <textarea id="use-template-mcp" class="use-template-textarea" readonly>${escapeHtml(JSON.stringify(guide.mcp, null, 2))}</textarea>
+            <div class="use-template-option">
+              <div class="option-icon" aria-hidden="true">🤖</div>
+              <div class="option-title">方式三：MCP 工具</div>
+              <div class="option-desc">在支持 MCP 的 AI 编辑器/客户端中，复制参数调用 instantiate_content_template。</div>
+              <div class="use-template-field">
+                <div class="use-template-field-header">
+                  <label>MCP 参数</label>
+                  <button type="button" id="btn-copy-mcp" class="btn btn-small btn-copy-prompt">复制参数</button>
+                </div>
+                <textarea id="use-template-mcp" class="use-template-textarea" readonly>${escapeHtml(JSON.stringify(guide.mcp, null, 2))}</textarea>
+              </div>
+            </div>
           </div>
           <p class="use-template-hint">${escapeHtml(guide.hint || '')}</p>
         </div>

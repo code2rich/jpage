@@ -16,6 +16,7 @@ const dialogModal = {
     this.closeBtn = document.getElementById('dialog-modal-close');
     this.titleEl = document.getElementById('dialog-modal-title');
     this.labelEl = document.getElementById('dialog-modal-label');
+    this.panelEl = this.el.querySelector('.modal-panel');
 
     this.closeBtn.addEventListener('click', () => this._dismiss());
     this.cancelBtn.addEventListener('click', () => this._dismiss());
@@ -52,6 +53,10 @@ const dialogModal = {
     this.confirmBtn.disabled = false;
     this.cancelBtn.hidden = mode === 'alert';
     this.cancelBtn.textContent = opts.cancelText || '取消';
+
+    if (this.panelEl) {
+      this.panelEl.className = opts.panelClass ? `modal-panel ${opts.panelClass}` : 'modal-panel modal-panel-sm';
+    }
 
     this.el.hidden = false;
     this.el.setAttribute('aria-hidden', 'false');
