@@ -21,10 +21,10 @@ async function createToken(agent, name) {
   return res.body.token;
 }
 
-// 用 Token 调用 instantiate
-function instantiateRequest(id, token) {
+// 用 Token 调用 instantiate（使用 share_key）
+function instantiateRequest(shareKey, token) {
   return request(env.app)
-    .post(`/api/content-templates/${id}/instantiate`)
+    .post(`/api/content-templates/${shareKey}/instantiate`)
     .set('Authorization', 'Bearer ' + token)
     .set('X-Upload-Source', 'cli');
 }
@@ -118,17 +118,20 @@ test('管理员审核通过+展示 → 出现在市场', async () => {
   });
   assert.strictEqual(review.status, 200);
 
-  // 现在市场能看到
-  const market = await request(env.app).get('/api/content-templates/market');
-  assert.ok(market.body.templates.some(t => t.id === id));
+  // 现在市场能看到，并捕获公开 share_key
+  const marketAfter = await request(env.app).get('/api/content-templates/market');
+  const found = marketAfter.body.templates.find(t => t.title === '通过展示的模板');
+  assert.ok(found, '审核通过后应出现在市场列表');
+  const shareKey = found.share_key;
+  assert.ok(shareKey, '市场列表项应含 share_key');
 
   // 详情可匿名访问
-  const detail = await request(env.app).get(`/api/content-templates/market/${id}`);
+  const detail = await request(env.app).get(`/api/content-templates/market/${shareKey}`);
   assert.strictEqual(detail.status, 200);
   assert.strictEqual(detail.body.title, '通过展示的模板');
 
   // 预览内容可匿名访问
-  const preview = await request(env.app).get(`/api/content-templates/market/${id}/preview`);
+  const preview = await request(env.app).get(`/api/content-templates/market/${shareKey}/preview`);
   assert.strictEqual(preview.status, 200);
   assert.ok(preview.body.content.includes('路演'));
 });
@@ -140,13 +143,18 @@ test('市场搜索支持按创作者用户名查找', async () => {
   const id = submit.body.id;
   await adminAgent.post(`/api/content-templates/${id}/review`).send({ status: 'approved', visibility: 'visible' });
 
+  const marketAfter = await request(env.app).get('/api/content-templates/market');
+  const found = marketAfter.body.templates.find(t => t.title === '创作者搜索测试');
+  const shareKey = found ? found.share_key : null;
+  assert.ok(shareKey, '应能在市场列表找到 share_key');
+
   // 按创作者用户名 regular 搜索应命中
   const market = await request(env.app).get('/api/content-templates/market?keyword=regular');
-  assert.ok(market.body.templates.some(t => t.id === id));
+  assert.ok(market.body.templates.some(t => t.share_key === shareKey));
 
   // 不应命中无关关键词
   const empty = await request(env.app).get('/api/content-templates/market?keyword=维尔的命');
-  assert.ok(!empty.body.templates.some(t => t.id === id));
+  assert.ok(!empty.body.templates.some(t => t.share_key === shareKey));
 });
 
 test('市场 fileType 筛选在登录态下生效', async () => {
@@ -159,15 +167,20 @@ test('市场 fileType 筛选在登录态下生效', async () => {
   await adminAgent.post(`/api/content-templates/${htmlSubmit.body.id}/review`).send({ status: 'approved', visibility: 'visible' });
   await adminAgent.post(`/api/content-templates/${mdSubmit.body.id}/review`).send({ status: 'approved', visibility: 'visible' });
 
+  const marketAfter = await request(env.app).get('/api/content-templates/market');
+  const htmlShareKey = (marketAfter.body.templates.find(t => t.title === 'HTML 筛选测试') || {}).share_key;
+  const mdShareKey = (marketAfter.body.templates.find(t => t.title === 'MD 筛选测试') || {}).share_key;
+  assert.ok(htmlShareKey && mdShareKey, '两个模板都应出现在市场并含 share_key');
+
   // 登录用户筛选 html，应只命中 html 模板
   const htmlRes = await userAgent.get('/api/content-templates/market?fileType=html');
-  assert.ok(htmlRes.body.templates.some(t => t.id === htmlSubmit.body.id), 'html 筛选应命中 html 模板');
-  assert.ok(!htmlRes.body.templates.some(t => t.id === mdSubmit.body.id), 'html 筛选不应命中 md 模板');
+  assert.ok(htmlRes.body.templates.some(t => t.share_key === htmlShareKey), 'html 筛选应命中 html 模板');
+  assert.ok(!htmlRes.body.templates.some(t => t.share_key === mdShareKey), 'html 筛选不应命中 md 模板');
 
   // 登录用户筛选 markdown，应只命中 md 模板
   const mdRes = await userAgent.get('/api/content-templates/market?fileType=markdown');
-  assert.ok(mdRes.body.templates.some(t => t.id === mdSubmit.body.id), 'markdown 筛选应命中 md 模板');
-  assert.ok(!mdRes.body.templates.some(t => t.id === htmlSubmit.body.id), 'markdown 筛选不应命中 html 模板');
+  assert.ok(mdRes.body.templates.some(t => t.share_key === mdShareKey), 'markdown 筛选应命中 md 模板');
+  assert.ok(!mdRes.body.templates.some(t => t.share_key === htmlShareKey), 'markdown 筛选不应命中 html 模板');
 });
 
 test('管理员通过但隐藏 → 不出现在市场', async () => {
@@ -178,7 +191,7 @@ test('管理员通过但隐藏 → 不出现在市场', async () => {
     status: 'approved', visibility: 'hidden',
   });
   const market = await request(env.app).get('/api/content-templates/market');
-  assert.ok(!market.body.templates.some(t => t.id === submit.body.id));
+  assert.ok(!market.body.templates.some(t => t.title === '通过但隐藏'));
 });
 
 test('管理员拒绝 → 市场不展示，作者看到 review_note', async () => {
@@ -191,7 +204,7 @@ test('管理员拒绝 → 市场不展示，作者看到 review_note', async () 
   });
   // 市场无
   const market = await request(env.app).get('/api/content-templates/market');
-  assert.ok(!market.body.templates.some(t => t.id === id));
+  assert.ok(!market.body.templates.some(t => t.title === '会被拒'));
   // 作者看到拒绝+意见
   const mine = await userAgent.get('/api/content-templates/mine?status=rejected');
   const found = mine.body.templates.find(t => t.id === id);
@@ -235,13 +248,16 @@ test('作者归档模板 → 市场移除，但数据保留', async () => {
   });
   const id = submit.body.id;
   await adminAgent.post(`/api/content-templates/${id}/review`).send({ status: 'approved', visibility: 'visible' });
-  // 归档前在市场
-  assert.ok((await request(env.app).get('/api/content-templates/market')).body.templates.some(t => t.id === id));
+
+  const marketBefore = await request(env.app).get('/api/content-templates/market');
+  const shareKey = (marketBefore.body.templates.find(t => t.title === '待归档') || {}).share_key;
+  assert.ok(shareKey, '归档前应在市场列表中找到 share_key');
+
   // 归档
   const del = await userAgent.delete(`/api/content-templates/${id}`);
   assert.strictEqual(del.status, 200);
   // 市场移除
-  assert.ok(!(await request(env.app).get('/api/content-templates/market')).body.templates.some(t => t.id === id));
+  assert.ok(!(await request(env.app).get('/api/content-templates/market')).body.templates.some(t => t.share_key === shareKey));
   // 我的上架里能看到 archived
   const mine = await userAgent.get('/api/content-templates/mine?status=archived');
   assert.ok(mine.body.templates.some(t => t.id === id));
@@ -371,9 +387,9 @@ test('from-file：从文件上架 → pending，市场不展示', async () => {
   assert.strictEqual(res.status, 200);
   assert.strictEqual(res.body.status, 'pending');
   assert.strictEqual(res.body.republished, false);
-  // 市场不展示
+  // 市场不展示（按 title 查找）
   const market = await request(env.app).get('/api/content-templates/market');
-  assert.ok(!market.body.templates.some(t => t.id === res.body.id));
+  assert.ok(!market.body.templates.some(t => t.title === '商务路演'));
 });
 
 test('from-file：同文件再次上架 → 更新现有模板 + 重新审核', async () => {
@@ -392,7 +408,7 @@ test('from-file：同文件再次上架 → 更新现有模板 + 重新审核', 
   assert.strictEqual(second.body.status, 'pending', '应回退 pending');
   // 市场应已移除（回退 pending+hidden）
   const market = await request(env.app).get('/api/content-templates/market');
-  assert.ok(!market.body.templates.some(t => t.id === firstId));
+  assert.ok(!market.body.templates.some(t => t.title === '改过了'));
 });
 
 test('from-file：bundle 文件 → 400', async () => {
@@ -431,6 +447,7 @@ test('GET /by-file/:fileId 返回正确上架状态', async () => {
   // 上架
   const pub = await userAgent.post('/api/content-templates/from-file').send({ fileId, categoryId: 2 });
   const after = await userAgent.get(`/api/content-templates/by-file/${fileId}`);
+  assert.strictEqual(after.status, 200);
   assert.strictEqual(after.body.published, true);
   assert.strictEqual(after.body.templateId, pub.body.id);
   assert.strictEqual(after.body.status, 'pending');
@@ -453,7 +470,7 @@ test('mine 列表含 source_file_name', async () => {
 // 实例化（instantiate）主链路：使用模板 → 创建真实文件 + 追溯
 // ============================================================
 
-// 辅助：创建一个 approved+visible 模板，返回 id。
+// 辅助：创建一个 approved+visible 模板，返回 { id, shareKey }。
 // 用 categoryId:2（html-book）——分类 1 会被前置的「删除分类」测试停用。
 async function createPublishedTemplate(agent, title) {
   const submit = await agent.post('/api/content-templates').send({
@@ -461,20 +478,24 @@ async function createPublishedTemplate(agent, title) {
   });
   assert.ok(submit.body.id, `模板应创建成功，实际 status=${submit.status} body=${JSON.stringify(submit.body)}`);
   await adminAgent.post(`/api/content-templates/${submit.body.id}/review`).send({ status: 'approved', visibility: 'visible' });
-  return submit.body.id;
+  const detail = await agent.get(`/api/content-templates/${submit.body.id}`);
+  assert.strictEqual(detail.status, 200, '作者应能读取模板详情');
+  assert.ok(detail.body.share_key, '审核通过后应生成 share_key');
+  return { id: submit.body.id, shareKey: detail.body.share_key };
 }
 
 test('instantiate：approved+visible + Token → 创建文件 + 记录 installs + use_count+1', async () => {
-  const id = await createPublishedTemplate(userAgent, '可实例化模板');
+  const { id, shareKey } = await createPublishedTemplate(userAgent, '可实例化模板');
+  assert.ok(id, '应返回内部 numeric id');
 
   // 实例化前 use_count=0
-  const metaBefore = await request(env.app).get(`/api/content-templates/market/${id}`);
+  const metaBefore = await request(env.app).get(`/api/content-templates/market/${shareKey}`);
   assert.strictEqual(metaBefore.body.use_count, 0);
 
-  const res = await instantiateRequest(id, adminToken);
+  const res = await instantiateRequest(shareKey, adminToken);
   assert.strictEqual(res.status, 200);
   assert.ok(res.body.fileId, '应返回新建文件 id');
-  assert.strictEqual(res.body.templateId, id);
+  assert.strictEqual(res.body.templateShareKey, shareKey);
   assert.ok(res.body.shareKey, '应返回文件 share_key');
 
   // 验证文件确实创建了（upload_source='market-cli' 标记来自 CLI 式 Token 实例化）
@@ -484,7 +505,7 @@ test('instantiate：approved+visible + Token → 创建文件 + 记录 installs 
   assert.strictEqual(fileRes.body.is_public, 0, '默认应为私有文件');
 
   // use_count +1
-  const metaAfter = await request(env.app).get(`/api/content-templates/market/${id}`);
+  const metaAfter = await request(env.app).get(`/api/content-templates/market/${shareKey}`);
   assert.strictEqual(metaAfter.body.use_count, 1);
 
   // instantiation_count = 1
@@ -492,14 +513,14 @@ test('instantiate：approved+visible + Token → 创建文件 + 记录 installs 
 });
 
 test('instantiate：未登录 → 401', async () => {
-  const id = await createPublishedTemplate(userAgent, '未登录实例化');
-  const res = await request(env.app).post(`/api/content-templates/${id}/instantiate`);
+  const { shareKey } = await createPublishedTemplate(userAgent, '未登录实例化');
+  const res = await request(env.app).post(`/api/content-templates/${shareKey}/instantiate`);
   assert.strictEqual(res.status, 401);
 });
 
 test('instantiate：仅 Session Cookie → 403', async () => {
-  const id = await createPublishedTemplate(userAgent, 'session禁止实例化');
-  const res = await userAgent.post(`/api/content-templates/${id}/instantiate`);
+  const { shareKey } = await createPublishedTemplate(userAgent, 'session禁止实例化');
+  const res = await userAgent.post(`/api/content-templates/${shareKey}/instantiate`);
   assert.strictEqual(res.status, 403);
 });
 
@@ -507,53 +528,55 @@ test('instantiate：未上架模板（pending）→ 404', async () => {
   const submit = await userAgent.post('/api/content-templates').send({
     title: '未上架', fileType: 'html', categoryId: 2, content: '<p>x</p>',
   });
-  const res = await instantiateRequest(submit.body.id, userToken);
+  // pending 模板未生成 share_key，但公开端点按 share_key 查找，任意不存在的 key 都应 404
+  const res = await instantiateRequest('pending_no_share_key_' + submit.body.id, userToken);
   assert.strictEqual(res.status, 404, 'pending+hidden 模板不在市场可见范围，应 404');
 });
 
-test('instantiate：不存在的模板 id → 404', async () => {
-  const res = await instantiateRequest(999999, userToken);
+test('instantiate：不存在的模板 share_key → 404', async () => {
+  const res = await instantiateRequest('nonexistent_share_key_12345', userToken);
   assert.strictEqual(res.status, 404);
 });
 
 test('instantiate：同用户再次实例化同模板 → 刷新 installs 记录（非报错）', async () => {
-  const id = await createPublishedTemplate(userAgent, '重复实例化');
-  const first = await instantiateRequest(id, userToken);
-  const second = await instantiateRequest(id, userToken);
+  const { shareKey } = await createPublishedTemplate(userAgent, '重复实例化');
+  const first = await instantiateRequest(shareKey, userToken);
+  const second = await instantiateRequest(shareKey, userToken);
   assert.strictEqual(second.status, 200, 'UNIQUE(template_id,user_id) 应走 ON CONFLICT 更新而非报错');
   assert.ok(second.body.fileId !== first.body.fileId, '每次实例化应创建新文件');
   // instantiation_count 仍为 1（同用户的 install 记录被更新，而非新增）
-  const meta = await request(env.app).get(`/api/content-templates/market/${id}`);
+  const meta = await request(env.app).get(`/api/content-templates/market/${shareKey}`);
   assert.strictEqual(meta.body.instantiation_count, 1, '同用户去重，install 记录数不变');
   assert.strictEqual(meta.body.use_count, 2, '但热度计数 use_count 每次 +1');
 });
 
 test('instantiate：不同用户实例化 → instantiation_count 累加', async () => {
-  const id = await createPublishedTemplate(adminAgent, '多用户实例化');
-  await instantiateRequest(id, adminToken);
-  await instantiateRequest(id, userToken);
-  const meta = await request(env.app).get(`/api/content-templates/market/${id}`);
+  const { shareKey } = await createPublishedTemplate(adminAgent, '多用户实例化');
+  await instantiateRequest(shareKey, adminToken);
+  await instantiateRequest(shareKey, userToken);
+  const meta = await request(env.app).get(`/api/content-templates/market/${shareKey}`);
   assert.strictEqual(meta.body.instantiation_count, 2, '两个不同用户应各记一条 install');
 });
 
 test('GET /market 列表项含 view_count 字段', async () => {
-  const id = await createPublishedTemplate(userAgent, '列表字段');
+  const { shareKey } = await createPublishedTemplate(userAgent, '列表字段');
   const market = await request(env.app).get('/api/content-templates/market');
-  const found = market.body.templates.find(t => t.id === id);
+  const found = market.body.templates.find(t => t.share_key === shareKey);
   assert.ok(found, '模板应在市场列表中');
   assert.strictEqual(typeof found.view_count, 'number', '列表项应含 view_count');
 });
 
-test('GET /market/:id 每次访问详情 view_count +1', async () => {
-  const id = await createPublishedTemplate(userAgent, '查看计数');
-  const before = await request(env.app).get(`/api/content-templates/market/${id}`);
-  assert.strictEqual(before.body.view_count, 1);
+test('GET /market/:shareKey 每次访问详情 view_count +1', async () => {
+  const { shareKey } = await createPublishedTemplate(userAgent, '查看计数');
+  const before = await request(env.app).get(`/api/content-templates/market/${shareKey}`);
+  const beforeCount = before.body.view_count;
+  assert.strictEqual(typeof beforeCount, 'number');
 
-  await request(env.app).get(`/api/content-templates/market/${id}`);
-  await request(env.app).get(`/api/content-templates/market/${id}`);
+  await request(env.app).get(`/api/content-templates/market/${shareKey}`);
+  await request(env.app).get(`/api/content-templates/market/${shareKey}`);
 
-  const after = await request(env.app).get(`/api/content-templates/market/${id}`);
-  assert.strictEqual(after.body.view_count, 4);
+  const after = await request(env.app).get(`/api/content-templates/market/${shareKey}`);
+  assert.strictEqual(after.body.view_count, beforeCount + 3);
 });
 
 test('instantiate：创建的文件内容 = 模板内容快照', async () => {
@@ -564,7 +587,11 @@ test('instantiate：创建的文件内容 = 模板内容快照', async () => {
   const id = submit.body.id;
   await adminAgent.post(`/api/content-templates/${id}/review`).send({ status: 'approved', visibility: 'visible' });
 
-  const res = await instantiateRequest(id, userToken);
+  const market = await request(env.app).get('/api/content-templates/market');
+  const shareKey = (market.body.templates.find(t => t.title === '内容快照') || {}).share_key;
+  assert.ok(shareKey, '应能在市场列表找到 share_key');
+
+  const res = await instantiateRequest(shareKey, userToken);
   // 读文件原文，验证内容与模板一致
   const raw = await userAgent.get(`/api/files/${res.body.fileId}/content`);
   assert.strictEqual(raw.status, 200);
@@ -572,8 +599,8 @@ test('instantiate：创建的文件内容 = 模板内容快照', async () => {
 });
 
 test('instantiate：支持自定义文件名与公开性', async () => {
-  const id = await createPublishedTemplate(userAgent, '自定义文件名');
-  const res = await instantiateRequest(id, userToken).send({
+  const { shareKey } = await createPublishedTemplate(userAgent, '自定义文件名');
+  const res = await instantiateRequest(shareKey, userToken).send({
     originalName: '我的汇报.html',
     isPublic: true,
   });
@@ -584,8 +611,8 @@ test('instantiate：支持自定义文件名与公开性', async () => {
 });
 
 test('instantiate：Token 来源写入 upload_source', async () => {
-  const id = await createPublishedTemplate(userAgent, 'token来源');
-  const res = await instantiateRequest(id, userToken);
+  const { shareKey } = await createPublishedTemplate(userAgent, 'token来源');
+  const res = await instantiateRequest(shareKey, userToken);
   assert.strictEqual(res.status, 200);
 
   const file = await userAgent.get(`/api/files/${res.body.fileId}`);
@@ -593,22 +620,22 @@ test('instantiate：Token 来源写入 upload_source', async () => {
   assert.strictEqual(file.body.upload_source, 'market-cli', 'CLI Token 实例化应记录 upload_source=market-cli');
 });
 
-test('GET :id/use-guide 匿名可访问并返回 CLI/MCP 命令', async () => {
-  const id = await createPublishedTemplate(userAgent, '使用引导');
-  const res = await request(env.app).get(`/api/content-templates/${id}/use-guide`);
+test('GET :shareKey/use-guide 匿名可访问并返回 CLI/MCP 命令', async () => {
+  const { shareKey } = await createPublishedTemplate(userAgent, '使用引导');
+  const res = await request(env.app).get(`/api/content-templates/${shareKey}/use-guide`);
   assert.strictEqual(res.status, 200);
-  assert.strictEqual(res.body.templateId, id);
+  assert.strictEqual(res.body.shareKey, shareKey);
   assert.ok(res.body.cli, '应返回 cli 命令');
   assert.ok(res.body.cliWithName, '应返回带文件名的 cli 命令');
   assert.ok(res.body.mcp, '应返回 mcp 参数');
   assert.strictEqual(res.body.mcp.tool, 'instantiate_content_template');
 });
 
-test('GET :id/use-guide 对未上架模板返回 404', async () => {
+test('GET :shareKey/use-guide 对未上架模板返回 404', async () => {
   const submit = await userAgent.post('/api/content-templates').send({
     title: '未上架引导', fileType: 'html', categoryId: 2, content: '<p>x</p>',
   });
-  const res = await request(env.app).get(`/api/content-templates/${submit.body.id}/use-guide`);
+  const res = await request(env.app).get(`/api/content-templates/pending_no_share_key_${submit.body.id}/use-guide`);
   assert.strictEqual(res.status, 404);
 });
 
@@ -617,35 +644,35 @@ test('GET :id/use-guide 对未上架模板返回 404', async () => {
 // ============================================================
 
 test('收藏：toggle 收藏/取消，详情返回 starred 状态', async () => {
-  const id = await createPublishedTemplate(userAgent, '可收藏模板');
+  const { shareKey } = await createPublishedTemplate(userAgent, '可收藏模板');
   // 初始未收藏
-  const before = await userAgent.get(`/api/content-templates/market/${id}`);
+  const before = await userAgent.get(`/api/content-templates/market/${shareKey}`);
   assert.strictEqual(before.body.starred, false);
   // 收藏
-  const starOn = await userAgent.post(`/api/content-templates/${id}/star`);
+  const starOn = await userAgent.post(`/api/content-templates/${shareKey}/star`);
   assert.strictEqual(starOn.status, 200);
   assert.strictEqual(starOn.body.starred, true);
-  const after = await userAgent.get(`/api/content-templates/market/${id}`);
+  const after = await userAgent.get(`/api/content-templates/market/${shareKey}`);
   assert.strictEqual(after.body.starred, true);
   // 取消收藏
-  const starOff = await userAgent.post(`/api/content-templates/${id}/star`);
+  const starOff = await userAgent.post(`/api/content-templates/${shareKey}/star`);
   assert.strictEqual(starOff.body.starred, false);
 });
 
 test('收藏：未登录 → 401', async () => {
-  const id = await createPublishedTemplate(userAgent, '未登录收藏');
-  const res = await request(env.app).post(`/api/content-templates/${id}/star`);
+  const { shareKey } = await createPublishedTemplate(userAgent, '未登录收藏');
+  const res = await request(env.app).post(`/api/content-templates/${shareKey}/star`);
   assert.strictEqual(res.status, 401);
 });
 
 test('收藏：不存在的模板 → 404', async () => {
-  const res = await userAgent.post('/api/content-templates/999999/star');
+  const res = await userAgent.post('/api/content-templates/nonexistent_share_key_12345/star');
   assert.strictEqual(res.status, 404);
 });
 
 test('收藏：GET /mine/starred 返回已收藏列表', async () => {
-  const id = await createPublishedTemplate(userAgent, '收藏列表测试');
-  await userAgent.post(`/api/content-templates/${id}/star`);
+  const { id, shareKey } = await createPublishedTemplate(userAgent, '收藏列表测试');
+  await userAgent.post(`/api/content-templates/${shareKey}/star`);
   const res = await userAgent.get('/api/content-templates/mine/starred');
   assert.strictEqual(res.status, 200);
   assert.ok(Array.isArray(res.body.templates));
@@ -654,8 +681,8 @@ test('收藏：GET /mine/starred 返回已收藏列表', async () => {
 });
 
 test('下载：approved+visible → 返回文件内容，Content-Disposition 正确', async () => {
-  const id = await createPublishedTemplate(userAgent, '可下载模板');
-  const res = await userAgent.get(`/api/content-templates/${id}/download`);
+  const { shareKey } = await createPublishedTemplate(userAgent, '可下载模板');
+  const res = await userAgent.get(`/api/content-templates/${shareKey}/download`);
   assert.strictEqual(res.status, 200);
   assert.ok(res.text.includes('实例化'), '下载内容应为模板内容');
   assert.ok(res.headers['content-disposition'].includes('attachment'), '应为附件下载');
@@ -666,12 +693,12 @@ test('下载：未上架模板 → 404', async () => {
   const submit = await userAgent.post('/api/content-templates').send({
     title: '未上架下载', fileType: 'html', categoryId: 2, content: '<p>x</p>',
   });
-  const res = await userAgent.get(`/api/content-templates/${submit.body.id}/download`);
+  const res = await userAgent.get(`/api/content-templates/pending_no_share_key_${submit.body.id}/download`);
   assert.strictEqual(res.status, 404);
 });
 
 test('短链：生成 → 返回 key → /t/:key 匿名可访问渲染', async () => {
-  const id = await createPublishedTemplate(userAgent, '短链模板');
+  const { id } = await createPublishedTemplate(userAgent, '短链模板');
   const share = await userAgent.post(`/api/content-templates/${id}/share`);
   assert.strictEqual(share.status, 200);
   assert.ok(share.body.key, '应返回短链 key');
@@ -748,5 +775,3 @@ test('市场响应头含 X-Robots-Tag: noindex', async () => {
   assert.strictEqual(res.status, 200);
   assert.ok((res.headers['x-robots-tag'] || '').includes('noindex'));
 });
-
-

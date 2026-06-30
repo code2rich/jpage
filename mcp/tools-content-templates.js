@@ -51,13 +51,13 @@ function registerContentTemplateTools(server, { api, port, mcpIp, protocol }) {
       title: 'Get Content Template',
       description: '获取指定内容模板的完整样例内容。仅可获取市场中已审核通过且展示的模板。AI 拿到样例后，应学习其风格、布局和结构，生成风格一致但内容全新的作品。',
       inputSchema: {
-        id: z.number().int().positive().describe('模板 ID（list_content_templates 返回的 id）'),
+        shareKey: z.string().describe('模板 share_key（list_content_templates 返回的 share_key）'),
       },
     },
-    async ({ id }) => {
-      const data = await api.get(`/api/content-templates/market/${id}/preview`);
+    async ({ shareKey }) => {
+      const data = await api.get(`/api/content-templates/market/${shareKey}/preview`);
       return textResult({
-        id: data.id,
+        shareKey: data.share_key || shareKey,
         title: data.title,
         file_type: data.file_type,
         content: data.content,
@@ -73,20 +73,20 @@ function registerContentTemplateTools(server, { api, port, mcpIp, protocol }) {
       title: 'Instantiate Content Template',
       description: '使用指定内容模板在当前 Token 所属用户下创建一个新文件。调用会消耗用户存储空间，并记录模板使用热度。',
       inputSchema: {
-        id: z.number().int().positive().describe('模板 ID'),
+        shareKey: z.string().describe('模板 share_key'),
         originalName: z.string().optional().describe('实例化后的文件名，默认使用模板标题'),
         isPublic: z.boolean().optional().describe('是否设为公开文件，默认 false'),
       },
     },
-    async ({ id, originalName, isPublic }) => {
-      const data = await api.post(`/api/content-templates/${id}/instantiate`, {
+    async ({ shareKey, originalName, isPublic }) => {
+      const data = await api.post(`/api/content-templates/${shareKey}/instantiate`, {
         originalName,
         isPublic,
       });
       return textResult({
         success: true,
         fileId: data.fileId,
-        templateId: data.templateId,
+        templateShareKey: data.templateShareKey,
         url: `${protocol}://${mcpIp}:${port}/s/${data.shareKey || data.fileId}`,
         hint: '文件已创建到您的文件列表，可直接编辑或分享。',
       });

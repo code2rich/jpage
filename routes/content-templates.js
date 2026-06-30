@@ -118,7 +118,7 @@ router.get('/market', loadSession, marketBotFilter, marketListerLimiter, marketR
     });
 
     res.json({
-      templates: templatesWithHeat,
+      templates: templatesWithHeat.map(omitInternalId),
       pagination: { page, limit, total: total.count, totalPages: Math.ceil(total.count / limit) }
     });
   } catch (e) {
@@ -127,28 +127,40 @@ router.get('/market', loadSession, marketBotFilter, marketListerLimiter, marketR
   }
 });
 
+// 市场公开端点统一使用 share_key 作为标识，不暴露内部自增 id。
+// 按 share_key 查找已上架可见模板（含内部 id，供后续操作使用）。
+async function findPublicTemplateByShareKey(shareKey) {
+  return dbGet(
+    `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.use_count, ct.view_count, ct.featured,
+            ct.created_at, ct.published_at, ct.category_id, ct.share_key,
+            c.slug AS category_slug, c.name AS category_name,
+            u.username AS uploader_name,
+            (SELECT COUNT(*) FROM content_template_installs i WHERE i.template_id = ct.id) AS instantiation_count
+     FROM content_templates ct
+     LEFT JOIN template_market_categories c ON ct.category_id = c.id
+     LEFT JOIN users u ON ct.uploaded_by = u.id
+     WHERE ct.share_key = ? AND ${MARKET_VISIBLE_COND}`,
+    [shareKey]
+  );
+}
+
+function omitInternalId(obj) {
+  const { id: _id, ...rest } = obj;
+  return rest;
+}
+
 // 市场详情（匿名，仅 approved+visible）
 // 每次访问详情页，view_count +1，用于在市场展示热度。
-router.get('/market/:id', loadSession, marketBotFilter, marketPreviewLimiter, marketRobotsTag, async (req, res) => {
+router.get('/market/:shareKey', loadSession, marketBotFilter, marketPreviewLimiter, marketRobotsTag, async (req, res) => {
   try {
-    await dbRun('UPDATE content_templates SET view_count = view_count + 1 WHERE id = ?', [req.params.id]);
-    const t = await dbGet(
-      `SELECT ct.id, ct.title, ct.description, ct.file_type, ct.use_count, ct.view_count, ct.featured,
-              ct.created_at, ct.published_at, ct.category_id, ct.share_key,
-              c.slug AS category_slug, c.name AS category_name,
-              u.username AS uploader_name,
-              (SELECT COUNT(*) FROM content_template_installs i WHERE i.template_id = ct.id) AS instantiation_count
-       FROM content_templates ct
-       LEFT JOIN template_market_categories c ON ct.category_id = c.id
-       LEFT JOIN users u ON ct.uploaded_by = u.id
-       WHERE ct.id = ? AND ${MARKET_VISIBLE_COND}`,
-      [req.params.id]
-    );
+    const t = await findPublicTemplateByShareKey(req.params.shareKey);
     if (!t) return res.status(404).json({ error: '模板不存在或未上架' });
+    await dbRun('UPDATE content_templates SET view_count = view_count + 1 WHERE id = ?', [t.id]);
+
     // 登录用户附加收藏状态
     let starred = false;
     if (req.userId) {
-      const row = await dbGet('SELECT 1 FROM starred_templates WHERE user_id = ? AND template_id = ?', [req.userId, req.params.id]);
+      const row = await dbGet('SELECT 1 FROM starred_templates WHERE user_id = ? AND template_id = ?', [req.userId, t.id]);
       starred = !!row;
     }
 
@@ -161,10 +173,14 @@ router.get('/market/:id', loadSession, marketBotFilter, marketPreviewLimiter, ma
        WHERE ct.id != ? AND ct.category_id = ? AND ${MARKET_VISIBLE_COND}
        ORDER BY ct.featured DESC, ct.use_count DESC, ct.created_at DESC
        LIMIT 4`,
-      [req.params.id, t.category_id]
+      [t.id, t.category_id]
     );
 
-    res.json({ ...t, starred, related });
+    res.json({
+      ...omitInternalId(t),
+      starred,
+      related: related.map(omitInternalId),
+    });
   } catch (e) {
     logger.error({ type: 'app', msg: '获取市场模板详情失败', error: e.message });
     res.status(500).json({ error: '获取模板详情失败' });
@@ -172,31 +188,31 @@ router.get('/market/:id', loadSession, marketBotFilter, marketPreviewLimiter, ma
 });
 
 // 市场预览内容（匿名，用于 iframe 缩略图/详情页）
-router.get('/market/:id/preview', loadSession, marketBotFilter, marketPreviewLimiter, marketRobotsTag, async (req, res) => {
+router.get('/market/:shareKey/preview', loadSession, marketBotFilter, marketPreviewLimiter, marketRobotsTag, async (req, res) => {
   try {
     const t = await dbGet(
-      `SELECT ct.id, ct.title, ct.file_type, ct.content
+      `SELECT ct.title, ct.file_type, ct.content
        FROM content_templates ct
        LEFT JOIN template_market_categories c ON ct.category_id = c.id
-       WHERE ct.id = ? AND ${MARKET_VISIBLE_COND}`,
-      [req.params.id]
+       WHERE ct.share_key = ? AND ${MARKET_VISIBLE_COND}`,
+      [req.params.shareKey]
     );
     if (!t) return res.status(404).json({ error: '模板不存在或未上架' });
-    res.json({ id: t.id, title: t.title, file_type: t.file_type, content: t.content });
+    res.json({ title: t.title, file_type: t.file_type, content: t.content });
   } catch (e) {
     res.status(500).json({ error: '获取模板预览失败' });
   }
 });
 
 // 市场预览 HTML（用于 iframe src，避免 srcdoc 继承父页严格 CSP 导致内联脚本被拦截）
-router.get('/market/:id/preview-html', loadSession, marketBotFilter, marketPreviewLimiter, marketRobotsTag, async (req, res) => {
+router.get('/market/:shareKey/preview-html', loadSession, marketBotFilter, marketPreviewLimiter, marketRobotsTag, async (req, res) => {
   try {
     const t = await dbGet(
       `SELECT ct.title, ct.file_type, ct.content
        FROM content_templates ct
        LEFT JOIN template_market_categories c ON ct.category_id = c.id
-       WHERE ct.id = ? AND ${MARKET_VISIBLE_COND}`,
-      [req.params.id]
+       WHERE ct.share_key = ? AND ${MARKET_VISIBLE_COND}`,
+      [req.params.shareKey]
     );
     if (!t) return res.status(404).json({ error: '模板不存在或未上架' });
     return await renderTemplateContent(res, t);
@@ -205,6 +221,24 @@ router.get('/market/:id/preview-html', loadSession, marketBotFilter, marketPrevi
     res.status(500).json({ error: '渲染预览失败' });
   }
 });
+
+// 确保模板有 share_key；用于审核通过及公开端点兜底生成。
+async function ensureTemplateShareKey(templateId) {
+  const existing = await dbGet('SELECT share_key FROM content_templates WHERE id = ?', [templateId]);
+  if (!existing) return null;
+  if (existing.share_key) return existing.share_key;
+
+  let key;
+  for (let i = 0; i < 10; i++) {
+    const candidate = generateShareKey();
+    const clash = await dbGet('SELECT 1 FROM content_templates WHERE share_key = ?', [candidate]);
+    if (!clash) { key = candidate; break; }
+  }
+  if (!key) throw new Error(`无法为模板 ${templateId} 生成唯一 share_key`);
+
+  await dbRun('UPDATE content_templates SET share_key = ? WHERE id = ?', [key, templateId]);
+  return key;
+}
 
 // ============================================================
 // 登录用户端点 —— 提交、我的上架、编辑
@@ -536,14 +570,14 @@ router.post('/:id/use', (req, res) => {
 // 语义：「使用模板」= 用户真正得到一个可编辑的文件，而非空计数。
 // 仅对 approved+visible 模板生效；必须通过 Token（MCP_TOKEN 或 jp_...）调用，禁止 Session Cookie。
 // 同用户对同模板可多次实例化（每次得到新文件）。
-router.post('/:id/instantiate', uploadLimiter, requireAuth, requireTokenAuth, async (req, res) => {
+router.post('/:shareKey/instantiate', uploadLimiter, requireAuth, requireTokenAuth, async (req, res) => {
   try {
     const t = await dbGet(
-      `SELECT ct.id, ct.title, ct.content, ct.file_type, ct.version
+      `SELECT ct.id, ct.title, ct.content, ct.file_type, ct.version, ct.share_key
        FROM content_templates ct
        LEFT JOIN template_market_categories c ON ct.category_id = c.id
-       WHERE ct.id = ? AND ${MARKET_VISIBLE_COND}`,
-      [req.params.id]
+       WHERE ct.share_key = ? AND ${MARKET_VISIBLE_COND}`,
+      [req.params.shareKey]
     );
     if (!t) return res.status(404).json({ error: '模板不存在或未上架' });
     if (!t.content) return res.status(400).json({ error: '模板内容为空' });
@@ -576,7 +610,7 @@ router.post('/:id/instantiate', uploadLimiter, requireAuth, requireTokenAuth, as
           (original_name, stored_name, file_type, size, is_public, uploaded_by,
            share_key, upload_source, source_asset_id, created_from, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [originalName, storedName, t.file_type, size, isPublic, req.userId, generateShareKey(), uploadSource, req.params.id, 'market', ts]
+        [originalName, storedName, t.file_type, size, isPublic, req.userId, generateShareKey(), uploadSource, t.id, 'market', ts]
       );
       fileId = result.lastID;
       await addUserStorage(req.userId, size);
@@ -604,21 +638,21 @@ router.post('/:id/instantiate', uploadLimiter, requireAuth, requireTokenAuth, as
          token_prefix = excluded.token_prefix,
          token_hash_prefix = excluded.token_hash_prefix,
          created_at = datetime('now')`,
-      [req.params.id, req.userId, fileId, t.version || '1.0.0', req.tokenSource || 'unknown',
+      [t.id, req.userId, fileId, t.version || '1.0.0', req.tokenSource || 'unknown',
        req.tokenPrefix || null, req.tokenHashPrefix || null]
     );
 
     // 模板热度：use_count 同步 +1；实例化次数由 content_template_installs 子查询实时统计
-    await dbRun('UPDATE content_templates SET use_count = use_count + 1 WHERE id = ?', [req.params.id]);
+    await dbRun('UPDATE content_templates SET use_count = use_count + 1 WHERE id = ?', [t.id]);
 
     // 读出新建文件的 share_key 返回，方便客户端直接构造预览链接
     const fileRow = await dbGet('SELECT share_key FROM files WHERE id = ?', [fileId]);
 
     logger.audit('content_template.instantiate', {
-      templateId: parseInt(req.params.id), fileId, userId: req.userId,
+      templateShareKey: t.share_key, fileId, userId: req.userId,
       source: req.tokenSource, tokenHashPrefix: req.tokenHashPrefix, ip: clientIp(req)
     });
-    res.json({ success: true, fileId, templateId: parseInt(req.params.id), shareKey: fileRow ? fileRow.share_key : null });
+    res.json({ success: true, fileId, templateShareKey: t.share_key, shareKey: fileRow ? fileRow.share_key : null });
   } catch (e) {
     logger.error({ type: 'app', msg: '实例化模板失败', error: e.message });
     res.status(500).json({ error: '实例化失败' });
@@ -626,32 +660,32 @@ router.post('/:id/instantiate', uploadLimiter, requireAuth, requireTokenAuth, as
 });
 
 // 公开端点：返回某模板的 CLI/MCP 使用引导命令，供 Web UI「使用此模板」按钮展示。
-// 匿名可访问，因为只是命令文本，不创建文件。
-router.get('/:id/use-guide', loadSession, marketBotFilter, marketPreviewLimiter, marketRobotsTag, async (req, res) => {
+// 匿名可访问，因为只是命令文本，不创建文件。使用 share_key 作为标识，不暴露内部 id。
+router.get('/:shareKey/use-guide', loadSession, marketBotFilter, marketPreviewLimiter, marketRobotsTag, async (req, res) => {
   try {
     const t = await dbGet(
       `SELECT ct.id, ct.title, ct.file_type, ct.share_key
        FROM content_templates ct
        LEFT JOIN template_market_categories c ON ct.category_id = c.id
-       WHERE ct.id = ? AND ${MARKET_VISIBLE_COND}`,
-      [req.params.id]
+       WHERE ct.share_key = ? AND ${MARKET_VISIBLE_COND}`,
+      [req.params.shareKey]
     );
     if (!t) return res.status(404).json({ error: '模板不存在或未上架' });
 
     const ext = t.file_type === 'markdown' ? '.md' : '.html';
     const safeName = (t.title || '模板').replace(/[\\/:*?"<>|]/g, '_').trim() || '模板';
     const defaultName = safeName + ext;
-    const templateId = parseInt(t.id, 10);
+    const shareKey = t.share_key;
 
     res.json({
-      templateId,
+      shareKey,
       title: t.title,
       fileType: t.file_type,
-      cli: `jpage template use ${templateId}`,
-      cliWithName: `jpage template use ${templateId} --name "${defaultName}"`,
+      cli: `jpage template use ${shareKey}`,
+      cliWithName: `jpage template use ${shareKey} --name "${defaultName}"`,
       mcp: {
         tool: 'instantiate_content_template',
-        args: { id: templateId },
+        args: { shareKey },
       },
       hint: '使用此模板需要有效的 API Token（jp_...）或 MCP_TOKEN，将在您的账户下创建一个新文件。',
     });
@@ -662,16 +696,22 @@ router.get('/:id/use-guide', loadSession, marketBotFilter, marketPreviewLimiter,
 });
 
 // 收藏模板（toggle：已收藏则取消，否则收藏）
-router.post('/:id/star', requireAuth, async (req, res) => {
+// 使用 share_key 作为标识，避免暴露内部 id。
+router.post('/:shareKey/star', requireAuth, async (req, res) => {
   try {
-    const t = await dbGet('SELECT id FROM content_templates WHERE id = ?', [req.params.id]);
+    const t = await dbGet(
+      `SELECT ct.id FROM content_templates ct
+       LEFT JOIN template_market_categories c ON ct.category_id = c.id
+       WHERE ct.share_key = ? AND ${MARKET_VISIBLE_COND}`,
+      [req.params.shareKey]
+    );
     if (!t) return res.status(404).json({ error: '模板不存在' });
-    const existing = await dbGet('SELECT 1 FROM starred_templates WHERE user_id = ? AND template_id = ?', [req.userId, req.params.id]);
+    const existing = await dbGet('SELECT 1 FROM starred_templates WHERE user_id = ? AND template_id = ?', [req.userId, t.id]);
     if (existing) {
-      await dbRun('DELETE FROM starred_templates WHERE user_id = ? AND template_id = ?', [req.userId, req.params.id]);
+      await dbRun('DELETE FROM starred_templates WHERE user_id = ? AND template_id = ?', [req.userId, t.id]);
       res.json({ starred: false });
     } else {
-      await dbRun('INSERT INTO starred_templates (user_id, template_id) VALUES (?, ?)', [req.userId, req.params.id]);
+      await dbRun('INSERT INTO starred_templates (user_id, template_id) VALUES (?, ?)', [req.userId, t.id]);
       res.json({ starred: true });
     }
   } catch (e) {
@@ -680,13 +720,13 @@ router.post('/:id/star', requireAuth, async (req, res) => {
 });
 
 // 下载模板内容为文件（HTML/MD）
-router.get('/:id/download', requireAuth, async (req, res) => {
+router.get('/:shareKey/download', requireAuth, async (req, res) => {
   try {
     const t = await dbGet(
       `SELECT ct.title, ct.content, ct.file_type FROM content_templates ct
        LEFT JOIN template_market_categories c ON ct.category_id = c.id
-       WHERE ct.id = ? AND ${MARKET_VISIBLE_COND}`,
-      [req.params.id]
+       WHERE ct.share_key = ? AND ${MARKET_VISIBLE_COND}`,
+      [req.params.shareKey]
     );
     if (!t) return res.status(404).json({ error: '模板不存在或未上架' });
     const ext = t.file_type === 'markdown' ? '.md' : '.html';
@@ -799,6 +839,10 @@ router.post('/:id/review', requireAuth, requireAdmin, async (req, res) => {
       const vis = visibility === 'visible' ? 'visible' : 'hidden';
       sets.push('visibility = ?', 'published_at = ?');
       params.push(vis, ts);
+      // 审核通过并展示时，确保有 share_key 供公开端点使用
+      if (vis === 'visible') {
+        await ensureTemplateShareKey(req.params.id);
+      }
     } else if (status === 'rejected') {
       // 拒绝时保持 hidden
       sets.push('visibility = ?');
