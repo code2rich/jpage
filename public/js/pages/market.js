@@ -92,12 +92,7 @@ function renderError(container, { message, retry, list = false } = {}) {
 export function renderMarket(container, hash, navigate) {
   const path = hash.replace(/^#/, '') || '/market';
 
-  // /market/:shareKey 详情（排除 /market/submit、/market/my、/market/admin 这些保留段）
-  const detailMatch = path.match(/^\/market\/([A-Za-z0-9_-]+)$/);
-  if (detailMatch) {
-    renderDetail(container, detailMatch[1], navigate);
-    return;
-  }
+  // 保留子路由优先匹配，避免被详情正则当作 shareKey
   if (path === '/market/submit') {
     const body = renderMarketShell(container, { active: 'my', navigate });
     body.innerHTML = '<div class="ct-empty">上架入口已移至文件列表。请在首页文件列表对某个文件点「⋯ → 上架到市场」。</div>';
@@ -120,6 +115,12 @@ export function renderMarket(container, hash, navigate) {
       return;
     }
     renderAdmin(container, navigate);
+    return;
+  }
+  // /market/:shareKey 详情
+  const detailMatch = path.match(/^\/market\/([A-Za-z0-9_-]+)$/);
+  if (detailMatch) {
+    renderDetail(container, detailMatch[1], navigate);
     return;
   }
   // 默认：市场首页
