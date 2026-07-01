@@ -91,10 +91,10 @@ function renderError(container, { message, retry, list = false } = {}) {
 export function renderMarket(container, hash, navigate) {
   const path = hash.replace(/^#/, '') || '/market';
 
-  // /market/:id 详情（排除 /market/submit、/market/my、/market/admin 这些保留段）
-  const detailMatch = path.match(/^\/market\/(\d+)$/);
+  // /market/:shareKey 详情（排除 /market/submit、/market/my、/market/admin 这些保留段）
+  const detailMatch = path.match(/^\/market\/([A-Za-z0-9_-]+)$/);
   if (detailMatch) {
-    renderDetail(container, parseInt(detailMatch[1]), navigate);
+    renderDetail(container, detailMatch[1], navigate);
     return;
   }
   if (path === '/market/submit') {
@@ -520,7 +520,7 @@ function createTemplateCard(t) {
   const cat = t.category_name ? `<span class="ct-badge ct-badge-scene">${escapeHtml(t.category_name)}</span>` : '';
   const featured = t.featured ? '<span class="ct-badge ct-badge-featured">精选</span>' : '';
   const isLoggedIn = !!state.currentUser;
-  return `<div class="ct-card mw-card" data-id="${t.id}" data-file-type="${t.file_type}" data-title="${escapeHtml(t.title)}" data-share-key="${escapeHtml(t.share_key || '')}" tabindex="0">
+  return `<div class="ct-card mw-card" data-share-key="${escapeHtml(t.share_key || '')}" data-file-type="${t.file_type}" data-title="${escapeHtml(t.title)}" tabindex="0">
     <div class="ct-card-thumb">
       <div class="ct-card-thumb-wrap"><iframe class="ct-thumb-iframe" sandbox="allow-scripts"></iframe></div>
       <div class="ct-card-thumb-loading"></div>
@@ -549,64 +549,54 @@ function createTemplateCard(t) {
   </div>`;
 }
 
-async function showTemplateUseGuide({ id, title }) {
+async function showTemplateUseGuide({ shareKey, title }) {
   try {
-    const guide = await api(`/api/content-templates/${id}/use-guide`);
-    const isHtml = guide.fileType === 'html';
-    const extLabel = isHtml ? '.html' : '.md';
+    const guide = await api(`/api/content-templates/${shareKey}/use-guide`);
+    const isLoggedIn = !!state.currentUser;
+    const extLabel = guide.fileType === 'markdown' ? '.md' : '.html';
+    const downloadLink = isLoggedIn
+      ? `<a class="btn btn-primary btn-download-template" href="/api/content-templates/${shareKey}/download" download>下载 ${extLabel} 模板</a>`
+      : `<a class="btn btn-primary btn-download-template" href="#/login">登录后下载 ${extLabel} 模板</a>`;
 
     dialogModal.alert({
       title: `使用《${title}》`,
+      panelClass: 'modal-panel-wide',
       message: `
         <div class="use-template-dialog">
           <p class="use-template-tip">你可以选择以下任意一种方式使用此模板。推荐普通用户直接下载源文件后编辑；开发者可通过 CLI/MCP 自动创建到账户。</p>
           <div class="use-template-options">
-            <div class="use-template-option option-download">
-              <div class="option-title">
-                <span class="option-icon">📥</span>
-                <span>方式一：下载源文件</span>
-              </div>
-              <p class="option-desc">适合大部分用户。下载后在本地用任意编辑器修改，再上传到即页即可预览分享。</p>
-              <a href="/api/content-templates/${id}/download" class="btn btn-primary btn-download-template" target="_blank" download>
-                下载 ${extLabel} 模板
-              </a>
+            <div class="use-template-option">
+              <div class="option-icon" aria-hidden="true">📥</div>
+              <div class="option-title">方式一：下载源文件</div>
+              <div class="option-desc">适合大部分用户。下载后在本地用任意编辑器修改，再上传到即页即可预览分享。</div>
+              ${downloadLink}
             </div>
-            <div class="use-template-option option-cli">
-              <div class="option-title">
-                <span class="option-icon">⌨️</span>
-                <span>方式二：CLI 命令行</span>
-              </div>
-              <p class="option-desc">已安装 jpage CLI 并配置 Token 的用户，复制后在终端执行。</p>
+            <div class="use-template-option">
+              <div class="option-icon" aria-hidden="true">⌨️</div>
+              <div class="option-title">方式二：CLI 命令行</div>
+              <div class="option-desc">已安装 jpage CLI 并配置 Token 的用户，复制后在终端执行。</div>
               <div class="use-template-field">
                 <div class="use-template-field-header">
                   <label>CLI 命令</label>
-                  <button type="button" id="btn-copy-cli" class="btn btn-small btn-copy-prompt">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2z"/><path d="M4 15V5a2 2 0 0 1 2-2h8"/></svg>
-                    <span>复制</span>
-                  </button>
+                  <button type="button" id="btn-copy-cli" class="btn btn-small btn-copy-prompt">复制</button>
                 </div>
                 <textarea id="use-template-cli" class="use-template-textarea" readonly>${escapeHtml(guide.cliWithName || guide.cli)}</textarea>
               </div>
             </div>
-            <div class="use-template-option option-mcp">
-              <div class="option-title">
-                <span class="option-icon">🤖</span>
-                <span>方式三：MCP 工具</span>
-              </div>
-              <p class="option-desc">在支持 MCP 的 AI 编辑器/客户端中，复制参数调用 instantiate_content_template。</p>
+            <div class="use-template-option">
+              <div class="option-icon" aria-hidden="true">🤖</div>
+              <div class="option-title">方式三：MCP 工具</div>
+              <div class="option-desc">在支持 MCP 的 AI 编辑器/客户端中，复制参数调用 instantiate_content_template。</div>
               <div class="use-template-field">
                 <div class="use-template-field-header">
                   <label>MCP 参数</label>
-                  <button type="button" id="btn-copy-mcp" class="btn btn-small btn-copy-prompt">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2z"/><path d="M4 15V5a2 2 0 0 1 2-2h8"/></svg>
-                    <span>复制参数</span>
-                  </button>
+                  <button type="button" id="btn-copy-mcp" class="btn btn-small btn-copy-prompt">复制参数</button>
                 </div>
                 <textarea id="use-template-mcp" class="use-template-textarea" readonly>${escapeHtml(JSON.stringify(guide.mcp, null, 2))}</textarea>
               </div>
             </div>
           </div>
-          <p class="use-template-hint">${escapeHtml(guide.hint || '使用 CLI/MCP 需要有效的 API Token（jp_...）或 MCP_TOKEN。')}</p>
+          <p class="use-template-hint">${escapeHtml(guide.hint || '')}</p>
         </div>
       `,
       confirmText: '关闭'
@@ -637,18 +627,17 @@ async function showTemplateUseGuide({ id, title }) {
   }
 }
 
-
 function setupCardInteractions(grid, navigate) {
   grid.addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-act]');
     const card = e.target.closest('.ct-card');
     if (btn && card) {
-      const id = card.dataset.id;
+      const shareKey = card.dataset.shareKey;
       const title = card.dataset.title || '该模板';
       const act = btn.dataset.act;
       e.stopPropagation();
       if (act === 'use') {
-        await showTemplateUseGuide({ id, title });
+        await showTemplateUseGuide({ shareKey, title });
         return;
       }
       if (act === 'copy') {
@@ -656,19 +645,18 @@ function setupCardInteractions(grid, navigate) {
           toast('请先登录后复制链接', 'error');
           return;
         }
-        try {
-          const data = await api(`/api/content-templates/${id}/share`, { method: 'POST' });
-          const url = `${location.origin}/t/${data.key}`;
-          const ok = await copyToClipboard(url);
-          toast(ok ? '已复制公开链接' : '复制失败', ok ? 'success' : 'error');
-        } catch (err) {
-          toast(err.message || '复制链接失败', 'error');
+        if (!shareKey) {
+          toast('该模板暂无公开链接', 'error');
+          return;
         }
+        const url = `${location.origin}/t/${shareKey}`;
+        const ok = await copyToClipboard(url);
+        toast(ok ? '已复制公开链接' : '复制失败', ok ? 'success' : 'error');
         return;
       }
       if (act === 'preview') {
         try { sessionStorage.setItem('marketScrollY', String(window.scrollY)); } catch (_) {}
-        navigate(`/market/${id}`);
+        navigate(`/market/${shareKey}`);
         return;
       }
       if (act === 'star') {
@@ -678,7 +666,7 @@ function setupCardInteractions(grid, navigate) {
         }
         btn.classList.add('is-loading');
         try {
-          const data = await api(`/api/content-templates/${id}/star`, { method: 'POST' });
+          const data = await api(`/api/content-templates/${shareKey}/star`, { method: 'POST' });
           btn.dataset.starred = data.starred ? '1' : '0';
           btn.setAttribute('aria-label', data.starred ? '取消收藏' : '收藏');
           btn.setAttribute('data-tip', data.starred ? '取消收藏' : '收藏');
@@ -694,7 +682,7 @@ function setupCardInteractions(grid, navigate) {
     if (card) {
       e.stopPropagation();
       try { sessionStorage.setItem('marketScrollY', String(window.scrollY)); } catch (_) {}
-      navigate(`/market/${card.dataset.id}`);
+      navigate(`/market/${card.dataset.shareKey}`);
     }
   });
 
@@ -703,7 +691,7 @@ function setupCardInteractions(grid, navigate) {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         try { sessionStorage.setItem('marketScrollY', String(window.scrollY)); } catch (_) {}
-        navigate(`/market/${card.dataset.id}`);
+        navigate(`/market/${card.dataset.shareKey}`);
       }
     });
   });
@@ -829,7 +817,7 @@ function renderRelatedList(related, _navigate) {
     const typeLabel = t.file_type === 'markdown' ? 'MD' : 'HTML';
     const typeClass = t.file_type === 'markdown' ? 'ct-badge-md' : 'ct-badge-html';
     const cat = t.category_name ? `<span class="ct-badge ct-badge-scene">${escapeHtml(t.category_name)}</span>` : '';
-    return `<button type="button" class="market-detail-related-item" data-id="${t.id}" aria-label="查看 ${escapeHtml(t.title)}">
+    return `<button type="button" class="market-detail-related-item" data-share-key="${escapeHtml(t.share_key || '')}" aria-label="查看 ${escapeHtml(t.title)}">
       <div class="market-detail-related-info">
         <div class="market-detail-related-title">${escapeHtml(t.title)}</div>
         <div class="market-detail-related-meta">${cat}<span class="ct-badge ${typeClass}">${typeLabel}</span><span>${t.view_count || 0} 次查看</span></div>
@@ -838,16 +826,16 @@ function renderRelatedList(related, _navigate) {
   }).join('');
 }
 
-function renderDetail(container, id, navigate) {
+function renderDetail(container, shareKey, navigate) {
   const body = renderMarketShell(container, { active: 'home', navigate });
   body.innerHTML = '<div class="ct-loading">加载中...</div>';
 
-  loadDetail(body, id, navigate);
+  loadDetail(body, shareKey, navigate);
 }
 
-async function loadDetail(body, id, navigate) {
+async function loadDetail(body, shareKey, navigate) {
   try {
-    const meta = await api(`/api/content-templates/market/${id}`);
+    const meta = await api(`/api/content-templates/market/${shareKey}`);
 
     const typeLabel = meta.file_type === 'markdown' ? 'Markdown' : 'HTML';
     const cat = meta.category_name ? `<span class="ct-badge ct-badge-scene">${escapeHtml(meta.category_name)}</span>` : '';
@@ -913,11 +901,11 @@ async function loadDetail(body, id, navigate) {
     `;
 
     const iframe = body.querySelector('.market-detail-iframe');
-    iframe.src = `/api/content-templates/market/${id}/preview-html`;
+    iframe.src = `/api/content-templates/market/${shareKey}/preview-html`;
 
     // 使用此模板：Web 端仅展示 CLI/MCP 引导，实际实例化需通过 Token 客户端完成
     body.querySelector('#detail-use-template').onclick = async () => {
-      await showTemplateUseGuide({ id, title: meta.title });
+      await showTemplateUseGuide({ shareKey, title: meta.title });
     };
 
     // 收藏（toggle，仅登录用户可见）
@@ -925,7 +913,7 @@ async function loadDetail(body, id, navigate) {
     if (starBtn) {
       starBtn.onclick = async () => {
         try {
-          const data = await api(`/api/content-templates/${id}/star`, { method: 'POST' });
+          const data = await api(`/api/content-templates/${shareKey}/star`, { method: 'POST' });
           starBtn.dataset.starred = data.starred ? '1' : '0';
           const prefix = meta.title ? `《${meta.title}》` : '该模板';
           toast(data.starred ? `已收藏 ${prefix}` : `已取消收藏 ${prefix}`);
@@ -939,7 +927,7 @@ async function loadDetail(body, id, navigate) {
     const downloadBtn = body.querySelector('#detail-download');
     if (downloadBtn) {
       downloadBtn.onclick = () => {
-        window.open(`/api/content-templates/${id}/download`, '_blank');
+        window.open(`/api/content-templates/${shareKey}/download`, '_blank');
       };
     }
 
@@ -947,34 +935,26 @@ async function loadDetail(body, id, navigate) {
     const copyUrlBtn = body.querySelector('#detail-copy-url');
     if (copyUrlBtn) {
       copyUrlBtn.onclick = async () => {
-        try {
-          const data = await api(`/api/content-templates/${id}/share`, { method: 'POST' });
-          const url = `${location.origin}/t/${data.key}`;
-          const ok = await copyToClipboard(url);
-          toast(ok ? `已复制公开链接：${url}` : '复制失败，请手动复制', ok ? 'success' : 'error');
-        } catch (e) {
-          toast(e.message || '生成链接失败', 'error');
+        const key = meta.share_key;
+        if (!key) {
+          toast('该模板暂无公开链接', 'error');
+          return;
         }
+        const url = `${location.origin}/t/${key}`;
+        const ok = await copyToClipboard(url);
+        toast(ok ? `已复制公开链接：${url}` : '复制失败，请手动复制', ok ? 'success' : 'error');
       };
     }
 
     // 跳转：打开 /t/:key 公开页（仅登录用户可见）
     const viewPublicBtn = body.querySelector('#detail-view-public');
     if (viewPublicBtn) {
-      viewPublicBtn.onclick = async () => {
-        try {
-          let key = meta.share_key;
-          if (!key) {
-            const data = await api(`/api/content-templates/${id}/share`, { method: 'POST' });
-            key = data.key;
-          }
-          if (key) {
-            window.open(`${location.origin}/t/${key}`, '_blank');
-          } else {
-            toast('未找到公开链接', 'error');
-          }
-        } catch (e) {
-          toast(e.message || '打开公链失败', 'error');
+      viewPublicBtn.onclick = () => {
+        const key = meta.share_key;
+        if (key) {
+          window.open(`${location.origin}/t/${key}`, '_blank');
+        } else {
+          toast('未找到公开链接', 'error');
         }
       };
     }
@@ -985,7 +965,7 @@ async function loadDetail(body, id, navigate) {
       relatedList.addEventListener('click', (e) => {
         const item = e.target.closest('.market-detail-related-item');
         if (item) {
-          navigate(`/market/${item.dataset.id}`);
+          navigate(`/market/${item.dataset.shareKey}`);
         }
       });
     }

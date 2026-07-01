@@ -84,6 +84,37 @@ const browserGlobals = {
   CSS: 'readonly', // CSS.escape 用于 bundle 文件树选择器转义
 };
 
+const baseRules = {
+  // === error：真正的 bug 风险 ===
+  'no-undef': 'error',
+  'no-redeclare': 'error',
+  'prefer-const': 'error',
+  'no-var': 'error',
+  'no-debugger': 'error',
+
+  // === warn：可疑但不一定错，保留信号 ===
+  // catch 子句的 err 形参无法省略，项目里大量 catch 只为返回 500 不读 e，
+  // 故对名为 e/err/error/_ 的 catch 参数不告警；其余真正未用的变量仍 warn。
+  'no-unused-vars': [
+    'warn',
+    {
+      argsIgnorePattern: '^_',
+      varsIgnorePattern: '^_',
+      caughtErrorsIgnorePattern: '^(e|err|error|_)$',
+    },
+  ],
+
+  // === off：与本项目约定冲突或噪音过大 ===
+  'no-console': 'off', // 项目刻意用 logger.js，console 作为兜底不拦
+  'no-empty': ['error', { allowEmptyCatch: true }], // 多处 catch 静默（健康检查、可选清理）
+  'no-inner-declarations': 'off', // 函数提升在 Express 处理器里是常见写法
+  'no-prototype-builtins': 'off', // 无原型链污染风险
+  'no-control-regex': 'off', // 文件名解码等用到控制字符区间
+  'no-useless-escape': 'warn',
+  'no-self-assign': 'off', // preview.js 有意用 iframe.src = iframe.src 强制刷新
+  'no-useless-assignment': 'off', // server.js getIndexHtml 在 try 内条件重赋值，规则误报
+};
+
 export default [
   js.configs.recommended,
 
@@ -111,36 +142,18 @@ export default [
       sourceType: 'commonjs',
       globals: nodeGlobals,
     },
-    rules: {
-      // === error：真正的 bug 风险 ===
-      'no-undef': 'error',
-      'no-redeclare': 'error',
-      'prefer-const': 'error',
-      'no-var': 'error',
-      'no-debugger': 'error',
+    rules: baseRules,
+  },
 
-      // === warn：可疑但不一定错，保留信号 ===
-      // catch 子句的 err 形参无法省略，项目里大量 catch 只为返回 500 不读 e，
-      // 故对名为 e/err/error/_ 的 catch 参数不告警；其余真正未用的变量仍 warn。
-      'no-unused-vars': [
-        'warn',
-        {
-          argsIgnorePattern: '^_',
-          varsIgnorePattern: '^_',
-          caughtErrorsIgnorePattern: '^(e|err|error|_)$',
-        },
-      ],
-
-      // === off：与本项目约定冲突或噪音过大 ===
-      'no-console': 'off', // 项目刻意用 logger.js，console 作为兜底不拦
-      'no-empty': ['error', { allowEmptyCatch: true }], // 多处 catch 静默（健康检查、可选清理）
-      'no-inner-declarations': 'off', // 函数提升在 Express 处理器里是常见写法
-      'no-prototype-builtins': 'off', // 无原型链污染风险
-      'no-control-regex': 'off', // 文件名解码等用到控制字符区间
-      'no-useless-escape': 'warn',
-      'no-self-assign': 'off', // preview.js 有意用 iframe.src = iframe.src 强制刷新
-      'no-useless-assignment': 'off', // server.js getIndexHtml 在 try 内条件重赋值，规则误报
+  {
+    // Node.js ES Module 脚本（.mjs）
+    files: ['**/*.mjs'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: nodeGlobals,
     },
+    rules: baseRules,
   },
 
   {
