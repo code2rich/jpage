@@ -1,5 +1,5 @@
 // 内容模板市场：独立路由页面。
-// 子路由：#/market（首页）/ :id（详情）/ submit（提交）/ my（我的上架）/ admin（管理）。
+// 子路由：#/market（首页）/ :shareKey（详情）/ submit（提交）/ my（我的上架）/ admin（管理）。
 
 import { api } from '../api.js';
 import { state } from '../app.js';
@@ -47,15 +47,16 @@ function enqueueThumbLoad(card) {
 }
 
 async function loadThumb(card) {
-  const id = parseInt(card.dataset.id);
-  if (loadedThumbs.has(id)) return;
-  loadedThumbs.add(id);
+  const shareKey = card.dataset.shareKey;
+  if (!shareKey) return;
+  if (loadedThumbs.has(shareKey)) return;
+  loadedThumbs.add(shareKey);
   const loadingEl = card.querySelector('.ct-card-thumb-loading');
   const iframe = card.querySelector('.ct-thumb-iframe');
   if (!iframe) return;
   iframe.onload = () => { if (loadingEl) loadingEl.remove(); };
   iframe.onerror = () => { if (loadingEl) loadingEl.remove(); };
-  iframe.src = `/api/content-templates/market/${id}/preview-html`;
+  iframe.src = `/api/content-templates/market/${shareKey}/preview-html`;
 }
 
 // ============================================================

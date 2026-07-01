@@ -4881,3 +4881,56 @@ html:not(.light) .btn-danger-soft {
   .mw-cat-scroll-btn { display: none; }
 }
 
+
+/* 使用模板对话框 - 三栏选项优化 */
+.use-template-options {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 12px 0;
+}
+.use-template-option {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  background: var(--bg);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.use-template-option:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+  border-color: var(--primary);
+}
+.option-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.option-icon { font-size: 18px; }
+.option-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+.btn-download-template {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.option-download {
+  background: linear-gradient(180deg, var(--bg) 0%, rgba(79, 70, 229, 0.04) 100%);
+}
+.use-template-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  line-height: 1.5;
+}
