@@ -3759,6 +3759,11 @@ html:not(.light) .btn-danger-soft {
   padding: 0;
   background: #f6f7f9;
   color: #17181d;
+  /* Market 为固定浅色风格，覆盖全局 dark 主题变量，避免右侧/卡片出现浅色背景配浅色文字 */
+  --text: #17181d;
+  --text-secondary: #4b5563;
+  --bg: #f6f7f9;
+  --border: #e5e7eb;
 }
 
 .mw-sidebar {
@@ -4229,6 +4234,27 @@ html:not(.light) .btn-danger-soft {
 .mw-main .market-detail-related-item { border-color: #e5e7eb; }
 .mw-main .market-detail-related-item:hover { background: #f3f4f6; border-color: var(--primary); }
 .mw-main .market-detail-related-thumb { border-color: #e5e7eb; }
+
+/* Market 页面内统一 badge / heat 配色，减少风格色数量并确保浅色背景下可读 */
+.mw-market-page.market-page .ct-badge,
+.mw-market-page.market-page .ct-badge-html,
+.mw-market-page.market-page .ct-badge-md,
+.mw-market-page.market-page .ct-badge-scene,
+.mw-market-page.market-page .ct-badge-tag,
+.mw-market-page.market-page .ct-badge-featured {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+}
+
+.mw-market-page.market-page .ct-heat-new,
+.mw-market-page.market-page .ct-heat-low,
+.mw-market-page.market-page .ct-heat-mid,
+.mw-market-page.market-page .ct-heat-high {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+}
 
 .mw-main .filter-chips {
   margin-bottom: 16px;
