@@ -155,6 +155,7 @@ function renderMarketShell(container, { active, navigate }) {
         </div>` : ''}
         <div class="mw-side-footer">
           <a href="#/">${isLoggedIn ? '返回我的页面' : '返回首页'}</a>
+          <p class="mw-icp"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">赣ICP备2021009043号-2</a></p>
         </div>
       </aside>
       <main class="mw-main" id="market-body"></main>
