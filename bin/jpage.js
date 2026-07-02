@@ -72,11 +72,13 @@ const HELP = `jpage —— 即页命令行
 
 通用选项：
   --token <TOKEN>        鉴权 token（jp_ 用户 token 或 MCP_TOKEN）
-  --base <URL>           服务地址（默认 http://localhost:8858）
+  --base <URL>           服务地址（默认 https://jpage.cn）
   --help, -h             显示本帮助
 
 token 优先级：--token > JPAGE_TOKEN 环境变量 > MCP_TOKEN 环境变量 > .env 里的同名变量
-base  优先级：--base  > JPAGE_BASE  环境变量 > 默认 http://localhost:8858
+base  优先级：--base  > JPAGE_BASE  环境变量 > 默认 https://jpage.cn
+
+支持的环境变量：JPAGE_TOKEN、JPAGE_BASE、MCP_TOKEN（JPAGE_BASE 可替代 --base）
 
 示例：
   jpage upload ./report.html --public

@@ -4,14 +4,14 @@
 //
 // 优先级（高 → 低）：
 //   --token  >  JPAGE_TOKEN env  >  MCP_TOKEN env（环境 + .env 文件）
-//   --base   >  JPAGE_BASE  env  >  默认 http://localhost:8858
+//   --base   >  JPAGE_BASE  env  >  默认 https://jpage.cn
 //
-// 设计：让 jpage 能「无参跑通本地默认实例」，同时支持远程/CI 场景显式指定。
+// 设计：让 jpage 默认连接线上实例 https://jpage.cn，同时支持本地开发/远程/CI 场景显式指定。
 
 const fs = require('fs');
 const path = require('path');
 
-const DEFAULT_BASE = 'http://localhost:8858';
+const DEFAULT_BASE = 'https://jpage.cn';
 
 // 解析 .env 文件为对象。仅支持最简语法：KEY=VALUE，值可带引号，# 开头为注释。
 // 失败（文件不存在/读错）返回空对象，由调用方决定是否报错。

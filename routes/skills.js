@@ -60,13 +60,25 @@ npm install -g @code2rich/jpage
 jpage --help
 \`\`\`
 
-## 配置 token
+## 配置 token 与服务地址
 
-CLI 需要一个 token（\`jp_\` 用户 token 或全局 \`MCP_TOKEN\`）。优先级：
+CLI 需要一个 token（\`jp_\` 用户 token 或全局 \`MCP_TOKEN\`）。token 优先级：
 
-\`--token\` > \`JPAGE_TOKEN\` 环境变量 > \`.env\` 里的 \`MCP_TOKEN\`
+\`--token\` > \`JPAGE_TOKEN\` 环境变量 / \`.env\` > \`MCP_TOKEN\` 环境变量 / \`.env\`
 
-在本系统的 **API 令牌** 页创建或复制你的 token。服务地址默认 \`${baseUrl}\`，可用 \`--base\` 覆盖。
+服务地址优先级：
+
+\`--base\` > \`JPAGE_BASE\` 环境变量 / \`.env\` > 默认 \`https://jpage.cn\`
+
+在本系统的 **API 令牌** 页创建或复制你的 token。示例默认使用 \`${baseUrl}\`。
+
+## 支持的环境变量
+
+| 变量 | 说明 |
+|---|---|
+| \`JPAGE_TOKEN\` | 用户 API Token（\`jp_\` 开头），替代 \`--token\` |
+| \`JPAGE_BASE\` | 服务地址，替代 \`--base\` |
+| \`MCP_TOKEN\` | 全局 MCP Token，当没有 \`JPAGE_TOKEN\` 时作为 token 兜底 |
 
 ## 命令
 

@@ -33,7 +33,7 @@ window.Login = (function () {
       return;
     }
     const cfg = window.jpage.getConfig();
-    els.serverUrl.value = cfg.base || 'https://www.jpage.cn';
+    els.serverUrl.value = cfg.base || 'https://jpage.cn';
     if (cfg.account) els.account.value = cfg.account;
     if (cfg.user) {
       els.subtitle.textContent = `当前账户：${cfg.user.username}（会话已保存，直接登录或重连）`;
@@ -99,7 +99,7 @@ window.Login = (function () {
     if (!confirm('确定要清空本地缓存吗？\n将清除服务器地址、账号和登录状态。')) return;
     try {
       window.jpage.clearCache();
-      els.serverUrl.value = 'https://www.jpage.cn';
+      els.serverUrl.value = 'https://jpage.cn';
       els.account.value = '';
       els.password.value = '';
       els.subtitle.textContent = '登录你的即页账户';

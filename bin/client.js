@@ -22,7 +22,7 @@ class HttpError extends Error {
 /**
  * 创建 API 客户端。
  * @param {object} opts
- * @param {string} opts.base - 服务地址（如 http://localhost:8858），无尾斜杠
+ * @param {string} opts.base - 服务地址（如 https://jpage.cn），无尾斜杠
  * @param {string} [opts.token] - Bearer token；为空时不发 Authorization 头
  * @param {string} [opts.source] - 上传来源标记，写入 X-Upload-Source 头，默认 'cli'
  * @param {function} [opts.fetchImpl] - 可选 fetch 实现（测试注入）

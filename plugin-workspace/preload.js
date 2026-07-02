@@ -61,7 +61,7 @@ function removeCfg(key) {
 // ---------------------------------------------------------------------------
 
 function getBase() {
-  let base = (getCfg(DB_KEYS.base, 'https://www.jpage.cn') || '').trim();
+  let base = (getCfg(DB_KEYS.base, 'https://jpage.cn') || '').trim();
   if (base.endsWith('/')) base = base.slice(0, -1);
   return base;
 }
