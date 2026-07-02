@@ -85,13 +85,14 @@ app.use(helmet({
 // 由 lib/render.js 的 renderFile 按内容类型分级下发 Markdown/HTML 策略。
 // 渲染端点还需被同源 iframe 嵌入（文件列表卡片缩略图），故移除 helmet 全局下发的
 // X-Frame-Options: DENY，改由 render.js 下发 SAMEORIGIN（仅同源可嵌入）。
-const { APP_CSP, isRenderPath } = require('./lib/csp');
+const { appCsp, isRenderPath, generateNonce } = require('./lib/csp');
 app.use((req, res, next) => {
   if (isRenderPath(req.path)) {
     res.removeHeader('X-Frame-Options'); // 由 render.js 按需下发 SAMEORIGIN
     return next();
   }
-  res.setHeader('Content-Security-Policy', APP_CSP);
+  req.cspNonce = generateNonce();
+  res.setHeader('Content-Security-Policy', appCsp(req.cspNonce));
   next();
 });
 
@@ -345,21 +346,30 @@ app.use(express.static(path.join(__dirname, 'public'), { ...STATIC_OPTS, index: 
 // --- SPA 兜底：返回 index.html，注入打包后的带哈希资源路径（若已 build）---
 const INDEX_HTML_PATH = path.join(__dirname, 'public', 'index.html');
 const DIST_MANIFEST_PATH = path.join(__dirname, 'public', 'dist', 'manifest.json');
+const ICP_BEIAN = process.env.ICP_BEIAN || '';
 let _indexHtmlCache = { html: null, manifestMtime: 0, manifest: null };
-function getIndexHtml() {
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+function getIndexHtml(nonce) {
   let manifest = null, manifestMtime = 0;
   try {
     const st = fs.statSync(DIST_MANIFEST_PATH);
     manifestMtime = st.mtimeMs;
-    if (_indexHtmlCache.html && _indexHtmlCache.manifestMtime === manifestMtime) {
-      return _indexHtmlCache.html; // manifest 未变，用缓存
+    if (_indexHtmlCache.html && _indexHtmlCache.manifestMtime === manifestMtime && _indexHtmlCache.nonce === nonce) {
+      return _indexHtmlCache.html; // manifest 与 nonce 均未变，用缓存
     }
     manifest = JSON.parse(fs.readFileSync(DIST_MANIFEST_PATH, 'utf8'));
   } catch {
     // 无构建产物 → 返回源 index.html（引用源文件 /css、/js）
-    if (_indexHtmlCache.html && !_indexHtmlCache.manifest) return _indexHtmlCache.html;
+    if (_indexHtmlCache.html && !_indexHtmlCache.manifest && _indexHtmlCache.nonce === nonce) return _indexHtmlCache.html;
     const html = fs.readFileSync(INDEX_HTML_PATH, 'utf8');
-    _indexHtmlCache = { html, manifestMtime: 0, manifest: null };
+    _indexHtmlCache = { html, manifestMtime: 0, manifest: null, nonce };
     return html;
   }
   // 注入哈希路径
@@ -370,13 +380,19 @@ function getIndexHtml() {
   if (manifest['app.js']) {
     html = html.replace(/\/js\/app\.js\?v=[^"']+/g, '/dist/' + manifest['app.js']);
   }
-  _indexHtmlCache = { html, manifestMtime, manifest };
+  // 备案号：服务端注入，未配置则不显示
+  const icpHtml = ICP_BEIAN
+    ? `<p class="landing-icp"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">${escapeHtml(ICP_BEIAN)}</a></p>`
+    : '';
+  html = html.replace('<!-- {{ICP_BEIAN_PLACEHOLDER}} -->', icpHtml);
+  html = html.replace('</head>', `<script nonce="${nonce}">window.__JPAGE_ICP_BEIAN__ = ${JSON.stringify(ICP_BEIAN)};</script></head>`);
+  _indexHtmlCache = { html, manifestMtime, manifest, nonce };
   return html;
 }
 
 app.get('*', (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.send(getIndexHtml());
+  res.send(getIndexHtml(req.cspNonce));
 });
 
 // --- 全局错误处理 ---

@@ -374,7 +374,7 @@ CLI 与 MCP 共用同一套 REST API，是对等的两个客户端入口。
 - 版本号以 `package.json` 为准。
 - 推荐发版：`npm version patch|minor|major` → `git push origin main` → `git push origin vX.Y.Z`，由 `.github/workflows/release.yml` 自动执行 lint、test、build、校验 tag、发布到 npm。
 - Docker：`Dockerfile` 多阶段构建（builder / frontend / runner），`EXPOSE 8858`；`docker-compose.yml` 映射 host 8858 → container 8858，挂载 `./data:/app/data`。
-- 环境变量完整清单（按需配置）：`PORT`、`NODE_ENV`、`JPAGE_DATA_DIR`、`ADMIN_USER`、`ADMIN_PASSWORD`、`SESSION_SECRET`、`COOKIE_SECURE`、`MCP_TOKEN`、`MCP_IP`、`MCP_PROTOCOL`、`TOKEN_ENCRYPTION_KEY`、`SMTP_HOST`、`SMTP_PORT`、`SMTP_SECURE`、`SMTP_USER`、`SMTP_PASS`、`SMTP_FROM`、`APP_URL`、`ALLOW_REGISTRATION`、`MAX_FILE_VERSIONS`、`BACKUP_CRON`、`BACKUP_DIR`。
+- 环境变量完整清单（按需配置）：`PORT`、`NODE_ENV`、`JPAGE_DATA_DIR`、`ADMIN_USER`、`ADMIN_PASSWORD`、`SESSION_SECRET`、`COOKIE_SECURE`、`MCP_TOKEN`、`MCP_IP`、`MCP_PROTOCOL`、`TOKEN_ENCRYPTION_KEY`、`SMTP_HOST`、`SMTP_PORT`、`SMTP_SECURE`、`SMTP_USER`、`SMTP_PASS`、`SMTP_FROM`、`APP_URL`、`ALLOW_REGISTRATION`、`MAX_FILE_VERSIONS`、`BACKUP_CRON`、`BACKUP_DIR`、`ICP_BEIAN`。
 
 ---
 

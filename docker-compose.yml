@@ -29,4 +29,5 @@ services:
       - MAX_FILE_VERSIONS=${MAX_FILE_VERSIONS:-20}
       - BACKUP_CRON=${BACKUP_CRON:-}
       - BACKUP_DIR=${BACKUP_DIR:-}
+      - ICP_BEIAN=${ICP_BEIAN:-}
     restart: unless-stopped
