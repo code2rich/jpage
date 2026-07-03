@@ -19,10 +19,10 @@ const rateLimit = require('express-rate-limit');
 const { runMigrations } = require('./migrations');
 const { setDb, dbGet, dbRun, configureDatabase } = require('./lib/db');
 const { DATA_DIR, UPLOAD_DIR } = require('./lib/paths');
-const { generateReadablePassword, currentUserId, now } = require('./lib/util');
+const { generateReadablePassword, currentUserId, now, unlinkQuiet } = require('./lib/util');
 const { loadTemplates, loadTemplateNameMap } = require('./lib/templates');
 const { reloadCategoryNameCache } = require('./lib/categories');
-const { backfillFtsIndex } = require('./lib/fts');
+const { backfillFtsIndex, deleteFileIndex } = require('./lib/fts');
 const { scheduleViewCountFlush, flushViewCounts, recordVisit } = require('./lib/view-counts');
 const { setAdminUserId } = require('./lib/auth-state');
 const { renderFile, renderTemplateContent } = require('./lib/render');
@@ -43,6 +43,7 @@ const categoriesRouter = require('./routes/categories');
 const contentTemplatesRouter = require('./routes/content-templates');
 const adminRouter = require('./routes/admin');
 const skillsRouter = require('./routes/skills');
+const { router: publicRouter, cleanupExpiredTryPastes } = require('./routes/public');
 
 const PORT = process.env.PORT || 8858;
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -188,6 +189,7 @@ app.use('/api', categoriesRouter);       // /api/categories、/api/templates
 app.use('/api/content-templates', contentTemplatesRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', skillsRouter);            // /api/skills、/api/mcp/config
+app.use('/api/public', publicRouter);      // 免登录公开接口：/api/public/try-paste
 
 // --- 短链（根路径，公开热点）---
 // 访问门槛（按序）：
@@ -242,6 +244,12 @@ app.get('/s/:key', async (req, res) => {
     if (!file) return res.status(404).send('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:sans-serif;text-align:center;padding:4em"><h1>404</h1><p>页面不存在</p><a href="/">返回首页</a></body></html>');
     // 过期判定（UTC 字符串比较）
     if (file.share_expires_at && file.share_expires_at <= now()) {
+      // 粘贴试用的临时文件过期后直接清理，避免匿名文件堆积
+      if (file.upload_source === 'try_paste') {
+        await unlinkQuiet(path.join(UPLOAD_DIR, file.stored_name));
+        await deleteFileIndex(file.id);
+        await dbRun('DELETE FROM files WHERE id = ?', [file.id]);
+      }
       return res.status(410).send(EXPIRED_HTML);
     }
     if (!file.is_public && !currentUserId(req)) return res.redirect('/');
@@ -271,6 +279,11 @@ app.post('/s/:key', shareKeyLimiter, async (req, res) => {
       return res.status(200).send(renderSharePasswordPage(req.params.key, '密码错误'));
     }
     if (file.share_expires_at && file.share_expires_at <= now()) {
+      if (file.upload_source === 'try_paste') {
+        await unlinkQuiet(path.join(UPLOAD_DIR, file.stored_name));
+        await deleteFileIndex(file.id);
+        await dbRun('DELETE FROM files WHERE id = ?', [file.id]);
+      }
       return res.status(410).send(EXPIRED_HTML);
     }
     if (!file.is_public && !currentUserId(req)) return res.redirect('/');
@@ -459,6 +472,8 @@ async function initApp() {
   }
   setAdminUserId(adminUserId);
   scheduleViewCountFlush();
+  // 启动时清理已过期的粘贴试用文件（匿名临时文件不会出现在用户列表中）
+  cleanupExpiredTryPastes().catch(() => {});
   return adminUserId;
 }
 

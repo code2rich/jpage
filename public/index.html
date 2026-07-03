@@ -103,6 +103,40 @@
     </div>
   </section>
 
+  <!-- 粘贴试用 -->
+  <section class="landing-sec landing-sec-try" id="try-paste">
+    <div class="landing-sec-inner">
+      <div class="landing-sec-tag reveal">Try it now</div>
+      <h2 class="landing-sec-title reveal">不用注册，粘贴即可预览</h2>
+      <p class="landing-sec-lead reveal">把 AI 生成的 HTML 或 Markdown 直接贴进来，10 分钟内获得一个可分享的短链接。</p>
+      <div class="try-paste-box reveal">
+        <div class="try-paste-tabs">
+          <button type="button" class="try-paste-tab active" data-mode="auto">自动识别</button>
+          <button type="button" class="try-paste-tab" data-mode="html">HTML</button>
+          <button type="button" class="try-paste-tab" data-mode="markdown">Markdown</button>
+        </div>
+        <textarea class="try-paste-editor" placeholder="在此粘贴 HTML 或 Markdown 内容..." spellcheck="false"></textarea>
+        <div class="try-paste-footer">
+          <span class="try-paste-hint">最多 200KB · 10 分钟有效 · 无需登录</span>
+          <button type="button" class="btn btn-primary btn-lg try-paste-submit">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            生成临时页面
+          </button>
+        </div>
+        <div class="try-paste-result" hidden>
+          <div class="try-paste-result-label">临时链接（10 分钟内有效）</div>
+          <div class="try-paste-result-url">
+            <input type="text" class="try-paste-url-input" readonly>
+            <button type="button" class="btn btn-small try-paste-copy">复制</button>
+            <a class="btn btn-small" target="_blank" rel="noopener noreferrer">打开</a>
+          </div>
+          <div class="try-paste-countdown"></div>
+        </div>
+        <div class="try-paste-error" role="alert" hidden></div>
+      </div>
+    </div>
+  </section>
+
   <!-- 特性 -->
   <section class="landing-sec" id="features">
     <div class="landing-sec-inner">
