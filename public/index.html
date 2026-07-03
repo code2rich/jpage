@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="即页是面向 AI 时代的轻量内容发布工具。上传 HTML、Markdown 或 ZIP 页面包，即刻在线预览并生成短链接，支持密码、过期时间、版本历史、模板市场、CLI、MCP 和自托管部署。">
-<title>即页 jpage - AI 生成 HTML / Markdown 一键发布成可分享网页</title>
+<meta name="description" content="即页，拖入 HTML 或 Markdown 文件，即刻获得在线预览页面。">
+<title>即页 — 拖入文件，即刻成页</title>
 <link rel="icon" type="image/svg+xml" href="/jpage_logo/favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="/jpage_logo/favicons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/jpage_logo/favicons/favicon-16.png">
@@ -45,50 +45,57 @@
 
   <!-- Hero -->
   <section class="landing-hero">
-    <div class="landing-hero-bg" aria-hidden="true"><div class="landing-grid" aria-hidden="true"></div></div>
+    <div class="landing-hero-bg" aria-hidden="true">
+      <div class="blob blob-1"></div>
+      <div class="blob blob-2"></div>
+      <div class="blob blob-3"></div>
+      <div class="landing-grid" aria-hidden="true"></div>
+    </div>
     <div class="landing-hero-content reveal">
-      <p class="landing-hero-eyebrow"><span class="badge-dot"></span>AI 内容发布层 · HTML / Markdown / ZIP</p>
-      <h1 class="landing-hero-title"><em>AI 生成的页面</em><br><span>一秒变成可分享链接</span></h1>
-      <p class="landing-hero-slogan">上传 HTML、Markdown 或 ZIP 页面包，即页会自动渲染、生成短链，并支持密码、过期时间、版本历史和模板复用。适合 AI 报告、数据看板、产品原型、技术文档和演示页面。</p>
+      <p class="landing-hero-eyebrow"><span class="badge-dot"></span>HTML · Markdown · ZIP · 创作市场 · 即时预览分享</p>
+      <h1 class="landing-hero-title"><em>即页</em> <small>jpage</small></h1>
+      <p class="landing-hero-sub">零配置的内容发布引擎</p>
+      <p class="landing-hero-slogan">拖入文件，即刻成页。AI 工具直连，一键分享。<br>为 AI 时代重新设计的内容预览与分发工作流。</p>
       <div class="landing-hero-actions">
         <a class="btn btn-primary btn-lg" href="#/login">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-          立即上传一个页面
+          开始使用
         </a>
-        <a class="btn btn-ghost btn-lg" href="#demo-showcase">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          查看真实 Demo
-        </a>
-        <a class="btn btn-ghost btn-lg" id="landing-github-btn" href="https://github.com/code2rich/jpage#docker-compose" target="_blank" rel="noopener noreferrer">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96 12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg>
-          自托管部署
+        <a class="btn btn-ghost btn-lg" id="landing-github-btn" href="https://github.com/code2rich/jpage" target="_blank" rel="noopener noreferrer">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.3-1.7-1.3-1.7-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.78 2.73 1.27 3.4.97.1-.76.41-1.27.74-1.56-2.56-.29-5.26-1.28-5.26-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.7 5.41-5.27 5.69.42.37.8 1.1.8 2.22v3.29c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5z"/></svg>
+          GitHub
         </a>
       </div>
       <div class="landing-hero-tags">
-        <span class="landing-tag">不需要仓库</span>
-        <span class="landing-tag">不需要构建</span>
-        <span class="landing-tag">不需要服务器知识</span>
+        <span class="landing-tag">Express</span>
+        <span class="landing-tag">SQLite</span>
+        <span class="landing-tag">Vanilla JS</span>
+        <span class="landing-tag">MCP</span>
+        <span class="landing-tag">uTools</span>
+        <span class="landing-tag">Docker</span>
+        <span class="landing-tag">ESM</span>
       </div>
     </div>
     <div class="landing-demo reveal">
       <div class="landing-demo-window">
         <div class="landing-demo-header">
           <div class="landing-demo-dots"><span></span><span></span><span></span></div>
-          <div class="landing-demo-title">AI report -> jpage link</div>
+          <div class="landing-demo-title">index.html</div>
         </div>
         <div class="landing-demo-body">
+          <div class="landing-demo-sidebar">
+            <div class="demo-logo">JP</div>
+            <div class="demo-nav-items"><span></span><span></span><span></span></div>
+          </div>
           <div class="landing-demo-main">
-            <div class="demo-flow">
-              <div class="demo-flow-item"><span>1</span><strong>AI 生成页面</strong><small>HTML / MD / ZIP</small></div>
-              <div class="demo-flow-arrow">-></div>
-              <div class="demo-flow-item"><span>2</span><strong>上传到即页</strong><small>拖拽 / CLI / MCP</small></div>
-              <div class="demo-flow-arrow">-></div>
-              <div class="demo-flow-item active"><span>3</span><strong>复制短链接</strong><small>https://jpage.cn/s/...</small></div>
+            <div class="demo-upload">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span>拖入文件，即刻成页</span>
             </div>
             <div class="demo-file-list">
-              <div class="demo-file"><span class="demo-file-icon html">HTML</span><span class="demo-file-name">growth-report.html</span><span class="demo-file-meta">数据图表 · 可交互</span></div>
-              <div class="demo-file"><span class="demo-file-icon md">MD</span><span class="demo-file-name">architecture-notes.md</span><span class="demo-file-meta">代码高亮 · Mermaid · KaTeX</span></div>
-              <div class="demo-file"><span class="demo-file-icon zip">ZIP</span><span class="demo-file-name">launch-page.zip</span><span class="demo-file-meta">CSS / JS / 图片完整预览</span></div>
+              <div class="demo-file"><span class="demo-file-icon html">HTML</span><span class="demo-file-name">report.html</span><span class="demo-file-meta">2.4 MB · 刚刚</span></div>
+              <div class="demo-file"><span class="demo-file-icon md">MD</span><span class="demo-file-name">README.md</span><span class="demo-file-meta">12 KB · 1 分钟前</span></div>
+              <div class="demo-file"><span class="demo-file-icon zip">ZIP</span><span class="demo-file-name">portfolio.zip</span><span class="demo-file-meta">8.1 MB · 5 分钟前</span></div>
             </div>
           </div>
         </div>
@@ -96,75 +103,37 @@
     </div>
   </section>
 
-  <!-- Demo -->
-  <section class="landing-sec landing-sec-demo" id="demo-showcase">
-    <div class="landing-sec-inner">
-      <div class="landing-sec-tag reveal">Live Demo</div>
-      <h2 class="landing-sec-title reveal">先看效果，再决定是否注册</h2>
-      <p class="landing-sec-lead reveal">首页先把真实使用场景摆出来：AI 报告、技术文档、ZIP 页面包。访客不需要理解部署，也能马上判断即页解决的是“生成之后如何给别人看”。</p>
-      <div class="landing-demo-cards">
-        <a class="landing-demo-card reveal" href="#/market">
-          <div class="demo-card-preview demo-card-report">
-            <span></span><span></span><span></span>
-          </div>
-          <div class="demo-card-copy">
-            <strong>HTML 数据报告 Demo</strong>
-            <p>指标卡片、图表、交互区块保持原样，适合运营复盘、融资材料和业务看板。</p>
-          </div>
-        </a>
-        <a class="landing-demo-card reveal" href="#/market">
-          <div class="demo-card-preview demo-card-doc">
-            <span></span><span></span><span></span><span></span>
-          </div>
-          <div class="demo-card-copy">
-            <strong>Markdown 技术文档 Demo</strong>
-            <p>代码高亮、公式、Mermaid 流程图和目录结构自动渲染，发链接即可评审。</p>
-          </div>
-        </a>
-        <a class="landing-demo-card reveal" href="#/market">
-          <div class="demo-card-preview demo-card-zip">
-            <span></span><span></span><span></span>
-          </div>
-          <div class="demo-card-copy">
-            <strong>ZIP 产品页 Demo</strong>
-            <p>连同 CSS、图片、JS 一起上传，完整预览作品集、Landing Page 和演示页面。</p>
-          </div>
-        </a>
-      </div>
-    </div>
-  </section>
-
-  <!-- 场景 -->
+  <!-- 特性 -->
   <section class="landing-sec" id="features">
     <div class="landing-sec-inner">
-      <div class="landing-sec-tag reveal">Use Cases</div>
-      <h2 class="landing-sec-title reveal">AI 生成内容的最后一公里</h2>
+      <div class="landing-sec-tag reveal">Features</div>
+      <h2 class="landing-sec-title reveal">不只是预览，是完整的内容发布工作流</h2>
       <div class="landing-features-grid">
         <div class="landing-feature-card reveal landing-feature-large">
-          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-4 4"/></svg></div>
-          <h3>AI HTML 报告分享</h3>
-          <p>让 AI 生成的数据报告不再停留在本地文件。上传即得可交互链接，保留图表、布局和页面状态。</p>
-          <div class="feature-tags"><span>报告</span><span>看板</span><span>评审</span></div>
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg></div>
+          <h3>HTML / Markdown / ZIP 全能渲染</h3>
+          <p>代码高亮、KaTeX 公式、Mermaid 图表完整呈现。ZIP 网站包自动解压并渲染入口页。</p>
+          <div class="feature-tags"><span>180+ 语言</span><span>行内公式</span><span>流程图</span></div>
         </div>
         <div class="landing-feature-card reveal">
-          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg></div>
-          <h3>Markdown 文档发布</h3>
-          <p>技术笔记、项目报告、会议纪要自动渲染代码、公式和 Mermaid 图表。</p>
-        </div>
-        <div class="landing-feature-card reveal">
-          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
-          <h3>ZIP 页面包预览</h3>
-          <p>产品页、作品集、演示文稿连同 CSS、图片、JS 一起上传，完整预览。</p>
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
+          <h3>短链即分享</h3>
+          <p>上传即得 /s/:key 短链接。支持别名、过期时间与密码保护。</p>
         </div>
         <div class="landing-feature-card reveal">
           <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></div>
-          <h3>AI 工具自动发布</h3>
-          <p>Claude Code、Cursor、脚本和 CI 可以通过 CLI / MCP 直接上传、更新、管理页面。</p>
+          <h3>CLI / MCP / uTools 三端入口</h3>
+          <p>网页拖拽、uTools 插件、jpage CLI、MCP Server 共用同一套权限与审计，各端用户都能一键上传。</p>
+        </div>
+        <div class="landing-feature-card reveal">
+          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></div>
+          <h3>版本与组织</h3>
+          <p>完整版本历史、标签、分类、收藏，让文件从临时分享进化为知识库。</p>
         </div>
         <div class="landing-feature-card reveal landing-feature-wide">
           <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg></div>
-          <h3>模板市场与风格复用</h3>
-          <p>把满意的页面沉淀为模板，让 AI 下次按同样风格生成，也让团队复用统一审美。</p>
+          <h3>内容模板市场</h3>
+          <p>内置 9 大场景模板，支持用户上架与管理员审核。AI 可以学习风格，批量生成一致审美。</p>
         </div>
       </div>
     </div>
@@ -175,7 +144,7 @@
     <div class="landing-sec-inner">
       <div class="landing-sec-tag reveal">Template Market</div>
       <h2 class="landing-sec-title reveal">把风格变成资产，让 AI 学会你的审美</h2>
-      <p class="landing-sec-lead reveal">创作市场承接 “Reuse” 任务：把满意的页面上架为模板，后续由自己、团队或 AI 工作流反复调用。</p>
+      <p class="landing-sec-lead reveal">创作市场不只是模板库。你可以把任意文件上架为风格模板，管理员审核后即可被自己和团队反复调用；AI 也能读取这些模板，批量生成一致审美的 HTML / Markdown。</p>
       <div class="market-preview-grid reveal">
         <div class="market-preview-card">
           <div class="mp-icon">🎓</div>
@@ -243,21 +212,21 @@
           <div class="step-num">01</div>
           <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
           <h3>拖入文件</h3>
-          <p>拖入 HTML / Markdown / ZIP，或通过 CLI / MCP 从 Claude Code、Cursor、脚本中自动上传。</p>
+          <p>网页、uTools 插件、CLI 均支持拖拽或流式上传 HTML、Markdown、ZIP。</p>
         </div>
         <div class="landing-step-divider reveal" aria-hidden="true"></div>
         <div class="landing-step reveal">
           <div class="step-num">02</div>
           <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
           <h3>即时渲染</h3>
-          <p>Markdown 自动支持代码高亮、公式和流程图；HTML 与 ZIP 页面包在隔离环境中渲染。</p>
+          <p>自动识别文件类型，Markdown 套用模板，HTML 进入 iframe Sandbox 安全预览。</p>
         </div>
         <div class="landing-step-divider reveal" aria-hidden="true"></div>
         <div class="landing-step reveal">
           <div class="step-num">03</div>
           <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></div>
           <h3>一键分享</h3>
-          <p>获得短链接，可设置公开/私有、访问密码、过期时间、自定义别名和版本历史。</p>
+          <p>复制短链接，或让 AI 通过 MCP 直接读取、更新、管理你的内容。</p>
         </div>
       </div>
     </div>
@@ -267,9 +236,9 @@
   <section class="landing-sec" id="stats">
     <div class="landing-sec-inner">
       <div class="landing-stats reveal">
-        <div class="stat"><strong>3</strong><span>核心格式</span></div>
-        <div class="stat"><strong>17+</strong><span>AI Tools</span></div>
+        <div class="stat"><strong>17+</strong><span>MCP Tools</span></div>
         <div class="stat"><strong>11</strong><span>CLI 命令</span></div>
+        <div class="stat"><strong>9+</strong><span>内容场景</span></div>
         <div class="stat"><strong>4</strong><span>渲染模板</span></div>
         <div class="stat"><strong>0</strong><span>配置成本</span></div>
       </div>
@@ -279,26 +248,56 @@
   <!-- 版本进化 -->
   <section class="landing-sec landing-sec-alt" id="versions">
     <div class="landing-sec-inner">
-      <div class="landing-sec-tag reveal">Trust</div>
-      <h2 class="landing-sec-title reveal">轻量发布，也要有分享控制</h2>
-      <div class="landing-trust-grid">
-        <div class="landing-trust-item reveal"><strong>短链控制</strong><p>自定义别名、访问密码、过期时间、公开/私有状态。</p></div>
-        <div class="landing-trust-item reveal"><strong>版本历史</strong><p>覆盖上传后保留版本记录，评审材料和报告可以快速回滚。</p></div>
-        <div class="landing-trust-item reveal"><strong>隔离渲染</strong><p>HTML 和 ZIP 页面在 sandbox 中预览，Markdown 使用独立渲染管线。</p></div>
+      <div class="landing-sec-tag reveal">Version History</div>
+      <h2 class="landing-sec-title reveal">持续进化的产品能力</h2>
+      <div class="landing-versions">
+        <div class="ver reveal">
+          <div class="ver-dot"></div>
+          <div class="ver-card">
+            <div class="ver-head">
+              <span class="ver-num">V1.5</span>
+              <span class="ver-date">2026-06</span>
+              <span class="ver-title">双客户端 + AI 演示 + 卡片视图</span>
+            </div>
+            <p class="ver-desc">jpage CLI 成为与 MCP 并列的第二客户端入口；新增 uTools 插件，支持在 uTools 中直接拖拽上传；整合 jpage-upload / jpage-presentation / jpage-content-template 为统一 jpage Skill；文件列表卡片视图用 iframe 实时缩略图。</p>
+          </div>
+        </div>
+        <div class="ver reveal">
+          <div class="ver-dot"></div>
+          <div class="ver-card">
+            <div class="ver-head">
+              <span class="ver-num">V1.4</span>
+              <span class="ver-date">2026-06</span>
+              <span class="ver-title">内容模板市场 + 风格化渲染</span>
+            </div>
+            <p class="ver-desc">内容模板市场让 AI 学会风格参考；4 种 Markdown 渲染模板、FTS5 全文搜索、链接访问统计。</p>
+          </div>
+        </div>
+        <div class="ver reveal">
+          <div class="ver-dot"></div>
+          <div class="ver-card">
+            <div class="ver-head">
+              <span class="ver-num">V1.0</span>
+              <span class="ver-date">2026-05</span>
+              <span class="ver-title">诞生：从第一行代码到品牌确立</span>
+            </div>
+            <p class="ver-desc">AI 生成的 HTML 不再沦为截图或附件。拖拽上传，秒级预览，短链接即分享——即页的第一个版本，只做一件事：让内容被完整地看见。</p>
+          </div>
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- 开源与部署 -->
+  <!-- 设计理念 -->
   <section class="landing-sec" id="philosophy">
     <div class="landing-sec-inner">
-      <div class="landing-sec-tag reveal">Open Source</div>
-      <h2 class="landing-sec-title reveal">开发者需要的细节，放在该出现的位置</h2>
+      <div class="landing-sec-tag reveal">Design Philosophy</div>
+      <h2 class="landing-sec-title reveal">设计理念</h2>
       <div class="landing-philos">
-        <div class="phi reveal"><div class="phi-ico">JP</div><h3>Node.js + SQLite</h3><p>适合轻量自托管，不需要复杂基础设施即可跑起个人或团队内容发布层。</p></div>
-        <div class="phi reveal"><div class="phi-ico">AI</div><h3>CLI / MCP / Skills</h3><p>面向 AI Agent 的发布接口，让生成、上传、分享成为同一条自动化链路。</p></div>
-        <div class="phi reveal"><div class="phi-ico">UI</div><h3>原生前端</h3><p>管理界面、预览页、市场页按需加载，保持依赖和部署复杂度可控。</p></div>
-        <div class="phi reveal"><div class="phi-ico">OSS</div><h3>Docker 自托管</h3><p>开源仓库和 Docker Compose 部署路径明确，数据可以留在自己的服务器。</p></div>
+        <div class="phi reveal"><div class="phi-ico">⚡</div><h3>零配置哲学</h3><p>docker-compose up — 三秒启动，五秒上传，八秒分享。开发者的内容工具应该像呼吸一样自然。</p></div>
+        <div class="phi reveal"><div class="phi-ico">🤖</div><h3>AI-Native</h3><p>不是给产品加 AI 功能，而是以 AI 为中心重新设计内容发布流程。MCP 让 Claude 成为内容助手，uTools 插件让本地工作流也能秒级成页。</p></div>
+        <div class="phi reveal"><div class="phi-ico">✂️</div><h3>极简主义</h3><p>无框架前端、无构建工具、无 npm script 魔法。Vanilla JS 写出的代码，十年后还能读懂。</p></div>
+        <div class="phi reveal"><div class="phi-ico">🌱</div><h3>渐进增强</h3><p>从文件预览器到模板市场。每个功能都是自然生长的结果，不是预先设计的冗余。</p></div>
       </div>
     </div>
   </section>
@@ -307,12 +306,9 @@
   <section class="landing-sec landing-sec-cta" id="cta">
     <div class="landing-sec-inner">
       <div class="landing-cta reveal">
-        <h2>把下一份 AI 页面发成链接</h2>
-        <p>不需要仓库。不需要构建。不需要配置服务器。</p>
-        <div class="landing-cta-actions">
-          <a class="btn btn-primary btn-lg" href="#/login">立即上传一个页面</a>
-          <a class="btn btn-ghost btn-lg" href="https://github.com/code2rich/jpage" target="_blank" rel="noopener noreferrer">查看 GitHub</a>
-        </div>
+        <h2>准备好让内容流动起来了吗？</h2>
+        <p>即页 jpage — 拖入文件，即刻成页。</p>
+        <a class="btn btn-primary btn-lg" href="#/login">立即开始</a>
       </div>
     </div>
   </section>
