@@ -43,60 +43,48 @@ function buildServerConfig(url, token) {
 }
 
 // 生成 CLI 用法文档 Markdown。
-// baseUrl 预填进示例（从 /mcp URL 去掉 /mcp 后缀得到），方便用户复制即用。
-// token 用占位符 <YOUR_TOKEN>，不泄露真实 token。
+// baseUrl 预填进示例，方便用户复制即用；真实 token 用 <YOUR_TOKEN> 占位，不在弹窗中泄露。
 function buildCliGuide(baseUrl) {
   return `# jpage CLI
 
-\`jpage\` 是即页的命令行工具，通过 REST API 上传/列出/管理文件。与 MCP 是**对称的两个入口**：
-
-- **有 Bash 的场景**（Claude Code/ZCode 等 agent、脚本、CI、人工操作）→ 用 **CLI**：multipart 二进制流式上传，大文件/ZIP 不进 token 流，快且省
-- **纯 MCP 客户端**（Claude Desktop 等无 Bash）→ 用 **MCP**
+\`jpage\` 是即页的命令行工具，与 MCP 并列、基于同一套 REST API。适合 Bash/脚本/CI/Agent 场景，multipart 上传大文件更省流。
 
 ## 安装
 
 \`\`\`bash
 npm install -g @code2rich/jpage
-jpage --help
 \`\`\`
 
-## 配置 token 与服务地址
+## 认证
 
-CLI 需要一个 token（\`jp_\` 用户 token 或全局 \`MCP_TOKEN\`）。token 优先级：
+在「API 令牌」页创建 token 后，任选一种方式注入：
 
-\`--token\` > \`JPAGE_TOKEN\` 环境变量 / \`.env\` > \`MCP_TOKEN\` 环境变量 / \`.env\`
+\`\`\`bash
+export JPAGE_TOKEN=<YOUR_TOKEN>   # 推荐
+jpage <命令> --token <YOUR_TOKEN> # 单条命令
+\`\`\`
 
-服务地址优先级：
+token 优先级：\`--token\` > \`JPAGE_TOKEN\` > \`MCP_TOKEN\`。  
+服务地址优先级：\`--base\` > \`JPAGE_BASE\` > 默认 \`https://jpage.cn\`。  
+以下示例默认使用 \`${baseUrl}\`。
 
-\`--base\` > \`JPAGE_BASE\` 环境变量 / \`.env\` > 默认 \`https://jpage.cn\`
-
-在本系统的 **API 令牌** 页创建或复制你的 token。示例默认使用 \`${baseUrl}\`。
-
-## 支持的环境变量
-
-| 变量 | 说明 |
-|---|---|
-| \`JPAGE_TOKEN\` | 用户 API Token（\`jp_\` 开头），替代 \`--token\` |
-| \`JPAGE_BASE\` | 服务地址，替代 \`--base\` |
-| \`MCP_TOKEN\` | 全局 MCP Token，当没有 \`JPAGE_TOKEN\` 时作为 token 兜底 |
-
-## 命令
+## 命令速查
 
 | 命令 | 说明 |
 |---|---|
-| \`upload <路径> [--public] [--overwrite ID]\` | 上传（ZIP 自动判 bundle/batch） |
+| \`upload <路径> [--public] [--overwrite ID]\` | 上传文件或 ZIP |
 | \`ls [--page --limit --kw --cat --tag]\` | 列出文件 |
-| \`cat <id>\` | 输出文件内容 |
-| \`url <id>\` | 打印 /s/:key 预览链接 |
-| \`mv <id> <新名> [--public|--private]\` | 改名 / 公开性 |
+| \`cat <id>\` | 查看文件内容 |
+| \`url <id>\` | 打印 /s/:key 短链接 |
+| \`mv <id> <新名> [--public|--private]\` | 重命名 / 改公开性 |
 | \`rm <id> [--yes]\` | 删除 |
 | \`star <id>\` / \`unstar <id>\` | 收藏 / 取消收藏 |
-| \`tags <id> [add|set|clear] [名,名,...]\` | 标签（追加/替换/清空） |
-| \`skills ls | get <名> | download <名>\` | Skill 包（统一 \`jpage\` Skill） |
-| \`whoami\` | 校验 token 是否有效 |
-| \`update [--check] [--registry <url>]\` | 自更新到最新版（**不需 token**） |
+| \`tags <id> [add|set|clear] [名,名,...]\` | 标签管理 |
+| \`skills ls | get <名> | download <名>\` | Skill 包 |
+| \`whoami\` | 校验 token |
+| \`update [--check] [--registry <url>]\` | 自更新（**不需 token**） |
 
-## 示例
+## 常用示例
 
 \`\`\`bash
 jpage upload ./report.html --public --base ${baseUrl}
@@ -104,23 +92,10 @@ jpage ls --kw 季度
 jpage cat 8
 jpage tags 8 add Q3,财报
 jpage url 8
+jpage update
 \`\`\`
 
-### 更新到最新版
-
-\`update\` 是纯本地操作（npm 自更新），不调后端 API、不需 token：
-
-\`\`\`bash
-jpage update                  # 自更新到最新版
-jpage update --check          # 只查有没有新版本，不安装
-jpage update --registry https://registry.npmmirror.com   # 指定 npm 源（如国内镜像）
-\`\`\`
-
-> 更新后需重新运行 \`jpage\` 才生效。
-
-> 首次使用需先设 token（\`update\` 除外）：\`export JPAGE_TOKEN=<YOUR_TOKEN>\`，或在命令后加 \`--token <YOUR_TOKEN>\`。
->
-> 完整说明：\`jpage --help\`
+完整说明请运行 \`jpage --help\`。
 `;
 }
 
