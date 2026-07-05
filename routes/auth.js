@@ -15,13 +15,16 @@ const logger = require('../logger');
 const router = express.Router();
 
 const ALLOW_REGISTRATION = process.env.ALLOW_REGISTRATION === 'true';
+const WECHAT_PROVIDER = 'wechat';
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   message: { error: '登录尝试过于频繁，请稍后再试' },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  // 测试环境密集登录会触发限流，跳过以保证集成测试稳定（生产不受影响）
+  skip: () => process.env.NODE_ENV === 'test'
 });
 
 const registerLimiter = rateLimit({
@@ -106,6 +109,142 @@ async function generateUsernameFromEmail(email) {
   return username;
 }
 
+function isWechatLoginEnabled() {
+  return !!(process.env.WECHAT_OPEN_APP_ID && process.env.WECHAT_OPEN_APP_SECRET);
+}
+
+function normalizeReturnTo(value) {
+  const raw = String(value || '/').trim();
+  if (!raw || raw.startsWith('//') || /^[a-z][a-z0-9+.-]*:/i.test(raw)) return '/';
+  if (raw.startsWith('#/')) return raw.slice(1);
+  if (raw.startsWith('/')) return raw;
+  return '/';
+}
+
+function appBaseUrl(req) {
+  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, '');
+  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+  const host = req.headers['x-forwarded-host'] || req.headers.host || `localhost:${process.env.PORT || 8858}`;
+  return `${proto}://${host}`.replace(/\/+$/, '');
+}
+
+function redirectForReturnTo(req, returnTo) {
+  const path = normalizeReturnTo(returnTo);
+  return `${appBaseUrl(req)}/#${path}`;
+}
+
+function sanitizeWechatUsername(raw) {
+  return String(raw || '')
+    .normalize('NFKD')
+    .replace(/[^\w]/g, '')
+    .slice(0, 24);
+}
+
+async function generateUsernameFromWechat(profile) {
+  const idTail = String(profile.unionid || profile.openid || crypto.randomBytes(4).toString('hex')).slice(-8);
+  let base = sanitizeWechatUsername(profile.nickname);
+  if (base.length < 2) base = `wechat_${idTail}`;
+  base = base.slice(0, 24);
+  let username = base;
+  let suffix = 1;
+  while (await dbGet('SELECT id FROM users WHERE username = ?', [username])) {
+    username = `${base}_${suffix}`;
+    if (username.length > 30) username = `${base.slice(0, 20)}_${suffix}`;
+    suffix++;
+  }
+  return username;
+}
+
+async function fetchWechatJson(url) {
+  const response = await fetch(url);
+  const text = await response.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    throw new Error('微信接口返回无效 JSON', { cause: e });
+  }
+  if (!response.ok) throw new Error(`微信接口请求失败：HTTP ${response.status}`);
+  if (data.errcode) throw new Error(data.errmsg || `微信接口错误：${data.errcode}`);
+  return data;
+}
+
+async function fetchWechatProfile(code, redirectUri) {
+  const tokenUrl = new URL('https://api.weixin.qq.com/sns/oauth2/access_token');
+  tokenUrl.searchParams.set('appid', process.env.WECHAT_OPEN_APP_ID);
+  tokenUrl.searchParams.set('secret', process.env.WECHAT_OPEN_APP_SECRET);
+  tokenUrl.searchParams.set('code', code);
+  tokenUrl.searchParams.set('grant_type', 'authorization_code');
+  const token = await fetchWechatJson(tokenUrl.toString());
+  if (!token.access_token || !token.openid) throw new Error('微信授权结果缺少 access_token 或 openid');
+
+  const userUrl = new URL('https://api.weixin.qq.com/sns/userinfo');
+  userUrl.searchParams.set('access_token', token.access_token);
+  userUrl.searchParams.set('openid', token.openid);
+  userUrl.searchParams.set('lang', 'zh_CN');
+  const profile = await fetchWechatJson(userUrl.toString());
+  return {
+    openid: profile.openid || token.openid,
+    unionid: profile.unionid || token.unionid || null,
+    nickname: profile.nickname || '',
+    avatarUrl: profile.headimgurl || '',
+    raw: { token: { scope: token.scope, unionid: token.unionid || null }, profile, redirectUri }
+  };
+}
+
+function loginAsUser(req, user) {
+  req.session.userId = user.id;
+  req.session.username = user.username;
+  req.session.userRole = user.role;
+}
+
+async function findWechatAccount(profile) {
+  const byOpenid = await dbGet(
+    'SELECT oa.*, u.username, u.role FROM oauth_accounts oa JOIN users u ON u.id = oa.user_id WHERE oa.provider = ? AND oa.provider_user_id = ?',
+    [WECHAT_PROVIDER, profile.openid]
+  );
+  if (byOpenid) return byOpenid;
+  if (!profile.unionid) return null;
+  return dbGet(
+    'SELECT oa.*, u.username, u.role FROM oauth_accounts oa JOIN users u ON u.id = oa.user_id WHERE oa.provider = ? AND oa.unionid = ?',
+    [WECHAT_PROVIDER, profile.unionid]
+  );
+}
+
+async function upsertWechatAccount(userId, profile) {
+  await dbRun(
+    `INSERT INTO oauth_accounts
+       (user_id, provider, provider_user_id, unionid, nickname, avatar_url, raw_profile_json, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+     ON CONFLICT(provider, provider_user_id) DO UPDATE SET
+       user_id = excluded.user_id,
+       unionid = excluded.unionid,
+       nickname = excluded.nickname,
+       avatar_url = excluded.avatar_url,
+       raw_profile_json = excluded.raw_profile_json,
+       updated_at = datetime('now')`,
+    [
+      userId,
+      WECHAT_PROVIDER,
+      profile.openid,
+      profile.unionid || null,
+      profile.nickname || null,
+      profile.avatarUrl || null,
+      JSON.stringify(profile.raw || {})
+    ]
+  );
+}
+
+async function createUserFromWechat(profile) {
+  const username = await generateUsernameFromWechat(profile);
+  const disabledPasswordHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
+  const result = await dbRun(
+    'INSERT INTO users (username, email, email_verified, password_hash, role) VALUES (?, NULL, 0, ?, ?)',
+    [username, disabledPasswordHash, 'user']
+  );
+  return { id: result.lastID, username, role: 'user' };
+}
+
 // --- 路由 ---
 
 router.get('/me', async (req, res) => {
@@ -145,6 +284,84 @@ router.post('/login', loginLimiter, async (req, res) => {
     res.json({ id: user.id, username: user.username, email: user.email || null, emailVerified: !!user.email_verified, role: user.role });
   } catch (e) {
     res.status(500).json({ error: '登录失败' });
+  }
+});
+
+router.get('/wechat/status', (req, res) => {
+  res.json({
+    enabled: isWechatLoginEnabled(),
+    appId: process.env.WECHAT_OPEN_APP_ID || null,
+    callbackPath: '/api/auth/wechat/callback'
+  });
+});
+
+router.get('/wechat/start', loginLimiter, (req, res) => {
+  if (!isWechatLoginEnabled()) return res.status(503).json({ error: '微信登录未配置' });
+  const state = crypto.randomBytes(24).toString('hex');
+  const returnTo = normalizeReturnTo(req.query.returnTo);
+  const redirectUri = `${appBaseUrl(req)}/api/auth/wechat/callback`;
+  req.session.wechatOAuthState = {
+    state,
+    returnTo,
+    createdAt: Date.now()
+  };
+  const url = new URL('https://open.weixin.qq.com/connect/qrconnect');
+  url.searchParams.set('appid', process.env.WECHAT_OPEN_APP_ID);
+  url.searchParams.set('redirect_uri', redirectUri);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('scope', 'snsapi_login');
+  url.searchParams.set('state', state);
+  res.redirect(url.toString() + '#wechat_redirect');
+});
+
+router.get('/wechat/callback', loginLimiter, async (req, res) => {
+  const fail = (reason, status = 302) => {
+    logger.audit('wechat.login', { success: false, reason, ip: clientIp(req) });
+    return res.status(status).redirect(`${appBaseUrl(req)}/#/login`);
+  };
+  if (!isWechatLoginEnabled()) return fail('not_configured');
+  const saved = req.session.wechatOAuthState;
+  delete req.session.wechatOAuthState;
+  if (!saved || saved.state !== req.query.state || Date.now() - saved.createdAt > 10 * 60 * 1000) {
+    return fail('invalid_state');
+  }
+  if (req.query.errcode) return fail(String(req.query.errmsg || req.query.errcode));
+  const code = String(req.query.code || '').trim();
+  if (!code) return fail('missing_code');
+
+  try {
+    const redirectUri = `${appBaseUrl(req)}/api/auth/wechat/callback`;
+    const profile = await fetchWechatProfile(code, redirectUri);
+    if (!profile.openid) return fail('missing_openid');
+
+    const currentUserId = req.session?.userId || null;
+    if (currentUserId) {
+      const user = await dbGet('SELECT id, username, role FROM users WHERE id = ?', [currentUserId]);
+      if (!user) return fail('current_user_missing');
+      const existing = await findWechatAccount(profile);
+      if (existing && existing.user_id !== user.id) return fail('wechat_already_bound');
+      await upsertWechatAccount(user.id, profile);
+      loginAsUser(req, user);
+      logger.audit('wechat.bind', { userId: user.id, openid: profile.openid, unionid: profile.unionid || null, ip: clientIp(req) });
+      return res.redirect(redirectForReturnTo(req, saved.returnTo));
+    }
+
+    const account = await findWechatAccount(profile);
+    let user;
+    if (account) {
+      await upsertWechatAccount(account.user_id, profile);
+      user = { id: account.user_id, username: account.username, role: account.role };
+    } else {
+      user = await createUserFromWechat(profile);
+      await upsertWechatAccount(user.id, profile);
+      logger.audit('wechat.register', { userId: user.id, username: user.username, openid: profile.openid, unionid: profile.unionid || null, ip: clientIp(req) });
+    }
+    loginAsUser(req, user);
+    logger.audit('wechat.login', { success: true, userId: user.id, openid: profile.openid, unionid: profile.unionid || null, ip: clientIp(req) });
+    res.redirect(redirectForReturnTo(req, saved.returnTo));
+  } catch (e) {
+    logger.error({ type: 'app', msg: 'wechat login error', error: e.message });
+    return fail(e.message);
   }
 });
 

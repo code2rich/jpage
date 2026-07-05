@@ -202,6 +202,52 @@ html.light .theme-toggle .icon-sun { display: block; }
   border-bottom-color: var(--primary);
 }
 
+.auth-oauth {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.auth-oauth[hidden] { display: none; }
+
+.wechat-login-btn {
+  width: 100%;
+  justify-content: center;
+  gap: 8px;
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #15803d;
+  background: rgba(34, 197, 94, 0.08);
+  font-weight: 600;
+}
+
+.wechat-login-btn:hover {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.58);
+}
+
+.wechat-login-btn svg {
+  width: 19px;
+  height: 19px;
+  fill: currentColor;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--border);
+}
+
 .auth-panel { display: none; }
 .auth-panel.active { display: block; }
 

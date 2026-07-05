@@ -4,6 +4,11 @@ import { api } from '../api.js';
 import { toast } from '../components/toast.js';
 import { state, navigate } from '../app.js';
 
+function currentReturnTo() {
+  const hash = location.hash.replace(/^#/, '');
+  return (hash && hash !== '/login' && hash !== '/register') ? hash : '/';
+}
+
 function renderLogin(container, openTab) {
   if (state.currentUser) { navigate('/'); return; }
   const tmpl = document.getElementById('login-template');
@@ -17,6 +22,16 @@ function renderLogin(container, openTab) {
   api('/api/auth/registration-status').then(data => {
     if (!data.enabled && registerTab) registerTab.hidden = true;
   }).catch(() => {});
+
+  const oauthBox = container.querySelector('#auth-oauth');
+  const wechatBtn = container.querySelector('#btn-wechat-login');
+  api('/api/auth/wechat/status').then(data => {
+    if (data.enabled && oauthBox && wechatBtn) oauthBox.hidden = false;
+  }).catch(() => {});
+  wechatBtn?.addEventListener('click', () => {
+    const returnTo = encodeURIComponent(currentReturnTo());
+    location.href = `/api/auth/wechat/start?returnTo=${returnTo}`;
+  });
 
   const tabs = container.querySelectorAll('.auth-tab');
   const loginForm = container.querySelector('#login-form');
