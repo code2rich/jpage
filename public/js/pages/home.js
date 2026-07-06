@@ -20,6 +20,7 @@ let lastCheckedIndex = -1;
 let skillModalCurrent = null;
 let searchResults = null;
 let homeAbortController = null;
+let versionUploadFileId = null;
 
 // ---------- 视图模式（列表 / 卡片） ----------
 const FILE_VIEW_KEY = 'jpage-file-view';
@@ -217,6 +218,7 @@ function renderHome(container) {
   }
 
   setupUpload(container);
+  setupVersionUpload(container);
   setupFileFilter(container);
   setupViewToggle(container);
   loadTagsAndCategories(container);
@@ -523,6 +525,71 @@ function uploadOneFile(file, isPublic, onProgress) {
   });
 }
 
+// ---------- Version Upload (from file list) ----------
+function setupVersionUpload(container) {
+  const input = container.querySelector('#version-file-input');
+  if (!input) return;
+
+  input.addEventListener('change', () => {
+    if (!input.files.length || !versionUploadFileId) {
+      input.value = '';
+      versionUploadFileId = null;
+      return;
+    }
+    const file = input.files[0];
+    const allowed = ['.html', '.htm', '.md', '.markdown'];
+    const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+    if (!allowed.includes(ext)) {
+      toast('仅支持 HTML 和 Markdown 文件', 'error');
+      input.value = '';
+      versionUploadFileId = null;
+      return;
+    }
+
+    const fileId = versionUploadFileId;
+    versionUploadFileId = null;
+
+    const progressEl = container.querySelector('#version-upload-progress');
+    const progressBar = container.querySelector('#version-upload-progress-bar');
+    const progressText = container.querySelector('#version-upload-progress-text');
+    if (progressEl) progressEl.style.display = 'block';
+    if (progressBar) progressBar.style.width = '0%';
+    if (progressText) progressText.textContent = '0%';
+
+    const xhr = new XMLHttpRequest();
+    const fd = new FormData();
+    fd.append('file', file);
+
+    xhr.open('POST', API_BASE + `/api/files/${fileId}/overwrite`);
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 100);
+        if (progressBar) progressBar.style.width = pct + '%';
+        if (progressText) progressText.textContent = pct + '%';
+      }
+    };
+    xhr.onload = () => {
+      const data = JSON.parse(xhr.responseText || '{}');
+      if (progressBar) progressBar.style.width = '100%';
+      setTimeout(() => { if (progressEl) progressEl.style.display = 'none'; }, 400);
+      input.value = '';
+      if (xhr.status >= 200 && xhr.status < 300) {
+        toast(`已更新为第 ${data.version || '?'} 版`);
+        loadFiles(container);
+      } else {
+        toast(data.error || `HTTP ${xhr.status}`, 'error');
+      }
+    };
+    xhr.onerror = () => {
+      input.value = '';
+      if (progressEl) progressEl.style.display = 'none';
+      toast('上传失败，请检查网络', 'error');
+    };
+    xhr.send(fd);
+  });
+}
+
 // ---------- File List ----------
 async function loadFiles(container, page) {
   const list = container.querySelector('#file-list');
@@ -743,6 +810,7 @@ function renderFileList(container, list, files) {
             ${f.file_type === 'markdown' ? `<button type="button" class="file-more-item btn-template" data-id="${f.id}">切换模板</button>` : ''}
             <button type="button" class="file-more-item btn-stats" data-id="${f.id}">访问统计</button>
             <button type="button" class="file-more-item btn-versions" data-id="${f.id}">版本历史</button>
+            <button type="button" class="file-more-item btn-upload-version" data-id="${f.id}">上传新版本</button>
             <button type="button" class="file-more-item btn-rename" data-id="${f.id}">重命名</button>
             <button type="button" class="file-more-item btn-download" data-id="${f.id}">下载</button>
             <hr class="file-more-divider">
@@ -879,6 +947,12 @@ function renderFileList(container, list, files) {
       moreDropdown.classList.remove('open');
       openFileVersionDialog(f.id, f.original_name);
     });
+    el.querySelector('.btn-upload-version').addEventListener('click', e => {
+      e.stopPropagation();
+      moreDropdown.classList.remove('open');
+      versionUploadFileId = f.id;
+      container.querySelector('#version-file-input')?.click();
+    });
     list.appendChild(el);
   });
 }
@@ -947,6 +1021,7 @@ function renderCardList(container, list, files) {
           ${f.file_type === 'markdown' ? `<button type="button" class="file-more-item btn-template" data-id="${f.id}">切换模板</button>` : ''}
           <button type="button" class="file-more-item btn-stats" data-id="${f.id}">访问统计</button>
           <button type="button" class="file-more-item btn-versions" data-id="${f.id}">版本历史</button>
+          <button type="button" class="file-more-item btn-upload-version" data-id="${f.id}">上传新版本</button>
           <button type="button" class="file-more-item btn-rename" data-id="${f.id}">重命名</button>
           <button type="button" class="file-more-item btn-download" data-id="${f.id}">下载</button>
           <hr class="file-more-divider">
@@ -1070,6 +1145,12 @@ function renderCardList(container, list, files) {
       e.stopPropagation();
       moreDropdown.classList.remove('open');
       openFileVersionDialog(f.id, f.original_name);
+    });
+    el.querySelector('.btn-upload-version').addEventListener('click', e => {
+      e.stopPropagation();
+      moreDropdown.classList.remove('open');
+      versionUploadFileId = f.id;
+      container.querySelector('#version-file-input')?.click();
     });
     el.querySelectorAll('.file-badge-tag').forEach(badge => {
       badge.addEventListener('click', e => {
