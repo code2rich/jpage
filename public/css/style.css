@@ -2281,6 +2281,21 @@ html:not(.light) {
   }
 }
 
+/* 文件列表中的版本历史弹窗 */
+.version-history-dialog {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.version-history-dialog .version-item {
+  border-bottom: 1px solid var(--border);
+}
+
+.version-history-dialog .version-item:last-child {
+  border-bottom: none;
+}
+
 /* MCP Config Modal */
 .mcp-status {
   margin-bottom: 16px;

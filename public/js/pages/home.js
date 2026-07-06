@@ -741,6 +741,8 @@ function renderFileList(container, list, files) {
             <button type="button" class="file-more-item btn-category" data-id="${f.id}">移动分类</button>
             ${!f.is_bundle ? `<button type="button" class="file-more-item btn-publish-market" data-id="${f.id}">上架到市场</button>` : ''}
             ${f.file_type === 'markdown' ? `<button type="button" class="file-more-item btn-template" data-id="${f.id}">切换模板</button>` : ''}
+            <button type="button" class="file-more-item btn-stats" data-id="${f.id}">访问统计</button>
+            <button type="button" class="file-more-item btn-versions" data-id="${f.id}">版本历史</button>
             <button type="button" class="file-more-item btn-rename" data-id="${f.id}">重命名</button>
             <button type="button" class="file-more-item btn-download" data-id="${f.id}">下载</button>
             <hr class="file-more-divider">
@@ -771,13 +773,13 @@ function renderFileList(container, list, files) {
     });
 
     const info = el.querySelector('.file-info');
-    info.setAttribute('aria-label', `打开 ${f.original_name}`);
-    const openPreview = () => navigate('/view/' + f.id);
-    info.addEventListener('click', openPreview);
+    info.setAttribute('aria-label', `在新标签页打开 ${f.original_name}`);
+    const openPublic = () => window.open(`${location.origin}/s/${f.share_key}`, '_blank');
+    info.addEventListener('click', openPublic);
     info.addEventListener('keydown', e => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        openPreview();
+        openPublic();
       }
     });
     el.querySelector('.btn-copy-link').addEventListener('click', e => {
@@ -867,6 +869,16 @@ function renderFileList(container, list, files) {
         openTemplateSelect(container, f.id, f.template_id);
       });
     }
+    el.querySelector('.btn-stats').addEventListener('click', e => {
+      e.stopPropagation();
+      moreDropdown.classList.remove('open');
+      openFileStatsDialog(f.id);
+    });
+    el.querySelector('.btn-versions').addEventListener('click', e => {
+      e.stopPropagation();
+      moreDropdown.classList.remove('open');
+      openFileVersionDialog(f.id, f.original_name);
+    });
     list.appendChild(el);
   });
 }
@@ -933,6 +945,8 @@ function renderCardList(container, list, files) {
           <button type="button" class="file-more-item btn-category" data-id="${f.id}">移动分类</button>
           ${!f.is_bundle ? `<button type="button" class="file-more-item btn-publish-market" data-id="${f.id}">上架到市场</button>` : ''}
           ${f.file_type === 'markdown' ? `<button type="button" class="file-more-item btn-template" data-id="${f.id}">切换模板</button>` : ''}
+          <button type="button" class="file-more-item btn-stats" data-id="${f.id}">访问统计</button>
+          <button type="button" class="file-more-item btn-versions" data-id="${f.id}">版本历史</button>
           <button type="button" class="file-more-item btn-rename" data-id="${f.id}">重命名</button>
           <button type="button" class="file-more-item btn-download" data-id="${f.id}">下载</button>
           <hr class="file-more-divider">
@@ -966,15 +980,15 @@ function renderCardList(container, list, files) {
 
     el.setAttribute('role', 'button');
     el.setAttribute('tabindex', '0');
-    el.setAttribute('aria-label', `打开 ${f.original_name}`);
+    el.setAttribute('aria-label', `在新标签页打开 ${f.original_name}`);
 
-    // 整张卡片点击 → 预览（按钮单独拦截）
-    const openPreview = () => navigate('/view/' + f.id);
+    // 整张卡片点击 → 公链（按钮单独拦截）
+    const openPublic = () => window.open(`${location.origin}/s/${f.share_key}`, '_blank');
     el.addEventListener('click', e => {
       if (e.target.closest('.file-card-icon-btn, .file-card-more-dropdown, .file-checkbox-wrap')) return;
-      openPreview();
+      openPublic();
     });
-    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPreview(); } });
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPublic(); } });
     el.querySelector('.file-card-star').addEventListener('click', async e => {
       e.stopPropagation();
       await toggleStar(f.id, f.starred);
@@ -1047,6 +1061,16 @@ function renderCardList(container, list, files) {
         openTemplateSelect(container, f.id, f.template_id);
       });
     }
+    el.querySelector('.btn-stats').addEventListener('click', e => {
+      e.stopPropagation();
+      moreDropdown.classList.remove('open');
+      openFileStatsDialog(f.id);
+    });
+    el.querySelector('.btn-versions').addEventListener('click', e => {
+      e.stopPropagation();
+      moreDropdown.classList.remove('open');
+      openFileVersionDialog(f.id, f.original_name);
+    });
     el.querySelectorAll('.file-badge-tag').forEach(badge => {
       badge.addEventListener('click', e => {
         e.stopPropagation();
@@ -1235,6 +1259,145 @@ async function doCopyLink(shareKey) {
       toast('复制失败，请手动复制链接', 'error');
     }
   }
+}
+
+function buildFileStatsHtml(stats) {
+  const max7 = Math.max(1, ...stats.daily7.map(d => d.count));
+  const max30 = Math.max(1, ...stats.daily30.map(d => d.count));
+  const barChart = (data, maxVal) => {
+    if (!data.length) return '<div class="version-empty" style="padding:16px">暂无数据</div>';
+    return '<div class="stats-chart">' + data.map(d => {
+      const pct = Math.max(2, Math.round(d.count / maxVal * 100));
+      const label = d.date.slice(5);
+      return `<div class="stats-bar-group"><div class="stats-bar" style="height:${pct}%"></div><div class="stats-bar-val">${d.count}</div><div class="stats-bar-label">${label}</div></div>`;
+    }).join('') + '</div>';
+  };
+  return `<div class="stats-summary"><span class="stats-total">总浏览量：<strong>${stats.viewCount}</strong></span></div>`
+    + `<div class="stats-section"><h4>近 7 天</h4>${barChart(stats.daily7, max7)}</div>`
+    + `<div class="stats-section"><h4>近 30 天</h4>${barChart(stats.daily30, max30)}</div>`;
+}
+
+async function openFileStatsDialog(fileId) {
+  try {
+    const stats = await api(`/api/files/${fileId}/stats`);
+    dialogModal.alert({ title: '访问统计', message: buildFileStatsHtml(stats), confirmText: '关闭', panelClass: 'modal-panel-lg' });
+  } catch (e) {
+    toast(e.message || '获取统计失败', 'error');
+  }
+}
+
+function buildVersionHistoryHtml(data) {
+  const versions = data.versions || [];
+  const currentSize = data.current ? formatSize(data.current.size) : '';
+  const currentTime = data.current ? relativeTime(data.current.updated_at) : '';
+
+  let html = `
+    <div class="version-history-dialog">
+      <div class="version-item version-item-current">
+        <div class="version-item-row">
+          <span class="version-item-dot"></span>
+          <span class="version-item-label">当前 (v${versions.length + 1})</span>
+        </div>
+        <div class="version-item-meta">${currentSize} · ${currentTime}</div>
+      </div>
+  `;
+
+  if (versions.length === 0) {
+    html += '<div class="version-empty">仅有当前版本</div>';
+  } else {
+    versions.forEach(v => {
+      const vSize = formatSize(v.size);
+      const vTime = relativeTime(v.created_at);
+      html += `
+        <div class="version-item" data-version="${v.version}">
+          <div class="version-item-row">
+            <span class="version-item-dot"></span>
+            <span class="version-item-label">v${v.version}</span>
+          </div>
+          <div class="version-item-meta">${vSize} · ${vTime}</div>
+          <div class="version-item-actions">
+            <button type="button" class="btn btn-small version-view" data-version="${v.version}">查看</button>
+            <button type="button" class="btn btn-small version-restore" data-version="${v.version}">恢复</button>
+            <button type="button" class="btn btn-small btn-danger version-delete" data-version="${v.version}">删除</button>
+          </div>
+        </div>
+      `;
+    });
+  }
+
+  html += '</div>';
+  return html;
+}
+
+async function openFileVersionDialog(fileId, fileName) {
+  async function loadAndShow() {
+    let data;
+    try {
+      data = await api(`/api/files/${fileId}/versions`);
+    } catch (e) {
+      toast(e.message || '获取版本历史失败', 'error');
+      return;
+    }
+
+    dialogModal.alert({
+      title: `版本历史 · ${escapeHtml(fileName)}`,
+      message: buildVersionHistoryHtml(data),
+      confirmText: '关闭',
+      panelClass: 'modal-panel-lg',
+    });
+
+    // 绑定查看 / 恢复 / 删除
+    const msg = dialogModal.msg;
+    if (!msg) return;
+    msg.querySelectorAll('.version-view').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const ver = btn.dataset.version;
+        window.open(API_BASE + `/api/files/${fileId}/versions/${ver}/render`, '_blank');
+      });
+    });
+    msg.querySelectorAll('.version-restore').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        const ver = btn.dataset.version;
+        const ok = await dialogModal.confirm({
+          title: '恢复版本',
+          message: `确定要恢复到 <strong>v${ver}</strong> 吗？当前版本将被保存为历史记录。`,
+          confirmText: '恢复',
+        });
+        if (!ok) return;
+        try {
+          await api(`/api/files/${fileId}/versions/${ver}/restore`, { method: 'POST' });
+          toast(`已恢复到 v${ver}`);
+          loadAndShow();
+        } catch (err) {
+          toast(err.message || '恢复失败', 'error');
+        }
+      });
+    });
+    msg.querySelectorAll('.version-delete').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        const ver = btn.dataset.version;
+        const ok = await dialogModal.confirm({
+          title: '删除版本',
+          message: `确定要删除 <strong>v${ver}</strong> 吗？此操作不可撤销。`,
+          confirmText: '删除',
+          danger: true,
+        });
+        if (!ok) return;
+        try {
+          await api(`/api/files/${fileId}/versions/${ver}`, { method: 'DELETE' });
+          toast(`已删除 v${ver}`);
+          loadAndShow();
+        } catch (err) {
+          toast(err.message || '删除失败', 'error');
+        }
+      });
+    });
+  }
+
+  await loadAndShow();
 }
 
 async function doRename(container, id, currentName) {
