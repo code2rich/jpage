@@ -368,33 +368,35 @@
     <h1 class="login-title">即页</h1>
     <p class="login-subtitle">拖入文件，即刻成页</p>
   </div>
-  <div class="auth-tabs">
-    <button class="auth-tab active" data-tab="login">登录</button>
-    <button class="auth-tab" data-tab="register">注册</button>
-  </div>
+  <h2 class="auth-heading">登录 / 注册</h2>
   <div class="auth-oauth" id="auth-oauth" hidden>
-    <button type="button" class="btn wechat-login-btn" id="btn-wechat-login" aria-label="使用微信扫码登录">
+    <button type="button" class="btn github-login-btn" id="btn-github-login" aria-label="使用 GitHub 登录">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+      使用 GitHub 登录 / 注册
+    </button>
+    <button type="button" class="btn wechat-login-btn" id="btn-wechat-login" aria-label="使用微信扫码登录" hidden>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.4 4.2c-4.1 0-7.4 2.7-7.4 6.1 0 1.9 1.1 3.6 2.7 4.7l-.7 2.2 2.6-1.3c.9.3 1.8.5 2.8.5.3 0 .6 0 .9-.1-.2-.6-.3-1.2-.3-1.8 0-3.2 3.2-5.8 7.1-5.8h.2c-.9-2.6-4-4.5-7.9-4.5zm-2.5 4.6c-.6 0-1-.4-1-1s.4-1 1-1 1 .4 1 1-.4 1-1 1zm5 0c-.6 0-1-.4-1-1s.4-1 1-1 1 .4 1 1-.4 1-1 1zm5.2 1.1c-3.3 0-6 2.1-6 4.7s2.7 4.7 6 4.7c.8 0 1.5-.1 2.2-.4l2.1 1-.6-1.8c1.3-.9 2.2-2.2 2.2-3.7 0-2.4-2.7-4.5-5.9-4.5zm-2 3.4c-.5 0-.8-.3-.8-.8s.3-.8.8-.8.8.3.8.8-.3.8-.8.8zm4 0c-.5 0-.8-.3-.8-.8s.3-.8.8-.8.8.3.8.8-.3.8-.8.8z"/></svg>
       微信扫码登录 / 注册
     </button>
-    <div class="auth-divider"><span>或使用账号密码</span></div>
+    <div class="auth-divider"><span>或使用邮箱 / 用户名</span></div>
   </div>
-  <form class="login-form auth-panel active" id="login-form" autocomplete="on">
+  <form class="login-form auth-panel active" id="auth-form" autocomplete="on">
     <label class="login-field">
-      <span>用户名或邮箱</span>
-      <input type="text" name="username" id="login-username" required autocomplete="username" autofocus>
+      <span>邮箱 / 用户名</span>
+      <input type="text" name="account" id="auth-account" required autocomplete="username" placeholder="邮箱或用户名" autofocus>
     </label>
-    <label class="login-field">
+    <label class="login-field" id="auth-password-field">
       <span>密码</span>
-      <input type="password" name="password" id="login-password" required autocomplete="current-password">
+      <input type="password" name="password" id="auth-password" required autocomplete="current-password" placeholder="输入密码">
     </label>
-    <div class="login-error" id="login-error" role="alert" hidden></div>
-    <button type="submit" class="btn btn-primary login-submit" id="login-submit">登录</button>
+    <div class="login-error" id="auth-error" role="alert" hidden></div>
+    <button type="submit" class="btn btn-primary login-submit" id="auth-submit">继续</button>
   </form>
-  <form class="login-form auth-panel" id="register-form" autocomplete="on">
+  <form class="login-form auth-panel" id="register-extra" autocomplete="on" hidden>
+    <p class="register-hint">该邮箱未注册，请填写验证码完成注册。</p>
     <label class="login-field">
       <span>邮箱</span>
-      <input type="email" name="email" id="register-email" autocomplete="email" required placeholder="用于接收验证码">
+      <input type="email" name="email" id="register-email" autocomplete="email" readonly>
     </label>
     <div class="register-code-row">
       <input type="text" id="register-code" placeholder="6 位验证码" maxlength="6" inputmode="numeric" pattern="\d{6}" required autocomplete="one-time-code">
@@ -416,6 +418,7 @@
     </label>
     <div class="login-error" id="register-error" role="alert" hidden></div>
     <button type="submit" class="btn btn-primary login-submit" id="register-submit">注册</button>
+    <button type="button" class="btn btn-text" id="btn-back-to-login">返回登录</button>
   </form>
 </main>
 </div>

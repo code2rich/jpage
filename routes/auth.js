@@ -16,6 +16,7 @@ const router = express.Router();
 
 const ALLOW_REGISTRATION = process.env.ALLOW_REGISTRATION === 'true';
 const WECHAT_PROVIDER = 'wechat';
+const GITHUB_PROVIDER = 'github';
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -107,6 +108,41 @@ async function generateUsernameFromEmail(email) {
     if (username.length > 30) username = base.slice(0, 24) + suffix;
   }
   return username;
+}
+
+async function sendRegisterCode(email) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) return { ok: false, status: 400, error: '邮箱格式不正确' };
+
+  const conflict = await dbGet('SELECT id FROM users WHERE email = ? OR username = ?', [email, email]);
+  if (conflict) return { ok: false, status: 409, error: '该邮箱已被使用' };
+
+  if (!isMailerConfigured()) return { ok: false, status: 503, error: '邮件服务未配置，无法注册' };
+
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  const hash = crypto.createHash('sha256').update(code + email).digest('hex');
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+  await dbRun("DELETE FROM email_verifications WHERE type = 'register_code' AND new_email = ?", [email]);
+  await dbRun(
+    'INSERT INTO email_verifications (user_id, token_hash, token_prefix, type, new_email, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [0, hash, code.slice(0, 3) + '***', 'register_code', email, expiresAt]
+  );
+
+  try {
+    await sendMail(email, '注册验证码 — 即页',
+      `<div style="max-width:480px;margin:0 auto;padding:32px 24px;font-family:system-ui,-apple-system,sans-serif;color:#333">
+        <h2 style="margin:0 0 24px;font-size:20px;color:#111">注册验证码</h2>
+        <p style="margin:0 0 16px;font-size:15px">你的注册验证码是：</p>
+        <p style="margin:0 0 24px;font-size:32px;font-weight:700;letter-spacing:6px;color:#4f46e5">${code}</p>
+        <p style="margin:0;font-size:13px;color:#888">验证码 10 分钟内有效。如非本人操作请忽略。</p>
+      </div>`
+    );
+    return { ok: true };
+  } catch (e) {
+    logger.error({ type: 'app', message: '发送注册验证码失败', error: e.message });
+    return { ok: false, status: 500, error: '验证码发送失败，请稍后重试' };
+  }
 }
 
 function isWechatLoginEnabled() {
@@ -245,6 +281,167 @@ async function createUserFromWechat(profile) {
   return { id: result.lastID, username, role: 'user' };
 }
 
+// --- GitHub OAuth 辅助函数 ---
+
+function isGithubLoginEnabled() {
+  return !!(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
+}
+
+function sanitizeGithubUsername(raw) {
+  return String(raw || '')
+    .normalize('NFKD')
+    .replace(/[^a-zA-Z0-9_]/g, '')
+    .slice(0, 24);
+}
+
+async function generateUsernameFromGithub(profile) {
+  const idTail = String(profile.providerUserId || crypto.randomBytes(4).toString('hex')).slice(-8);
+  let base = sanitizeGithubUsername(profile.username || profile.login);
+  if (base.length < 2) base = `github_${idTail}`;
+  base = base.slice(0, 24);
+  let username = base;
+  let suffix = 1;
+  while (await dbGet('SELECT id FROM users WHERE username = ?', [username])) {
+    username = `${base}_${suffix}`;
+    if (username.length > 30) username = `${base.slice(0, 20)}_${suffix}`;
+    suffix++;
+  }
+  return username;
+}
+
+async function fetchGithubJson(url, options = {}) {
+  const response = await fetch(url, options);
+  const text = await response.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    throw new Error('GitHub 接口返回无效 JSON', { cause: e });
+  }
+  if (!response.ok) throw new Error(`GitHub 接口请求失败：HTTP ${response.status}`);
+  if (data.error) throw new Error(data.error_description || data.error);
+  return data;
+}
+
+async function fetchGithubToken(code, redirectUri) {
+  const response = await fetch('https://github.com/login/oauth/access_token', {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      client_id: process.env.GITHUB_CLIENT_ID,
+      client_secret: process.env.GITHUB_CLIENT_SECRET,
+      code,
+      redirect_uri: redirectUri
+    })
+  });
+  const text = await response.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    throw new Error('GitHub token 接口返回无效 JSON', { cause: e });
+  }
+  if (!response.ok) throw new Error(`GitHub token 接口请求失败：HTTP ${response.status}`);
+  if (data.error) throw new Error(data.error_description || data.error);
+  if (!data.access_token) throw new Error('GitHub 授权结果缺少 access_token');
+  return data;
+}
+
+async function fetchGithubUser(token) {
+  return fetchGithubJson('https://api.github.com/user', {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'jpage'
+    }
+  });
+}
+
+async function fetchGithubPrimaryEmail(token) {
+  const emails = await fetchGithubJson('https://api.github.com/user/emails', {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'jpage'
+    }
+  });
+  if (!Array.isArray(emails) || emails.length === 0) return null;
+  const primary = emails.find(e => e.primary && e.verified);
+  if (primary) return primary.email;
+  const verified = emails.find(e => e.verified);
+  if (verified) return verified.email;
+  return emails[0].email;
+}
+
+async function fetchGithubProfile(code, redirectUri) {
+  const tokenData = await fetchGithubToken(code, redirectUri);
+  const user = await fetchGithubUser(tokenData.access_token);
+  let email = user.email || null;
+  if (!email) {
+    try {
+      email = await fetchGithubPrimaryEmail(tokenData.access_token);
+    } catch (e) {
+      logger.warn({ type: 'app', message: '获取 GitHub 邮箱失败', error: e.message });
+    }
+  }
+  return {
+    providerUserId: String(user.id),
+    login: user.login || '',
+    username: user.login || '',
+    email: email || null,
+    emailVerified: !!email,
+    avatarUrl: user.avatar_url || '',
+    name: user.name || '',
+    raw: { token: { scope: tokenData.scope }, user, redirectUri }
+  };
+}
+
+async function findGithubAccount(profile) {
+  return dbGet(
+    'SELECT oa.*, u.username, u.role FROM oauth_accounts oa JOIN users u ON u.id = oa.user_id WHERE oa.provider = ? AND oa.provider_user_id = ?',
+    [GITHUB_PROVIDER, profile.providerUserId]
+  );
+}
+
+async function upsertGithubAccount(userId, profile) {
+  await dbRun(
+    `INSERT INTO oauth_accounts
+       (user_id, provider, provider_user_id, unionid, nickname, avatar_url, raw_profile_json, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+     ON CONFLICT(provider, provider_user_id) DO UPDATE SET
+       user_id = excluded.user_id,
+       unionid = excluded.unionid,
+       nickname = excluded.nickname,
+       avatar_url = excluded.avatar_url,
+       raw_profile_json = excluded.raw_profile_json,
+       updated_at = datetime('now')`,
+    [
+      userId,
+      GITHUB_PROVIDER,
+      profile.providerUserId,
+      null,
+      profile.name || profile.username || null,
+      profile.avatarUrl || null,
+      JSON.stringify(profile.raw || {})
+    ]
+  );
+}
+
+async function createUserFromGithub(profile) {
+  const username = await generateUsernameFromGithub(profile);
+  const disabledPasswordHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
+  const result = await dbRun(
+    'INSERT INTO users (username, email, email_verified, password_hash, role) VALUES (?, ?, ?, ?, ?)',
+    [username, profile.email || null, profile.emailVerified ? 1 : 0, disabledPasswordHash, 'user']
+  );
+  return { id: result.lastID, username, role: 'user' };
+}
+
 // --- 路由 ---
 
 router.get('/me', async (req, res) => {
@@ -264,18 +461,28 @@ router.get('/me', async (req, res) => {
 router.post('/login', loginLimiter, async (req, res) => {
   const { username, account, password } = req.body || {};
   const input = account || username;
-  if (!input || !password) return res.status(400).json({ error: '用户名和密码不能为空' });
+  if (!input || !password) return res.status(400).json({ error: '用户名/邮箱和密码不能为空' });
   try {
     // 统一入口：自动识别用户名或邮箱
     const isEmail = input.includes('@');
     const user = isEmail
       ? await dbGet('SELECT * FROM users WHERE email = ?', [input])
       : await dbGet('SELECT * FROM users WHERE username = ?', [input]);
-    if (!user) return res.status(401).json({ error: '登录失败' });
+    if (!user) {
+      if (isEmail) {
+        // 邮箱未注册：自动发送验证码，引导完成注册
+        const result = await sendRegisterCode(input);
+        if (!result.ok) return res.status(result.status).json({ error: result.error });
+        logger.audit('register_code.sent', { email: input, ip: clientIp(req), source: 'login_unregistered' });
+        return res.json({ action: 'register_code_sent', email: input });
+      }
+      logger.audit('login', { username: input, ip: clientIp(req), success: false, reason: 'not_found' });
+      return res.status(404).json({ error: '用户名不存在' });
+    }
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) {
       logger.audit('login', { username: input, ip: clientIp(req), success: false });
-      return res.status(401).json({ error: '登录失败' });
+      return res.status(401).json({ error: '密码错误' });
     }
     req.session.userId = user.id;
     req.session.username = user.username;
@@ -361,6 +568,85 @@ router.get('/wechat/callback', loginLimiter, async (req, res) => {
     res.redirect(redirectForReturnTo(req, saved.returnTo));
   } catch (e) {
     logger.error({ type: 'app', msg: 'wechat login error', error: e.message });
+    return fail(e.message);
+  }
+});
+
+// --- GitHub OAuth 路由 ---
+
+router.get('/github/status', (req, res) => {
+  res.json({
+    enabled: isGithubLoginEnabled(),
+    clientId: process.env.GITHUB_CLIENT_ID || null,
+    callbackPath: '/api/auth/github/callback'
+  });
+});
+
+router.get('/github/start', loginLimiter, (req, res) => {
+  if (!isGithubLoginEnabled()) return res.status(503).json({ error: 'GitHub 登录未配置' });
+  const state = crypto.randomBytes(24).toString('hex');
+  const returnTo = normalizeReturnTo(req.query.returnTo);
+  const redirectUri = `${appBaseUrl(req)}/api/auth/github/callback`;
+  req.session.githubOAuthState = {
+    state,
+    returnTo,
+    createdAt: Date.now()
+  };
+  const url = new URL('https://github.com/login/oauth/authorize');
+  url.searchParams.set('client_id', process.env.GITHUB_CLIENT_ID);
+  url.searchParams.set('redirect_uri', redirectUri);
+  url.searchParams.set('scope', 'read:user user:email');
+  url.searchParams.set('state', state);
+  res.redirect(url.toString());
+});
+
+router.get('/github/callback', loginLimiter, async (req, res) => {
+  const fail = (reason, status = 302) => {
+    logger.audit('github.login', { success: false, reason, ip: clientIp(req) });
+    return res.status(status).redirect(`${appBaseUrl(req)}/#/login`);
+  };
+  if (!isGithubLoginEnabled()) return fail('not_configured');
+  const saved = req.session.githubOAuthState;
+  delete req.session.githubOAuthState;
+  if (!saved || saved.state !== req.query.state || Date.now() - saved.createdAt > 10 * 60 * 1000) {
+    return fail('invalid_state');
+  }
+  if (req.query.error) return fail(String(req.query.error_description || req.query.error));
+  const code = String(req.query.code || '').trim();
+  if (!code) return fail('missing_code');
+
+  try {
+    const redirectUri = `${appBaseUrl(req)}/api/auth/github/callback`;
+    const profile = await fetchGithubProfile(code, redirectUri);
+    if (!profile.providerUserId) return fail('missing_user_id');
+
+    const currentUserId = req.session?.userId || null;
+    if (currentUserId) {
+      const user = await dbGet('SELECT id, username, role FROM users WHERE id = ?', [currentUserId]);
+      if (!user) return fail('current_user_missing');
+      const existing = await findGithubAccount(profile);
+      if (existing && existing.user_id !== user.id) return fail('github_already_bound');
+      await upsertGithubAccount(user.id, profile);
+      loginAsUser(req, user);
+      logger.audit('github.bind', { userId: user.id, providerUserId: profile.providerUserId, ip: clientIp(req) });
+      return res.redirect(redirectForReturnTo(req, saved.returnTo));
+    }
+
+    const account = await findGithubAccount(profile);
+    let user;
+    if (account) {
+      await upsertGithubAccount(account.user_id, profile);
+      user = { id: account.user_id, username: account.username, role: account.role };
+    } else {
+      user = await createUserFromGithub(profile);
+      await upsertGithubAccount(user.id, profile);
+      logger.audit('github.register', { userId: user.id, username: user.username, providerUserId: profile.providerUserId, ip: clientIp(req) });
+    }
+    loginAsUser(req, user);
+    logger.audit('github.login', { success: true, userId: user.id, providerUserId: profile.providerUserId, ip: clientIp(req) });
+    res.redirect(redirectForReturnTo(req, saved.returnTo));
+  } catch (e) {
+    logger.error({ type: 'app', msg: 'github login error', error: e.message });
     return fail(e.message);
   }
 });
@@ -534,41 +820,9 @@ router.post('/send-register-code', sendCodeLimiter, async (req, res) => {
   if (!ALLOW_REGISTRATION) return res.status(403).json({ error: '注册功能未开放' });
   const { email } = req.body || {};
   if (!email) return res.status(400).json({ error: '请填写邮箱' });
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) return res.status(400).json({ error: '邮箱格式不正确' });
-
-  // 邮箱唯一性检查
-  const conflict = await dbGet('SELECT id FROM users WHERE email = ? OR username = ?', [email, email]);
-  if (conflict) return res.status(409).json({ error: '该邮箱已被使用' });
-
-  if (!isMailerConfigured()) return res.status(503).json({ error: '邮件服务未配置，无法注册' });
-
-  // 生成 6 位数字验证码
-  const code = String(Math.floor(100000 + Math.random() * 900000));
-  const hash = crypto.createHash('sha256').update(code + email).digest('hex');
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-
-  // 删除该邮箱之前的注册验证码
-  await dbRun("DELETE FROM email_verifications WHERE type = 'register_code' AND new_email = ?", [email]);
-  await dbRun(
-    'INSERT INTO email_verifications (user_id, token_hash, token_prefix, type, new_email, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
-    [0, hash, code.slice(0, 3) + '***', 'register_code', email, expiresAt]
-  );
-
-  try {
-    await sendMail(email, '注册验证码 — 即页',
-      `<div style="max-width:480px;margin:0 auto;padding:32px 24px;font-family:system-ui,-apple-system,sans-serif;color:#333">
-        <h2 style="margin:0 0 24px;font-size:20px;color:#111">注册验证码</h2>
-        <p style="margin:0 0 16px;font-size:15px">你的注册验证码是：</p>
-        <p style="margin:0 0 24px;font-size:32px;font-weight:700;letter-spacing:6px;color:#4f46e5">${code}</p>
-        <p style="margin:0;font-size:13px;color:#888">验证码 10 分钟内有效。如非本人操作请忽略。</p>
-      </div>`
-    );
-    res.json({ sent: true });
-  } catch (e) {
-    logger.error({ type: 'app', message: '发送注册验证码失败', error: e.message });
-    res.status(500).json({ error: '验证码发送失败，请稍后重试' });
-  }
+  const result = await sendRegisterCode(email);
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json({ sent: true });
 });
 
 router.get('/smtp-status', (req, res) => {

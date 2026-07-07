@@ -1,4 +1,5 @@
-// 登录/注册页：全屏认证页面，tab 切换登录和注册
+// 登录/注册页：统一入口，支持 GitHub / 微信 OAuth 与邮箱/用户名登录。
+// 邮箱未注册时自动发送验证码并引导完成注册；用户名不存在时提示错误。
 
 import { api } from '../api.js';
 import { toast } from '../components/toast.js';
@@ -9,92 +10,91 @@ function currentReturnTo() {
   return (hash && hash !== '/login' && hash !== '/register') ? hash : '/';
 }
 
-function renderLogin(container, openTab) {
+function renderLogin(container) {
   if (state.currentUser) { navigate('/'); return; }
   const tmpl = document.getElementById('login-template');
   container.innerHTML = '';
   container.appendChild(tmpl.content.cloneNode(true));
 
-  // 检查注册是否开放，动态隐藏注册 tab 和表单
-  const registerTab = container.querySelector('.auth-tab[data-tab="register"]');
-  const registerForm = container.querySelector('#register-form');
-
-  api('/api/auth/registration-status').then(data => {
-    if (!data.enabled && registerTab) registerTab.hidden = true;
-  }).catch(() => {});
-
   const oauthBox = container.querySelector('#auth-oauth');
+  const githubBtn = container.querySelector('#btn-github-login');
   const wechatBtn = container.querySelector('#btn-wechat-login');
+
+  // GitHub 登录
+  api('/api/auth/github/status').then(data => {
+    if (data.enabled && oauthBox && githubBtn) oauthBox.hidden = false;
+  }).catch(() => {});
+  githubBtn?.addEventListener('click', () => {
+    const returnTo = encodeURIComponent(currentReturnTo());
+    location.href = `/api/auth/github/start?returnTo=${returnTo}`;
+  });
+
+  // 微信登录（保留兼容）
   api('/api/auth/wechat/status').then(data => {
-    if (data.enabled && oauthBox && wechatBtn) oauthBox.hidden = false;
+    if (data.enabled && oauthBox && wechatBtn) {
+      oauthBox.hidden = false;
+      wechatBtn.hidden = false;
+    }
   }).catch(() => {});
   wechatBtn?.addEventListener('click', () => {
     const returnTo = encodeURIComponent(currentReturnTo());
     location.href = `/api/auth/wechat/start?returnTo=${returnTo}`;
   });
 
-  const tabs = container.querySelectorAll('.auth-tab');
-  const loginForm = container.querySelector('#login-form');
+  // 统一登录/注册表单
+  const authForm = container.querySelector('#auth-form');
+  const accountInput = container.querySelector('#auth-account');
+  const passwordInput = container.querySelector('#auth-password');
+  const authSubmit = container.querySelector('#auth-submit');
+  const authError = container.querySelector('#auth-error');
 
-  function switchTab(tab) {
-    tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-    loginForm.classList.toggle('active', tab === 'login');
-    registerForm.classList.toggle('active', tab === 'register');
-  }
-
-  tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      location.hash = '/' + tab.dataset.tab;
-    });
-  });
-
-  const initialTab = openTab || (location.hash === '#/register' ? 'register' : 'login');
-  switchTab(initialTab);
-
-  // 登录 — 统一入口，自动识别用户名或邮箱
-  const loginError = container.querySelector('#login-error');
-  const loginSubmit = container.querySelector('#login-submit');
-  loginForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const account = container.querySelector('#login-username').value.trim();
-    const password = container.querySelector('#login-password').value;
-    if (!account || !password) return;
-    loginError.hidden = true;
-    loginSubmit.disabled = true;
-    const origText = loginSubmit.textContent;
-    loginSubmit.textContent = '登录中…';
-    try {
-      const data = await api('/api/auth/login', {
-        method: 'POST',
-        body: { account, password }
-      });
-      state.currentUser = data;
-      toast('登录成功');
-      navigate('/');
-    } catch (e) {
-      loginError.textContent = e.message || '登录失败';
-      loginError.hidden = false;
-    } finally {
-      loginSubmit.disabled = false;
-      loginSubmit.textContent = origText;
-    }
-  });
-
-  // 注册 — 邮箱必填，验证码校验
-  const registerError = container.querySelector('#register-error');
-  const registerSubmit = container.querySelector('#register-submit');
-  const emailInput = container.querySelector('#register-email');
-  const usernameInput = container.querySelector('#register-username');
-  const usernameHint = container.querySelector('#register-username-hint');
-  const codeInput = container.querySelector('#register-code');
+  // 注册补充区
+  const registerExtra = container.querySelector('#register-extra');
+  const registerEmail = container.querySelector('#register-email');
+  const registerCode = container.querySelector('#register-code');
   const sendCodeBtn = container.querySelector('#btn-send-code');
   const codeTip = container.querySelector('#register-code-tip');
-  let codeTimer = null;
-  let tipTimer = null;
+  const registerUsername = container.querySelector('#register-username');
+  const usernameHint = container.querySelector('#register-username-hint');
+  const registerPassword = container.querySelector('#register-password');
+  const registerConfirm = container.querySelector('#register-confirm');
+  const registerSubmit = container.querySelector('#register-submit');
+  const registerError = container.querySelector('#register-error');
+  const backToLoginBtn = container.querySelector('#btn-back-to-login');
+
+  function showError(el, msg) {
+    el.textContent = msg;
+    el.hidden = false;
+  }
+  function clearError(el) { el.textContent = ''; el.hidden = true; }
+
+  function showRegisterExtra(email) {
+    authForm.classList.remove('active');
+    authForm.hidden = true;
+    registerExtra.hidden = false;
+    registerExtra.classList.add('active');
+    registerEmail.value = email;
+    registerCode.value = '';
+    registerPassword.value = '';
+    registerConfirm.value = '';
+    registerUsername.value = '';
+    clearError(registerError);
+  }
+
+  function resetToLogin() {
+    registerExtra.hidden = true;
+    registerExtra.classList.remove('active');
+    authForm.hidden = false;
+    authForm.classList.add('active');
+    passwordInput.value = '';
+    clearError(authError);
+  }
+
+  backToLoginBtn?.addEventListener('click', resetToLogin);
 
   // 用户名实时校验
-  usernameInput.addEventListener('input', () => {
-    const val = usernameInput.value.trim();
+  registerUsername?.addEventListener('input', () => {
+    const val = registerUsername.value.trim();
     if (!val) { usernameHint.hidden = true; usernameHint.textContent = ''; return; }
     if (/[^a-zA-Z0-9_]/.test(val)) {
       usernameHint.textContent = '用户名只能包含字母、数字和下划线';
@@ -108,11 +108,48 @@ function renderLogin(container, openTab) {
     }
   });
 
+  // 统一表单提交：登录 / 触发注册验证码
+  authForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const account = accountInput.value.trim();
+    const password = passwordInput.value;
+    if (!account || !password) return;
+    clearError(authError);
+    authSubmit.disabled = true;
+    const origText = authSubmit.textContent;
+    authSubmit.textContent = '处理中…';
+    try {
+      const data = await api('/api/auth/login', {
+        method: 'POST',
+        body: { account, password }
+      });
+      if (data.action === 'register_code_sent') {
+        showRegisterExtra(data.email);
+        toast('验证码已发送，请查收邮件');
+        return;
+      }
+      state.currentUser = data;
+      toast('登录成功');
+      navigate('/');
+    } catch (e) {
+      let msg = e.message || '登录失败';
+      if (e.status === 401) msg = '密码错误';
+      else if (e.status === 404) msg = '用户名不存在';
+      else if (e.status === 400) msg = e.message || '请求格式错误';
+      showError(authError, msg);
+    } finally {
+      authSubmit.disabled = false;
+      authSubmit.textContent = origText;
+    }
+  });
+
   // 发送验证码
-  sendCodeBtn.addEventListener('click', async () => {
-    const email = emailInput.value.trim();
-    if (!email) { registerError.textContent = '请先填写邮箱'; registerError.hidden = false; return; }
-    registerError.hidden = true;
+  let codeTimer = null;
+  let tipTimer = null;
+  sendCodeBtn?.addEventListener('click', async () => {
+    const email = registerEmail.value.trim();
+    if (!email) { showError(registerError, '邮箱不能为空'); return; }
+    clearError(registerError);
     sendCodeBtn.disabled = true;
     try {
       await api('/api/auth/send-register-code', { method: 'POST', body: { email } });
@@ -131,7 +168,6 @@ function renderLogin(container, openTab) {
           sendCodeBtn.textContent = remain + 's';
         }
       }, 1000);
-      // 剩余 30s 时开始轮转提示
       setTimeout(() => {
         if (remain <= 0) return;
         const tips = ['还没收到？检查一下垃圾邮件', '邮件可能在垃圾箱里，去看看吧', '仍未收到？稍等片刻再查看'];
@@ -145,40 +181,41 @@ function renderLogin(container, openTab) {
         tipTimer = setInterval(showTip, 5000);
       }, 30000);
     } catch (e) {
-      registerError.textContent = e.message || '发送失败';
-      registerError.hidden = false;
+      showError(registerError, e.message || '发送失败');
       sendCodeBtn.disabled = false;
     }
   });
 
-  registerForm.addEventListener('submit', async (e) => {
+  // 注册提交
+  registerExtra.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const email = emailInput.value.trim();
-    const code = codeInput.value.trim();
-    const username = usernameInput.value.trim();
-    const password = container.querySelector('#register-password').value;
-    const confirmPassword = container.querySelector('#register-confirm').value;
-    if (!email) { registerError.textContent = '请填写邮箱'; registerError.hidden = false; return; }
-    if (!code) { registerError.textContent = '请填写验证码'; registerError.hidden = false; return; }
-    if (username && !/^[a-zA-Z0-9_]{2,30}$/.test(username)) { registerError.textContent = '用户名只能包含字母、数字和下划线，2-30 位'; registerError.hidden = false; return; }
-    if (!password || !confirmPassword) return;
-    registerError.hidden = true;
+    const email = registerEmail.value.trim();
+    const code = registerCode.value.trim();
+    const username = registerUsername.value.trim();
+    const password = registerPassword.value;
+    const confirmPassword = registerConfirm.value;
+    if (!email) { showError(registerError, '请填写邮箱'); return; }
+    if (!code) { showError(registerError, '请填写验证码'); return; }
+    if (!password || !confirmPassword) { showError(registerError, '请填写密码'); return; }
+    if (password.length < 8) { showError(registerError, '密码至少 8 位'); return; }
+    if (password !== confirmPassword) { showError(registerError, '两次密码不一致'); return; }
+    if (username && !/^[a-zA-Z0-9_]{2,30}$/.test(username)) {
+      showError(registerError, '用户名只能包含字母、数字和下划线，2-30 位');
+      return;
+    }
+    clearError(registerError);
     registerSubmit.disabled = true;
     const origText = registerSubmit.textContent;
     registerSubmit.textContent = '注册中…';
     try {
       const body = { email, code, password, confirmPassword };
       if (username) body.username = username;
-      const data = await api('/api/auth/register', {
-        method: 'POST',
-        body
-      });
+      const data = await api('/api/auth/register', { method: 'POST', body });
       state.currentUser = data;
       toast('注册成功');
       navigate('/');
     } catch (e) {
-      registerError.textContent = e.message || '注册失败';
-      registerError.hidden = false;
+      showError(registerError, e.message || '注册失败');
     } finally {
       registerSubmit.disabled = false;
       registerSubmit.textContent = origText;

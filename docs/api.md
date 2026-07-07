@@ -31,17 +31,22 @@ curl -b jpage.sid=<cookie> http://localhost:8858/api/auth/me
 
 ### `POST /api/auth/login`
 
-登录。Body: `{account, password}` 或 `{username, password}`（统一入口，自动识别用户名或邮箱）。成功后写入 session cookie。
+统一登录/注册入口。Body: `{account, password}` 或 `{username, password}`（兼容旧字段），自动识别用户名或邮箱：
+
+- 用户名/邮箱存在且密码正确 → 登录成功，返回用户信息。
+- 用户名/邮箱存在但密码错误 → 401。
+- 邮箱未注册 → 自动发送注册验证码，返回 `200 { action: 'register_code_sent', email }`。
+- 用户名不存在 → 404。
 
 ```bash
 curl -c jpage.sid -X POST http://localhost:8858/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin1234"}'
+  -d '{"account":"admin","password":"admin1234"}'
 ```
 
 ### `POST /api/auth/register`
 
-注册（需 `ALLOW_REGISTRATION=true`）。Body: `{email?, username?, password, confirmPassword}`，至少提供 email 或 username。邮箱注册会自动生成用户名，并发送验证邮件。
+注册（需 `ALLOW_REGISTRATION=true`）。Body: `{email, code, username?, password, confirmPassword}`。验证码通过 `POST /api/auth/send-register-code` 或统一登录入口（邮箱未注册时）获取。
 
 ### `POST /api/auth/logout`
 
@@ -74,6 +79,18 @@ curl -c jpage.sid -X POST http://localhost:8858/api/auth/login \
 ### `GET /api/auth/registration-status`
 
 返回 `{enabled: bool}`，注册是否开放。
+
+### `GET /api/auth/github/status`
+
+返回 GitHub OAuth 是否启用：`{enabled, clientId, callbackPath}`。
+
+### `GET /api/auth/github/start?returnTo=...`
+
+跳转 GitHub 授权页。需配置 `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`。
+
+### `GET /api/auth/github/callback?code=...&state=...`
+
+GitHub 授权回调。首次授权自动创建用户并登录；已绑定用户直接登录；已登录用户访问则绑定 GitHub 账号。
 
 ---
 

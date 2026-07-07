@@ -202,14 +202,43 @@ html.light .theme-toggle .icon-sun { display: block; }
   border-bottom-color: var(--primary);
 }
 
+.auth-heading {
+  font-size: 20px;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 18px;
+  color: var(--text);
+}
+
 .auth-oauth {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   margin-bottom: 18px;
 }
 
 .auth-oauth[hidden] { display: none; }
+
+.github-login-btn {
+  width: 100%;
+  justify-content: center;
+  gap: 8px;
+  border-color: rgba(36, 41, 47, 0.25);
+  color: #fff;
+  background: #24292f;
+  font-weight: 600;
+}
+
+.github-login-btn:hover {
+  background: #1b1f23;
+  border-color: rgba(36, 41, 47, 0.45);
+}
+
+.github-login-btn svg {
+  width: 19px;
+  height: 19px;
+  fill: currentColor;
+}
 
 .wechat-login-btn {
   width: 100%;
@@ -1569,6 +1598,26 @@ html:not(.light) {
 
 .login-form.auth-panel:not(.active) { display: none; }
 .login-form.auth-panel.active { display: flex; }
+
+.register-hint {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0 0 4px;
+}
+
+.btn-text {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 14px;
+  padding: 6px 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.btn-text:hover {
+  color: var(--primary-hover);
+}
 
 .login-brand {
   text-align: center;

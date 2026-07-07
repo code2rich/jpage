@@ -227,3 +227,175 @@ test('已绑定的微信号不能被其他登录用户转绑', async () => {
     else process.env.APP_URL = oldAppUrl;
   }
 });
+
+test('用户名不存在时统一登录返回 404', async () => {
+  const res = await request(env.app)
+    .post('/api/auth/login')
+    .send({ account: 'not_exists_user', password: 'anypassword' });
+  assert.strictEqual(res.status, 404);
+  assert.strictEqual(res.body.error, '用户名不存在');
+});
+
+test('邮箱未注册且 SMTP 未配置时统一登录返回 503', async () => {
+  const res = await request(env.app)
+    .post('/api/auth/login')
+    .send({ account: 'notfound@example.com', password: 'anypassword' });
+  assert.strictEqual(res.status, 503);
+});
+
+test('邮箱未注册时统一登录自动发送验证码并返回 register_code_sent', async () => {
+  const oldSmtpHost = process.env.SMTP_HOST;
+  process.env.SMTP_HOST = 'smtp.test.local';
+  const nodemailer = require('nodemailer');
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => ({
+    sendMail: async () => ({ messageId: 'test-message-id' })
+  });
+  const mailer = require('../../mailer');
+  mailer.initMailer();
+
+  try {
+    const res = await request(env.app)
+      .post('/api/auth/login')
+      .send({ account: 'newuser@example.com', password: 'anypassword' });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.action, 'register_code_sent');
+    assert.strictEqual(res.body.email, 'newuser@example.com');
+  } finally {
+    nodemailer.createTransport = originalCreateTransport;
+    mailer.initMailer();
+    if (oldSmtpHost === undefined) delete process.env.SMTP_HOST;
+    else process.env.SMTP_HOST = oldSmtpHost;
+  }
+});
+
+test('GitHub 登录未配置时状态为关闭', async () => {
+  const oldClientId = process.env.GITHUB_CLIENT_ID;
+  const oldClientSecret = process.env.GITHUB_CLIENT_SECRET;
+  delete process.env.GITHUB_CLIENT_ID;
+  delete process.env.GITHUB_CLIENT_SECRET;
+  const res = await request(env.app).get('/api/auth/github/status');
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.body.enabled, false);
+  if (oldClientId !== undefined) process.env.GITHUB_CLIENT_ID = oldClientId;
+  if (oldClientSecret !== undefined) process.env.GITHUB_CLIENT_SECRET = oldClientSecret;
+});
+
+test('GitHub 回调可首次创建用户并建立 session', async () => {
+  const oldClientId = process.env.GITHUB_CLIENT_ID;
+  const oldClientSecret = process.env.GITHUB_CLIENT_SECRET;
+  const oldAppUrl = process.env.APP_URL;
+  const oldFetch = global.fetch;
+  process.env.GITHUB_CLIENT_ID = 'gh-test-client-id';
+  process.env.GITHUB_CLIENT_SECRET = 'gh-test-client-secret';
+  process.env.APP_URL = 'https://jpage.cn';
+  global.fetch = async (url) => {
+    const u = new URL(url);
+    if (u.pathname.endsWith('/login/oauth/access_token')) {
+      return new Response(JSON.stringify({
+        access_token: 'gh-access-token',
+        token_type: 'bearer',
+        scope: 'read:user user:email'
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (u.pathname.endsWith('/user') && u.hostname === 'api.github.com') {
+      return new Response(JSON.stringify({
+        id: 123456,
+        login: 'octocat',
+        email: null,
+        avatar_url: 'https://github.com/avatar.png',
+        name: 'Monalisa Octocat'
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (u.pathname.endsWith('/user/emails') && u.hostname === 'api.github.com') {
+      return new Response(JSON.stringify([
+        { email: 'octocat@example.com', primary: true, verified: true }
+      ]), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    throw new Error(`unexpected fetch url: ${url}`);
+  };
+
+  try {
+    const agent = request.agent(env.app);
+    const start = await agent.get('/api/auth/github/start?returnTo=%2F');
+    assert.strictEqual(start.status, 302);
+    const loginUrl = new URL(start.headers.location);
+    assert.strictEqual(loginUrl.hostname, 'github.com');
+    assert.strictEqual(loginUrl.pathname, '/login/oauth/authorize');
+    assert.strictEqual(loginUrl.searchParams.get('client_id'), 'gh-test-client-id');
+    assert.strictEqual(loginUrl.searchParams.get('scope'), 'read:user user:email');
+    const state = loginUrl.searchParams.get('state');
+    assert.ok(state);
+
+    const callback = await agent.get(`/api/auth/github/callback?code=mock-code&state=${state}`);
+    assert.strictEqual(callback.status, 302);
+    assert.strictEqual(callback.headers.location, 'https://jpage.cn/#/');
+
+    const me = await agent.get('/api/auth/me');
+    assert.strictEqual(me.status, 200);
+    assert.match(me.body.username, /^octocat/);
+    assert.strictEqual(me.body.role, 'user');
+  } finally {
+    global.fetch = oldFetch;
+    if (oldClientId === undefined) delete process.env.GITHUB_CLIENT_ID;
+    else process.env.GITHUB_CLIENT_ID = oldClientId;
+    if (oldClientSecret === undefined) delete process.env.GITHUB_CLIENT_SECRET;
+    else process.env.GITHUB_CLIENT_SECRET = oldClientSecret;
+    if (oldAppUrl === undefined) delete process.env.APP_URL;
+    else process.env.APP_URL = oldAppUrl;
+  }
+});
+
+test('已绑定的 GitHub 账号不能被其他登录用户转绑', async () => {
+  const oldClientId = process.env.GITHUB_CLIENT_ID;
+  const oldClientSecret = process.env.GITHUB_CLIENT_SECRET;
+  const oldAppUrl = process.env.APP_URL;
+  const oldFetch = global.fetch;
+  process.env.GITHUB_CLIENT_ID = 'gh-test-client-id';
+  process.env.GITHUB_CLIENT_SECRET = 'gh-test-client-secret';
+  process.env.APP_URL = 'https://jpage.cn';
+  global.fetch = async (url) => {
+    const u = new URL(url);
+    if (u.pathname.endsWith('/login/oauth/access_token')) {
+      return new Response(JSON.stringify({ access_token: 'gh-access-token', token_type: 'bearer' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (u.pathname.endsWith('/user') && u.hostname === 'api.github.com') {
+      return new Response(JSON.stringify({ id: 123456, login: 'octocat', email: 'octocat@example.com', avatar_url: '', name: '' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (u.pathname.endsWith('/user/emails') && u.hostname === 'api.github.com') {
+      return new Response(JSON.stringify([{ email: 'octocat@example.com', primary: true, verified: true }]), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    throw new Error(`unexpected fetch url: ${url}`);
+  };
+
+  try {
+    const regularAgent = request.agent(env.app);
+    await regularAgent.post('/api/auth/login').send({ username: 'regular', password: 'regularpass123' });
+    const start = await regularAgent.get('/api/auth/github/start');
+    const loginUrl = new URL(start.headers.location);
+    const state = loginUrl.searchParams.get('state');
+    const callback = await regularAgent.get(`/api/auth/github/callback?code=mock-code&state=${state}`);
+    assert.strictEqual(callback.status, 302);
+    assert.strictEqual(callback.headers.location, 'https://jpage.cn/#/login');
+    const stillRegular = await regularAgent.get('/api/auth/me');
+    assert.strictEqual(stillRegular.status, 200);
+    assert.strictEqual(stillRegular.body.username, 'regular');
+
+    const githubAgent = request.agent(env.app);
+    const startAgain = await githubAgent.get('/api/auth/github/start');
+    const loginUrlAgain = new URL(startAgain.headers.location);
+    const stateAgain = loginUrlAgain.searchParams.get('state');
+    await githubAgent.get(`/api/auth/github/callback?code=mock-code&state=${stateAgain}`);
+    const me = await githubAgent.get('/api/auth/me');
+    assert.strictEqual(me.status, 200);
+    assert.match(me.body.username, /^octocat/);
+  } finally {
+    global.fetch = oldFetch;
+    if (oldClientId === undefined) delete process.env.GITHUB_CLIENT_ID;
+    else process.env.GITHUB_CLIENT_ID = oldClientId;
+    if (oldClientSecret === undefined) delete process.env.GITHUB_CLIENT_SECRET;
+    else process.env.GITHUB_CLIENT_SECRET = oldClientSecret;
+    if (oldAppUrl === undefined) delete process.env.APP_URL;
+    else process.env.APP_URL = oldAppUrl;
+  }
+});
