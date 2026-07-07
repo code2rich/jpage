@@ -315,7 +315,7 @@ CLI 与 MCP 共用同一套 REST API，是对等的两个客户端入口。
 - **密码**：bcrypt 哈希（cost 10）。
 - **API Token**：`jp_` + 32 位 base62；数据库存 SHA-256 哈希用于鉴权，可选 AES-256-GCM 密文（`token_enc`）用于界面查看/复制。每用户最多 10 个。
 - **限流**：
-  - 登录 `10 req / 15 min / IP`
+  - 登录 `30 req / 15 min / IP`
   - 注册 `5 req / 15 min / IP`
   - 上传/覆盖 `50 req / 15 min / IP`
   - 短链密码提交 `20 req / 15 min / IP`

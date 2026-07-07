@@ -20,7 +20,7 @@ const GITHUB_PROVIDER = 'github';
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 30,
   message: { error: '登录尝试过于频繁，请稍后再试' },
   standardHeaders: true,
   legacyHeaders: false,
