@@ -28,6 +28,15 @@ const loginLimiter = rateLimit({
   skip: () => process.env.NODE_ENV === 'test'
 });
 
+const oauthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: 'OAuth 请求过于频繁，请稍后再试' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test'
+});
+
 const registerLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
@@ -382,9 +391,11 @@ async function fetchGithubProfile(code, redirectUri) {
   const tokenData = await fetchGithubToken(code, redirectUri);
   const user = await fetchGithubUser(tokenData.access_token);
   let email = user.email || null;
+  let emailVerified = false;
   if (!email) {
     try {
       email = await fetchGithubPrimaryEmail(tokenData.access_token);
+      emailVerified = !!email;
     } catch (e) {
       logger.warn({ type: 'app', message: '获取 GitHub 邮箱失败', error: e.message });
     }
@@ -394,7 +405,7 @@ async function fetchGithubProfile(code, redirectUri) {
     login: user.login || '',
     username: user.login || '',
     email: email || null,
-    emailVerified: !!email,
+    emailVerified,
     avatarUrl: user.avatar_url || '',
     name: user.name || '',
     raw: { token: { scope: tokenData.scope }, user, redirectUri }
@@ -502,7 +513,7 @@ router.get('/wechat/status', (req, res) => {
   });
 });
 
-router.get('/wechat/start', loginLimiter, (req, res) => {
+router.get('/wechat/start', oauthLimiter, (req, res) => {
   if (!isWechatLoginEnabled()) return res.status(503).json({ error: '微信登录未配置' });
   const state = crypto.randomBytes(24).toString('hex');
   const returnTo = normalizeReturnTo(req.query.returnTo);
@@ -521,7 +532,7 @@ router.get('/wechat/start', loginLimiter, (req, res) => {
   res.redirect(url.toString() + '#wechat_redirect');
 });
 
-router.get('/wechat/callback', loginLimiter, async (req, res) => {
+router.get('/wechat/callback', oauthLimiter, async (req, res) => {
   const fail = (reason, status = 302) => {
     logger.audit('wechat.login', { success: false, reason, ip: clientIp(req) });
     return res.status(status).redirect(`${appBaseUrl(req)}/#/login`);
@@ -582,7 +593,7 @@ router.get('/github/status', (req, res) => {
   });
 });
 
-router.get('/github/start', loginLimiter, (req, res) => {
+router.get('/github/start', oauthLimiter, (req, res) => {
   if (!isGithubLoginEnabled()) return res.status(503).json({ error: 'GitHub 登录未配置' });
   const state = crypto.randomBytes(24).toString('hex');
   const returnTo = normalizeReturnTo(req.query.returnTo);
@@ -600,7 +611,7 @@ router.get('/github/start', loginLimiter, (req, res) => {
   res.redirect(url.toString());
 });
 
-router.get('/github/callback', loginLimiter, async (req, res) => {
+router.get('/github/callback', oauthLimiter, async (req, res) => {
   const fail = (reason, status = 302) => {
     logger.audit('github.login', { success: false, reason, ip: clientIp(req) });
     return res.status(status).redirect(`${appBaseUrl(req)}/#/login`);
@@ -638,9 +649,20 @@ router.get('/github/callback', loginLimiter, async (req, res) => {
       await upsertGithubAccount(account.user_id, profile);
       user = { id: account.user_id, username: account.username, role: account.role };
     } else {
-      user = await createUserFromGithub(profile);
-      await upsertGithubAccount(user.id, profile);
-      logger.audit('github.register', { userId: user.id, username: user.username, providerUserId: profile.providerUserId, ip: clientIp(req) });
+      // GitHub 邮箱已验证且库里已有该邮箱 → 绑定到现有用户，避免重复注册
+      let existingUser = null;
+      if (profile.email && profile.emailVerified) {
+        existingUser = await dbGet('SELECT id, username, role FROM users WHERE email = ?', [profile.email]);
+      }
+      if (existingUser) {
+        await upsertGithubAccount(existingUser.id, profile);
+        user = existingUser;
+        logger.audit('github.bind', { userId: user.id, providerUserId: profile.providerUserId, ip: clientIp(req), byEmail: true });
+      } else {
+        user = await createUserFromGithub(profile);
+        await upsertGithubAccount(user.id, profile);
+        logger.audit('github.register', { userId: user.id, username: user.username, providerUserId: profile.providerUserId, ip: clientIp(req) });
+      }
     }
     loginAsUser(req, user);
     logger.audit('github.login', { success: true, userId: user.id, providerUserId: profile.providerUserId, ip: clientIp(req) });
