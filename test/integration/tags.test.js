@@ -82,3 +82,27 @@ test('删除标签后，文件-标签关联被级联清理', async () => {
   const detail = await agent.get(`/api/files/${up.body.id}`);
   assert.ok(!detail.body.tags.some(t => t.id === tagId));
 });
+
+
+// --- 文件标签归属（回归：普通用户必须能编辑自己的文件标签） ---
+test('普通用户给自有文件绑定标签 → 200，且详情中可见标签', async () => {
+  // admin 创建一个普通用户
+  await agent.post('/api/users').send({ username: 'tag_owner', password: 'tagpass123', role: 'user' });
+  const user = request.agent(env.app);
+  await user.post('/api/auth/login').send({ username: 'tag_owner', password: 'tagpass123' });
+
+  // 普通用户创建文件和标签并绑定
+  const up = await user.post('/api/files/upload-json').send({ name: 'owner.md', content: '# owner file' });
+  assert.strictEqual(up.status, 200);
+  const tagRes = await user.post('/api/tags').send({ name: '普通用户标签' });
+  assert.strictEqual(tagRes.status, 200);
+  const tagId = tagRes.body.id;
+
+  const bind = await user.put(`/api/files/${up.body.id}/tags`).send({ tagIds: [tagId] });
+  assert.strictEqual(bind.status, 200);
+  assert.strictEqual(bind.body.success, true);
+
+  // 详情中应返回该标签
+  const detail = await user.get(`/api/files/${up.body.id}`);
+  assert.ok(detail.body.tags.some(t => t.id === tagId));
+});
