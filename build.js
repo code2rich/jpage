@@ -39,7 +39,6 @@ const jsArgs = [
   '--outbase=' + path.join(PUBLIC, 'js'),
   '--entry-names=' + entryNames,
   '--chunk-names=chunks/' + entryNames,
-  '--metafile=' + path.join(DIST, 'meta.json'),
 ];
 if (!isDev) jsArgs.push('--minify', '--target=es2020');
 runEsbuild(jsArgs);
@@ -55,21 +54,7 @@ if (!isDev) cssArgs.push('--minify');
 runEsbuild([cssSrc, '--outfile=' + path.join(DIST, 'style.tmp.css'), ...(isDev ? [] : ['--minify'])]);
 
 // --- 3. 生成 manifest + 重命名 CSS 带哈希 ---
-const meta = JSON.parse(fs.readFileSync(path.join(DIST, 'meta.json'), 'utf8'));
 const manifest = {};
-
-// JS outputs：从 metafile 提取（path 是绝对/相对，统一取 basename）
-for (const outPath of Object.keys(meta.outputs)) {
-  const base = path.basename(outPath);
-  // app*.js -> app.js；chunk 在 chunks/ 下保留
-  const inChunks = outPath.includes('chunks/');
-  if (base.startsWith('app-') || base === 'app.js') {
-    manifest['app.js'] = inChunks ? 'chunks/' + base : base;
-  }
-  // 其余按 basename 记录（landing/login/home/preview + chunk）
-  // 不显式登记，index.html 只需引用 app.js 入口
-}
-fs.unlinkSync(path.join(DIST, 'meta.json'));
 
 // CSS 重命名带哈希（用内容 hash）
 const cssContent = fs.readFileSync(path.join(DIST, 'style.tmp.css'));
