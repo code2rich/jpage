@@ -10,6 +10,7 @@ import { escapeHtml, relativeTime, copyToClipboard, openModal, closeModal } from
 
 // 缩略图懒加载（从旧 content-templates.js 迁移，复用 .ct-thumb-iframe 容器）
 const loadedThumbs = new Set();
+const loadingThumbs = new Set();
 let activeThumbLoads = 0;
 const MAX_CONCURRENT_THUMBS = 3;
 const pendingThumbQueue = [];
@@ -30,6 +31,7 @@ function ensureThumbObserver() {
 
 function resetThumbCache() {
   loadedThumbs.clear();
+  loadingThumbs.clear();
   pendingThumbQueue.length = 0;
   activeThumbLoads = 0;
 }
@@ -49,13 +51,20 @@ function enqueueThumbLoad(card) {
 async function loadThumb(card) {
   const shareKey = card.dataset.shareKey;
   if (!shareKey) return;
-  if (loadedThumbs.has(shareKey)) return;
-  loadedThumbs.add(shareKey);
+  if (loadedThumbs.has(shareKey) || loadingThumbs.has(shareKey)) return;
   const loadingEl = card.querySelector('.ct-card-thumb-loading');
   const iframe = card.querySelector('.ct-thumb-iframe');
   if (!iframe) return;
-  iframe.onload = () => { if (loadingEl) loadingEl.remove(); };
-  iframe.onerror = () => { if (loadingEl) loadingEl.remove(); };
+  loadingThumbs.add(shareKey);
+  iframe.onload = () => {
+    loadedThumbs.add(shareKey);
+    loadingThumbs.delete(shareKey);
+    if (loadingEl) loadingEl.remove();
+  };
+  iframe.onerror = () => {
+    loadingThumbs.delete(shareKey);
+    if (loadingEl) loadingEl.remove();
+  };
   iframe.src = `/api/content-templates/market/${shareKey}/preview-html`;
 }
 
