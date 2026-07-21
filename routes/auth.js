@@ -9,7 +9,7 @@ const rateLimit = require('express-rate-limit');
 const { dbGet, dbRun } = require('../lib/db');
 const { requireAuth } = require('../lib/middleware/auth');
 const { clientIp } = require('../lib/util');
-const { sendMail, getAppUrl, isMailerConfigured } = require('../mailer');
+const { sendMailBackground, getAppUrl, isMailerConfigured } = require('../mailer');
 const logger = require('../logger');
 
 const router = express.Router();
@@ -88,21 +88,17 @@ async function sendVerificationEmail(userId, email, type, newEmail) {
   const targetEmail = newEmail || email;
   const appUrl = getAppUrl();
   const link = `${appUrl}/api/auth/verify-email?token=${token}`;
-  try {
-    await sendMail(targetEmail, '验证你的邮箱 — 即页',
-      `<div style="max-width:480px;margin:0 auto;font-family:system-ui,sans-serif;padding:24px">
-        <h2 style="color:#1a1a1a">验证你的邮箱</h2>
-        <p style="color:#555;font-size:15px">请点击以下按钮验证你的邮箱地址：</p>
-        <p style="margin:24px 0"><a href="${link}" style="display:inline-block;padding:12px 28px;background:#4f46e5;color:#fff;border-radius:6px;text-decoration:none;font-size:15px">验证邮箱</a></p>
-        <p style="color:#888;font-size:13px">或复制链接到浏览器：<br><a href="${link}" style="word-break:break-all">${link}</a></p>
-        <p style="color:#888;font-size:13px">链接 24 小时内有效。</p>
-      </div>`
-    );
-    return { sent: true };
-  } catch (e) {
-    logger.error({ type: 'app', message: '发送验证邮件失败', error: e.message, userId });
-    return { sent: false, error: e.message };
-  }
+  // 后台异步发信：验证记录已入库，接口立即响应，不阻塞请求
+  sendMailBackground(targetEmail, '验证你的邮箱 — 即页',
+    `<div style="max-width:480px;margin:0 auto;font-family:system-ui,sans-serif;padding:24px">
+      <h2 style="color:#1a1a1a">验证你的邮箱</h2>
+      <p style="color:#555;font-size:15px">请点击以下按钮验证你的邮箱地址：</p>
+      <p style="margin:24px 0"><a href="${link}" style="display:inline-block;padding:12px 28px;background:#4f46e5;color:#fff;border-radius:6px;text-decoration:none;font-size:15px">验证邮箱</a></p>
+      <p style="color:#888;font-size:13px">或复制链接到浏览器：<br><a href="${link}" style="word-break:break-all">${link}</a></p>
+      <p style="color:#888;font-size:13px">链接 24 小时内有效。</p>
+    </div>`
+  );
+  return { sent: true };
 }
 
 // 从邮箱前缀生成唯一用户名
@@ -138,20 +134,16 @@ async function sendRegisterCode(email) {
     [0, hash, code.slice(0, 3) + '***', 'register_code', email, expiresAt]
   );
 
-  try {
-    await sendMail(email, '注册验证码 — 即页',
-      `<div style="max-width:480px;margin:0 auto;padding:32px 24px;font-family:system-ui,-apple-system,sans-serif;color:#333">
-        <h2 style="margin:0 0 24px;font-size:20px;color:#111">注册验证码</h2>
-        <p style="margin:0 0 16px;font-size:15px">你的注册验证码是：</p>
-        <p style="margin:0 0 24px;font-size:32px;font-weight:700;letter-spacing:6px;color:#4f46e5">${code}</p>
-        <p style="margin:0;font-size:13px;color:#888">验证码 10 分钟内有效。如非本人操作请忽略。</p>
-      </div>`
-    );
-    return { ok: true };
-  } catch (e) {
-    logger.error({ type: 'app', message: '发送注册验证码失败', error: e.message });
-    return { ok: false, status: 500, error: '验证码发送失败，请稍后重试' };
-  }
+  // 后台异步发信：验证码已入库，接口立即响应，不阻塞请求
+  sendMailBackground(email, '注册验证码 — 即页',
+    `<div style="max-width:480px;margin:0 auto;padding:32px 24px;font-family:system-ui,-apple-system,sans-serif;color:#333">
+      <h2 style="margin:0 0 24px;font-size:20px;color:#111">注册验证码</h2>
+      <p style="margin:0 0 16px;font-size:15px">你的注册验证码是：</p>
+      <p style="margin:0 0 24px;font-size:32px;font-weight:700;letter-spacing:6px;color:#4f46e5">${code}</p>
+      <p style="margin:0;font-size:13px;color:#888">验证码 10 分钟内有效。如非本人操作请忽略。</p>
+    </div>`
+  );
+  return { ok: true };
 }
 
 function isWechatLoginEnabled() {

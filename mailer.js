@@ -14,6 +14,16 @@ function initMailer() {
     port: parseInt(SMTP_PORT) || 465,
     secure: SMTP_SECURE !== 'false',
     auth: SMTP_USER ? { user: SMTP_USER, pass: SMTP_PASS } : undefined,
+    // 连接池：复用连接，避免每次发信重新 TCP/TLS 握手
+    pool: true,
+    maxConnections: 2,
+    maxMessages: 100,
+    // 显式超时：SMTP 无响应时快速失败，而不是沿用 nodemailer
+    // 默认值（建连 2min / greeting 30s / 闲置 10min）导致请求长时间挂起
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 30000,
+    dnsTimeout: 10000,
   });
   fromAddress = SMTP_FROM || SMTP_USER || 'noreply@jpage.local';
   appUrl = APP_URL || 'http://localhost:8858';
@@ -28,7 +38,20 @@ async function sendMail(to, subject, html) {
   return info;
 }
 
+// 后台异步发信：不阻塞调用方（HTTP 请求路径），失败仅记录日志
+function sendMailBackground(to, subject, html) {
+  if (!transporter) return;
+  sendMail(to, subject, html).catch(e => {
+    logger.error({ type: 'app', message: '后台发送邮件失败', to, subject, error: e.message });
+  });
+}
+
+// 关闭 SMTP 连接池（进程退出前调用）
+function closeMailer() {
+  if (transporter && typeof transporter.close === 'function') transporter.close();
+}
+
 function getAppUrl() { return appUrl || process.env.APP_URL || 'http://localhost:8858'; }
 function isMailerConfigured() { return !!transporter; }
 
-module.exports = { initMailer, sendMail, getAppUrl, isMailerConfigured };
+module.exports = { initMailer, sendMail, sendMailBackground, closeMailer, getAppUrl, isMailerConfigured };

@@ -26,7 +26,7 @@ const { backfillFtsIndex, deleteFileIndex } = require('./lib/fts');
 const { scheduleViewCountFlush, flushViewCounts, recordVisit } = require('./lib/view-counts');
 const { setAdminUserId } = require('./lib/auth-state');
 const { renderFile, renderTemplateContent } = require('./lib/render');
-const { initMailer } = require('./mailer');
+const { initMailer, closeMailer } = require('./mailer');
 const { mountMcpServer, closeMcpTransports } = require('./mcp-server');
 const logger = require('./logger');
 
@@ -529,6 +529,7 @@ if (require.main === module) {
     process.on(sig, async () => {
       logger.info({ type: 'app', message: `收到 ${sig}，正在关闭 MCP transport` });
       await flushViewCounts(); // 关闭前回写缓冲的 view_count，避免丢失
+      closeMailer(); // 关闭 SMTP 连接池
       await closeMcpTransports();
       process.exit(0);
     });
