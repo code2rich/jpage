@@ -161,6 +161,8 @@ API 和 MCP 端点支持三种认证方式：
 | `SMTP_PASS` | 否 | SMTP 登录密码或授权码 |
 | `SMTP_FROM` | 否 | 发件人地址（如 `"即页 <user@example.com>"`） |
 | `APP_URL` | 否 | 应用外部访问地址，用于拼接验证链接（如 `https://jpage.cn`） |
+| `GOOGLE_CLIENT_ID` | 否 | Google Web 应用 OAuth Client ID；与 `GOOGLE_CLIENT_SECRET` 同时配置后启用 Google 登录 |
+| `GOOGLE_CLIENT_SECRET` | 否 | Google Web 应用 OAuth Client Secret；仅保存在服务端环境变量中 |
 | `JPAGE_DATA_DIR` | 否 | 数据目录，默认 `./data` |
 | `COOKIE_SECURE` | 否 | 设为 `true` 时 Cookie 仅 HTTPS 传输（生产推荐） |
 | `MCP_IP` | 否 | MCP 端点日志中显示的主机名，默认 `localhost` |

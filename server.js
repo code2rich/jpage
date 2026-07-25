@@ -355,6 +355,8 @@ app.use('/vendor/mermaid', express.static(path.join(NODE_MODULES, 'mermaid', 'di
 
 // index:false —— 不让 static 自动把 / 映射到 index.html（由下方 catch-all 注入哈希资源路径后返回）
 app.use(express.static(path.join(__dirname, 'public'), { ...STATIC_OPTS, index: false }));
+app.get('/privacy', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'privacy.html')));
+app.get('/terms', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'terms.html')));
 
 // --- SPA 兜底：返回 index.html，注入打包后的带哈希资源路径（若已 build）---
 const INDEX_HTML_PATH = path.join(__dirname, 'public', 'index.html');

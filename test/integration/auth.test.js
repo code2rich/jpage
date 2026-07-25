@@ -2,6 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const request = require('supertest');
+const { OAuth2Client } = require('google-auth-library');
 const { createTestEnv } = require('../helpers/setup');
 
 let env;
@@ -14,6 +15,48 @@ test.before(async () => {
 test.after(() => {
   env.cleanup();
 });
+
+async function withMockedGoogle(payloadFactory, run) {
+  const oldClientId = process.env.GOOGLE_CLIENT_ID;
+  const oldClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const oldAppUrl = process.env.APP_URL;
+  const oldGetToken = OAuth2Client.prototype.getToken;
+  const oldVerifyIdToken = OAuth2Client.prototype.verifyIdToken;
+  let expectedNonce = null;
+
+  process.env.GOOGLE_CLIENT_ID = 'google-test-client.apps.googleusercontent.com';
+  process.env.GOOGLE_CLIENT_SECRET = 'google-test-secret';
+  process.env.APP_URL = 'https://jpage.cn';
+  OAuth2Client.prototype.getToken = async (code) => {
+    assert.strictEqual(code, 'mock-code');
+    return { tokens: { id_token: 'mock-google-id-token' } };
+  };
+  OAuth2Client.prototype.verifyIdToken = async ({ idToken, audience }) => {
+    assert.strictEqual(idToken, 'mock-google-id-token');
+    assert.strictEqual(audience, 'google-test-client.apps.googleusercontent.com');
+    const payload = typeof payloadFactory === 'function'
+      ? payloadFactory(expectedNonce)
+      : { ...payloadFactory, nonce: expectedNonce };
+    return { getPayload: () => payload };
+  };
+
+  try {
+    await run({
+      setExpectedNonce(value) {
+        expectedNonce = value;
+      }
+    });
+  } finally {
+    OAuth2Client.prototype.getToken = oldGetToken;
+    OAuth2Client.prototype.verifyIdToken = oldVerifyIdToken;
+    if (oldClientId === undefined) delete process.env.GOOGLE_CLIENT_ID;
+    else process.env.GOOGLE_CLIENT_ID = oldClientId;
+    if (oldClientSecret === undefined) delete process.env.GOOGLE_CLIENT_SECRET;
+    else process.env.GOOGLE_CLIENT_SECRET = oldClientSecret;
+    if (oldAppUrl === undefined) delete process.env.APP_URL;
+    else process.env.APP_URL = oldAppUrl;
+  }
+}
 
 test('未登录 GET /api/auth/me → 401', async () => {
   const res = await request(env.app).get('/api/auth/me');
@@ -448,4 +491,173 @@ test('GitHub 邮箱已存在且已验证时自动绑定到现有用户', async (
     if (oldAppUrl === undefined) delete process.env.APP_URL;
     else process.env.APP_URL = oldAppUrl;
   }
+});
+
+test('Google 登录未配置时状态为关闭', async () => {
+  const oldClientId = process.env.GOOGLE_CLIENT_ID;
+  const oldClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  delete process.env.GOOGLE_CLIENT_ID;
+  delete process.env.GOOGLE_CLIENT_SECRET;
+  try {
+    const res = await request(env.app).get('/api/auth/google/status');
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.enabled, false);
+    assert.strictEqual(res.body.callbackPath, '/api/auth/google/callback');
+  } finally {
+    if (oldClientId !== undefined) process.env.GOOGLE_CLIENT_ID = oldClientId;
+    if (oldClientSecret !== undefined) process.env.GOOGLE_CLIENT_SECRET = oldClientSecret;
+  }
+});
+
+test('Google OIDC 首次登录创建用户、绑定账号并建立 session', async () => {
+  await withMockedGoogle({
+    iss: 'https://accounts.google.com',
+    aud: 'google-test-client.apps.googleusercontent.com',
+    sub: 'google-user-1001',
+    email: 'google.new@example.com',
+    email_verified: true,
+    name: 'Google New User',
+    picture: 'https://example.com/avatar.png'
+  }, async ({ setExpectedNonce }) => {
+    const agent = request.agent(env.app);
+    const start = await agent.get('/api/auth/google/start?returnTo=%2F');
+    assert.strictEqual(start.status, 302);
+    const loginUrl = new URL(start.headers.location);
+    assert.strictEqual(loginUrl.hostname, 'accounts.google.com');
+    assert.strictEqual(loginUrl.searchParams.get('client_id'), 'google-test-client.apps.googleusercontent.com');
+    assert.strictEqual(loginUrl.searchParams.get('redirect_uri'), 'https://jpage.cn/api/auth/google/callback');
+    assert.deepStrictEqual(
+      new Set(loginUrl.searchParams.get('scope').split(' ')),
+      new Set(['openid', 'email', 'profile'])
+    );
+    const state = loginUrl.searchParams.get('state');
+    const nonce = loginUrl.searchParams.get('nonce');
+    assert.ok(state);
+    assert.ok(nonce);
+    setExpectedNonce(nonce);
+
+    const callback = await agent.get(`/api/auth/google/callback?code=mock-code&state=${state}`);
+    assert.strictEqual(callback.status, 302);
+    assert.strictEqual(callback.headers.location, 'https://jpage.cn/#/');
+
+    const me = await agent.get('/api/auth/me');
+    assert.strictEqual(me.status, 200);
+    assert.match(me.body.username, /^googlenew/);
+    assert.strictEqual(me.body.email, 'google.new@example.com');
+    assert.strictEqual(me.body.emailVerified, true);
+    assert.strictEqual(me.body.role, 'user');
+  });
+});
+
+test('已绑定的 Google 账号可以再次登录同一用户', async () => {
+  await withMockedGoogle({
+    iss: 'https://accounts.google.com',
+    aud: 'google-test-client.apps.googleusercontent.com',
+    sub: 'google-user-1001',
+    email: 'google.new@example.com',
+    email_verified: true,
+    name: 'Google User Renamed',
+    picture: ''
+  }, async ({ setExpectedNonce }) => {
+    const agent = request.agent(env.app);
+    const start = await agent.get('/api/auth/google/start');
+    const loginUrl = new URL(start.headers.location);
+    setExpectedNonce(loginUrl.searchParams.get('nonce'));
+    await agent.get(`/api/auth/google/callback?code=mock-code&state=${loginUrl.searchParams.get('state')}`);
+    const me = await agent.get('/api/auth/me');
+    assert.strictEqual(me.status, 200);
+    assert.strictEqual(me.body.email, 'google.new@example.com');
+  });
+});
+
+test('Google 已验证邮箱可绑定到已验证的现有用户', async () => {
+  await withMockedGoogle({
+    iss: 'https://accounts.google.com',
+    aud: 'google-test-client.apps.googleusercontent.com',
+    sub: 'google-user-existing-email',
+    email: 'google.existing@example.com',
+    email_verified: true,
+    name: 'Existing Google User',
+    picture: ''
+  }, async ({ setExpectedNonce }) => {
+    const adminAgent = request.agent(env.app);
+    await adminAgent.post('/api/auth/login').send({ username: 'admin', password: 'testpassword123' });
+    const created = await adminAgent.post('/api/users').send({
+      username: 'googleexisting',
+      password: 'existingpass123',
+      role: 'user',
+      email: 'google.existing@example.com'
+    });
+    assert.strictEqual(created.status, 200);
+
+    const googleAgent = request.agent(env.app);
+    const start = await googleAgent.get('/api/auth/google/start');
+    const loginUrl = new URL(start.headers.location);
+    setExpectedNonce(loginUrl.searchParams.get('nonce'));
+    const callback = await googleAgent.get(`/api/auth/google/callback?code=mock-code&state=${loginUrl.searchParams.get('state')}`);
+    assert.strictEqual(callback.headers.location, 'https://jpage.cn/#/');
+    const me = await googleAgent.get('/api/auth/me');
+    assert.strictEqual(me.status, 200);
+    assert.strictEqual(me.body.username, 'googleexisting');
+  });
+});
+
+test('已绑定 Google 账号不能被其他登录用户转绑', async () => {
+  await withMockedGoogle({
+    iss: 'https://accounts.google.com',
+    aud: 'google-test-client.apps.googleusercontent.com',
+    sub: 'google-user-1001',
+    email: 'google.new@example.com',
+    email_verified: true,
+    name: 'Google New User',
+    picture: ''
+  }, async ({ setExpectedNonce }) => {
+    const regularAgent = request.agent(env.app);
+    await regularAgent.post('/api/auth/login').send({ username: 'regular', password: 'regularpass123' });
+    const start = await regularAgent.get('/api/auth/google/start');
+    const loginUrl = new URL(start.headers.location);
+    setExpectedNonce(loginUrl.searchParams.get('nonce'));
+    const callback = await regularAgent.get(`/api/auth/google/callback?code=mock-code&state=${loginUrl.searchParams.get('state')}`);
+    assert.strictEqual(callback.headers.location, 'https://jpage.cn/#/login?oauth=google_failed');
+    const me = await regularAgent.get('/api/auth/me');
+    assert.strictEqual(me.status, 200);
+    assert.strictEqual(me.body.username, 'regular');
+  });
+});
+
+test('Google nonce 校验失败时拒绝登录', async () => {
+  await withMockedGoogle((expectedNonce) => ({
+    iss: 'https://accounts.google.com',
+    aud: 'google-test-client.apps.googleusercontent.com',
+    sub: 'google-invalid-nonce',
+    email: 'nonce@example.com',
+    email_verified: true,
+    nonce: `${expectedNonce}-tampered`
+  }), async ({ setExpectedNonce }) => {
+    const agent = request.agent(env.app);
+    const start = await agent.get('/api/auth/google/start');
+    const loginUrl = new URL(start.headers.location);
+    setExpectedNonce(loginUrl.searchParams.get('nonce'));
+    const callback = await agent.get(`/api/auth/google/callback?code=mock-code&state=${loginUrl.searchParams.get('state')}`);
+    assert.strictEqual(callback.headers.location, 'https://jpage.cn/#/login?oauth=google_failed');
+    const me = await agent.get('/api/auth/me');
+    assert.strictEqual(me.status, 401);
+  });
+});
+
+test('Google state 不匹配时拒绝登录且不交换 token', async () => {
+  await withMockedGoogle({
+    iss: 'https://accounts.google.com',
+    aud: 'google-test-client.apps.googleusercontent.com',
+    sub: 'google-invalid-state',
+    email: 'state@example.com',
+    email_verified: true
+  }, async () => {
+    const agent = request.agent(env.app);
+    await agent.get('/api/auth/google/start');
+    const callback = await agent.get('/api/auth/google/callback?code=mock-code&state=tampered');
+    assert.strictEqual(callback.headers.location, 'https://jpage.cn/#/login?oauth=google_failed');
+    const me = await agent.get('/api/auth/me');
+    assert.strictEqual(me.status, 401);
+  });
 });

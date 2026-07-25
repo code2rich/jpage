@@ -6,6 +6,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
+const { OAuth2Client } = require('google-auth-library');
 const { dbGet, dbRun } = require('../lib/db');
 const { requireAuth } = require('../lib/middleware/auth');
 const { clientIp } = require('../lib/util');
@@ -17,6 +18,7 @@ const router = express.Router();
 const ALLOW_REGISTRATION = process.env.ALLOW_REGISTRATION === 'true';
 const WECHAT_PROVIDER = 'wechat';
 const GITHUB_PROVIDER = 'github';
+const GOOGLE_PROVIDER = 'google';
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -445,6 +447,112 @@ async function createUserFromGithub(profile) {
   return { id: result.lastID, username, role: 'user' };
 }
 
+// --- Google OpenID Connect 辅助函数 ---
+
+function isGoogleLoginEnabled() {
+  return !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+}
+
+function sanitizeGoogleUsername(raw) {
+  return String(raw || '')
+    .normalize('NFKD')
+    .replace(/[^a-zA-Z0-9_]/g, '')
+    .slice(0, 24);
+}
+
+async function generateUsernameFromGoogle(profile) {
+  const idTail = String(profile.providerUserId || crypto.randomBytes(4).toString('hex')).slice(-8);
+  const emailPrefix = profile.email ? profile.email.split('@')[0] : '';
+  let base = sanitizeGoogleUsername(emailPrefix || profile.name);
+  if (base.length < 2) base = `google_${idTail}`;
+  base = base.slice(0, 24);
+  let username = base;
+  let suffix = 1;
+  while (await dbGet('SELECT id FROM users WHERE username = ?', [username])) {
+    username = `${base}_${suffix}`;
+    if (username.length > 30) username = `${base.slice(0, 20)}_${suffix}`;
+    suffix++;
+  }
+  return username;
+}
+
+function createGoogleClient(redirectUri) {
+  return new OAuth2Client({
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    redirectUri
+  });
+}
+
+async function fetchGoogleProfile(code, redirectUri, expectedNonce) {
+  const client = createGoogleClient(redirectUri);
+  const { tokens } = await client.getToken(code);
+  if (!tokens.id_token) throw new Error('Google 授权结果缺少 ID Token');
+
+  const ticket = await client.verifyIdToken({
+    idToken: tokens.id_token,
+    audience: process.env.GOOGLE_CLIENT_ID
+  });
+  const payload = ticket.getPayload();
+  if (!payload || !payload.sub) throw new Error('Google ID Token 缺少用户标识');
+  if (!expectedNonce || payload.nonce !== expectedNonce) throw new Error('Google 登录 nonce 校验失败');
+
+  return {
+    providerUserId: String(payload.sub),
+    email: payload.email || null,
+    emailVerified: payload.email_verified === true,
+    avatarUrl: payload.picture || '',
+    name: payload.name || '',
+    raw: {
+      issuer: payload.iss,
+      audience: payload.aud,
+      emailVerified: payload.email_verified === true,
+      hostedDomain: payload.hd || null,
+      locale: payload.locale || null
+    }
+  };
+}
+
+async function findGoogleAccount(profile) {
+  return dbGet(
+    'SELECT oa.*, u.username, u.role FROM oauth_accounts oa JOIN users u ON u.id = oa.user_id WHERE oa.provider = ? AND oa.provider_user_id = ?',
+    [GOOGLE_PROVIDER, profile.providerUserId]
+  );
+}
+
+async function upsertGoogleAccount(userId, profile) {
+  await dbRun(
+    `INSERT INTO oauth_accounts
+       (user_id, provider, provider_user_id, unionid, nickname, avatar_url, raw_profile_json, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+     ON CONFLICT(provider, provider_user_id) DO UPDATE SET
+       user_id = excluded.user_id,
+       nickname = excluded.nickname,
+       avatar_url = excluded.avatar_url,
+       raw_profile_json = excluded.raw_profile_json,
+       updated_at = datetime('now')`,
+    [
+      userId,
+      GOOGLE_PROVIDER,
+      profile.providerUserId,
+      null,
+      profile.name || null,
+      profile.avatarUrl || null,
+      JSON.stringify(profile.raw || {})
+    ]
+  );
+}
+
+async function createUserFromGoogle(profile) {
+  const username = await generateUsernameFromGoogle(profile);
+  const disabledPasswordHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
+  const result = await dbRun(
+    'INSERT INTO users (username, email, email_verified, password_hash, role) VALUES (?, ?, ?, ?, ?)',
+    [username, profile.email || null, profile.emailVerified ? 1 : 0, disabledPasswordHash, 'user']
+  );
+  return { id: result.lastID, username, role: 'user' };
+}
+
 // --- 路由 ---
 
 router.get('/me', async (req, res) => {
@@ -662,6 +770,103 @@ router.get('/github/callback', oauthLimiter, async (req, res) => {
   } catch (e) {
     logger.error({ type: 'app', msg: 'github login error', error: e.message });
     return fail(e.message);
+  }
+});
+
+// --- Google OpenID Connect 路由 ---
+
+router.get('/google/status', (req, res) => {
+  res.json({
+    enabled: isGoogleLoginEnabled(),
+    callbackPath: '/api/auth/google/callback'
+  });
+});
+
+router.get('/google/start', oauthLimiter, (req, res) => {
+  if (!isGoogleLoginEnabled()) return res.status(503).json({ error: 'Google 登录未配置' });
+  const state = crypto.randomBytes(24).toString('hex');
+  const nonce = crypto.randomBytes(24).toString('hex');
+  const returnTo = normalizeReturnTo(req.query.returnTo);
+  const redirectUri = `${appBaseUrl(req)}/api/auth/google/callback`;
+  req.session.googleOAuthState = {
+    state,
+    nonce,
+    returnTo,
+    createdAt: Date.now()
+  };
+  const client = createGoogleClient(redirectUri);
+  const url = client.generateAuthUrl({
+    access_type: 'online',
+    scope: ['openid', 'email', 'profile'],
+    include_granted_scopes: true,
+    state,
+    nonce
+  });
+  res.redirect(url);
+});
+
+router.get('/google/callback', oauthLimiter, async (req, res) => {
+  const fail = (reason, status = 302) => {
+    logger.audit('google.login', { success: false, reason, ip: clientIp(req) });
+    return res.status(status).redirect(`${appBaseUrl(req)}/#/login?oauth=google_failed`);
+  };
+  if (!isGoogleLoginEnabled()) return fail('not_configured');
+  const saved = req.session.googleOAuthState;
+  delete req.session.googleOAuthState;
+  if (!saved || saved.state !== req.query.state || Date.now() - saved.createdAt > 10 * 60 * 1000) {
+    return fail('invalid_state');
+  }
+  if (req.query.error) return fail(String(req.query.error_description || req.query.error));
+  const code = String(req.query.code || '').trim();
+  if (!code) return fail('missing_code');
+
+  try {
+    const redirectUri = `${appBaseUrl(req)}/api/auth/google/callback`;
+    const profile = await fetchGoogleProfile(code, redirectUri, saved.nonce);
+
+    const currentUserId = req.session?.userId || null;
+    if (currentUserId) {
+      const user = await dbGet('SELECT id, username, role FROM users WHERE id = ?', [currentUserId]);
+      if (!user) return fail('current_user_missing');
+      const existing = await findGoogleAccount(profile);
+      if (existing && existing.user_id !== user.id) return fail('google_already_bound');
+      await upsertGoogleAccount(user.id, profile);
+      loginAsUser(req, user);
+      logger.audit('google.bind', { userId: user.id, providerUserId: profile.providerUserId, ip: clientIp(req) });
+      return res.redirect(redirectForReturnTo(req, saved.returnTo));
+    }
+
+    const account = await findGoogleAccount(profile);
+    let user;
+    if (account) {
+      await upsertGoogleAccount(account.user_id, profile);
+      user = { id: account.user_id, username: account.username, role: account.role };
+    } else {
+      let existingUser = null;
+      if (profile.email && profile.emailVerified) {
+        existingUser = await dbGet(
+          'SELECT id, username, role, email_verified FROM users WHERE email = ?',
+          [profile.email]
+        );
+      }
+      if (existingUser && existingUser.email_verified) {
+        await upsertGoogleAccount(existingUser.id, profile);
+        user = existingUser;
+        logger.audit('google.bind', { userId: user.id, providerUserId: profile.providerUserId, ip: clientIp(req), byEmail: true });
+      } else if (existingUser) {
+        return fail('email_requires_verified_binding');
+      } else {
+        user = await createUserFromGoogle(profile);
+        await upsertGoogleAccount(user.id, profile);
+        logger.audit('google.register', { userId: user.id, username: user.username, providerUserId: profile.providerUserId, ip: clientIp(req) });
+      }
+    }
+    loginAsUser(req, user);
+    logger.audit('google.login', { success: true, userId: user.id, providerUserId: profile.providerUserId, ip: clientIp(req) });
+    res.redirect(redirectForReturnTo(req, saved.returnTo));
+  } catch (e) {
+    logger.error({ type: 'app', msg: 'google login error', error: e.message });
+    return fail('token_validation_failed');
   }
 });
 

@@ -92,6 +92,18 @@ curl -c jpage.sid -X POST http://localhost:8858/api/auth/login \
 
 GitHub 授权回调。首次授权自动创建用户并登录；已绑定用户直接登录；已登录用户访问则绑定 GitHub 账号。
 
+### `GET /api/auth/google/status`
+
+返回 Google OIDC 是否启用：`{enabled, callbackPath}`。
+
+### `GET /api/auth/google/start?returnTo=...`
+
+跳转 Google 授权页。需配置 `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`，仅申请 `openid email profile` 基础权限。
+
+### `GET /api/auth/google/callback?code=...&state=...`
+
+Google OIDC 授权回调。服务端校验 state、nonce、签名、issuer 与 audience；首次授权自动创建用户，已绑定用户直接登录。只有 Google 与本地均已验证的同邮箱账号才会自动绑定。
+
 ---
 
 ## 文件管理
@@ -466,3 +478,5 @@ curl -b jpage.sid -OJ http://localhost:8858/api/skills/jpage/download
 | `ALLOW_REGISTRATION` | `false` | 设为 `true` 开放用户自助注册 |
 | `SMTP_HOST` 等 | — | SMTP 配置（`SMTP_HOST/PORT/SECURE/USER/PASS/FROM`），用于邮箱验证 |
 | `APP_URL` | `http://localhost:8858` | 应用外部访问地址，用于拼接验证链接 |
+| `GOOGLE_CLIENT_ID` | — | Google Web 应用 OAuth Client ID；与 Client Secret 同时配置后启用 Google 登录 |
+| `GOOGLE_CLIENT_SECRET` | — | Google Web 应用 OAuth Client Secret，仅限服务端保存 |

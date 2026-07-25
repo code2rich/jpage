@@ -1,4 +1,4 @@
-// 登录/注册页：统一入口，支持 GitHub / 微信 OAuth 与邮箱/用户名登录。
+// 登录/注册页：统一入口，支持 Google / GitHub / 微信 OAuth 与邮箱/用户名登录。
 // 邮箱未注册时自动发送验证码并引导完成注册；用户名不存在时提示错误。
 
 import { api } from '../api.js';
@@ -7,7 +7,19 @@ import { state, navigate } from '../app.js';
 
 function currentReturnTo() {
   const hash = location.hash.replace(/^#/, '');
-  return (hash && hash !== '/login' && hash !== '/register') ? hash : '/';
+  const path = hash.split('?')[0];
+  return (path && path !== '/login' && path !== '/register') ? path : '/';
+}
+
+function oauthErrorFromHash() {
+  const hash = location.hash.replace(/^#/, '');
+  const queryIndex = hash.indexOf('?');
+  if (queryIndex < 0) return null;
+  const params = new URLSearchParams(hash.slice(queryIndex + 1));
+  if (params.get('oauth') === 'google_failed') {
+    return 'Google 登录未完成，请重试；如果问题持续，请确认授权账号和回调配置。';
+  }
+  return null;
 }
 
 function renderLogin(container) {
@@ -17,12 +29,28 @@ function renderLogin(container) {
   container.appendChild(tmpl.content.cloneNode(true));
 
   const oauthBox = container.querySelector('#auth-oauth');
+  const googleBtn = container.querySelector('#btn-google-login');
   const githubBtn = container.querySelector('#btn-github-login');
   const wechatBtn = container.querySelector('#btn-wechat-login');
 
+  function revealProvider(button) {
+    if (!oauthBox || !button) return;
+    button.hidden = false;
+    oauthBox.hidden = false;
+  }
+
+  // Google 登录
+  api('/api/auth/google/status').then(data => {
+    if (data.enabled) revealProvider(googleBtn);
+  }).catch(() => {});
+  googleBtn?.addEventListener('click', () => {
+    const returnTo = encodeURIComponent(currentReturnTo());
+    location.href = `/api/auth/google/start?returnTo=${returnTo}`;
+  });
+
   // GitHub 登录
   api('/api/auth/github/status').then(data => {
-    if (data.enabled && oauthBox && githubBtn) oauthBox.hidden = false;
+    if (data.enabled) revealProvider(githubBtn);
   }).catch(() => {});
   githubBtn?.addEventListener('click', () => {
     const returnTo = encodeURIComponent(currentReturnTo());
@@ -31,10 +59,7 @@ function renderLogin(container) {
 
   // 微信登录（保留兼容）
   api('/api/auth/wechat/status').then(data => {
-    if (data.enabled && oauthBox && wechatBtn) {
-      oauthBox.hidden = false;
-      wechatBtn.hidden = false;
-    }
+    if (data.enabled) revealProvider(wechatBtn);
   }).catch(() => {});
   wechatBtn?.addEventListener('click', () => {
     const returnTo = encodeURIComponent(currentReturnTo());
@@ -67,6 +92,9 @@ function renderLogin(container) {
     el.hidden = false;
   }
   function clearError(el) { el.textContent = ''; el.hidden = true; }
+
+  const oauthError = oauthErrorFromHash();
+  if (oauthError) showError(authError, oauthError);
 
   function showRegisterExtra(email) {
     authForm.classList.remove('active');

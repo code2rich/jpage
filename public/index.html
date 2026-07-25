@@ -349,7 +349,7 @@
 
   <!-- 页脚 -->
   <footer class="landing-footer">
-    <p>&copy; 2026 即页 · <a href="https://github.com/code2rich/jpage" target="_blank">GitHub</a> · <a href="mailto:code2rich@qq.com">联系</a></p>
+    <p>&copy; 2026 即页 · <a href="https://github.com/code2rich/jpage" target="_blank">GitHub</a> · <a href="/privacy">隐私政策</a> · <a href="/terms">服务条款</a> · <a href="mailto:code2rich@qq.com">联系</a></p>
     <!-- {{ICP_BEIAN_PLACEHOLDER}} -->
   </footer>
 </div>
@@ -358,76 +358,115 @@
 <!-- 登录/注册模板 -->
 <template id="login-template">
 <div class="layout login-layout">
-<button class="theme-toggle" aria-label="切换主题" style="position:fixed;top:20px;right:20px;z-index:200">
+<button class="theme-toggle login-theme-toggle" aria-label="切换主题">
   <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
   <svg class="icon-sun" viewBox="0 0 24 24"><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41M12 6a6 6 0 100 12 6 6 0 000-12z"/></svg>
 </button>
 <main class="login-main">
-  <div class="login-brand">
-    <img class="brand-mark" src="/jpage_logo/jpage-app-icon.svg" alt="即页" aria-hidden="true">
-    <h1 class="login-title">即页</h1>
-    <p class="login-subtitle">拖入文件，即刻成页</p>
-  </div>
-  <div class="login-hero">
-    <h2 class="login-headline">开始你的下一个页面</h2>
-    <p class="login-tagline">免费使用 · 即时预览与分享</p>
-  </div>
-  <div class="auth-oauth" id="auth-oauth" hidden>
-    <button type="button" class="btn github-login-btn" id="btn-github-login" aria-label="使用 GitHub 登录">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
-      使用 GitHub 登录
-    </button>
-    <button type="button" class="btn wechat-login-btn" id="btn-wechat-login" aria-label="使用微信扫码登录" hidden>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.4 4.2c-4.1 0-7.4 2.7-7.4 6.1 0 1.9 1.1 3.6 2.7 4.7l-.7 2.2 2.6-1.3c.9.3 1.8.5 2.8.5.3 0 .6 0 .9-.1-.2-.6-.3-1.2-.3-1.8 0-3.2 3.2-5.8 7.1-5.8h.2c-.9-2.6-4-4.5-7.9-4.5zm-2.5 4.6c-.6 0-1-.4-1-1s.4-1 1-1 1 .4 1 1-.4 1-1 1zm5 0c-.6 0-1-.4-1-1s.4-1 1-1 1 .4 1 1-.4 1-1 1zm5.2 1.1c-3.3 0-6 2.1-6 4.7s2.7 4.7 6 4.7c.8 0 1.5-.1 2.2-.4l2.1 1-.6-1.8c1.3-.9 2.2-2.2 2.2-3.7 0-2.4-2.7-4.5-5.9-4.5zm-2 3.4c-.5 0-.8-.3-.8-.8s.3-.8.8-.8.8.3.8.8-.3.8-.8.8zm4 0c-.5 0-.8-.3-.8-.8s.3-.8.8-.8.8.3.8.8-.3.8-.8.8z"/></svg>
-      微信扫码登录
-    </button>
-    <div class="auth-divider"><span>或使用邮箱 / 用户名</span></div>
-  </div>
-  <form class="login-form auth-panel active" id="auth-form" autocomplete="on">
-    <label class="login-field has-icon">
-      <svg class="field-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
-      <span>邮箱 / 用户名</span>
-      <input type="text" name="account" id="auth-account" required autocomplete="username" placeholder="邮箱或用户名" autofocus>
-    </label>
-    <label class="login-field has-icon" id="auth-password-field">
-      <svg class="field-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
-      <span>密码</span>
-      <input type="password" name="password" id="auth-password" required autocomplete="current-password" placeholder="输入密码">
-    </label>
-    <div class="login-error" id="auth-error" role="alert" hidden></div>
-    <button type="submit" class="btn btn-primary login-submit" id="auth-submit">
-      继续
-      <svg class="btn-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/></svg>
-    </button>
-  </form>
-  <form class="login-form auth-panel" id="register-extra" autocomplete="on" hidden>
-    <p class="register-hint">该邮箱未注册，请填写验证码完成注册。</p>
-    <label class="login-field">
-      <span>邮箱</span>
-      <input type="email" name="email" id="register-email" autocomplete="email" readonly>
-    </label>
-    <div class="register-code-row">
-      <input type="text" id="register-code" placeholder="6 位验证码" maxlength="6" inputmode="numeric" pattern="\d{6}" required autocomplete="one-time-code">
-      <button type="button" class="btn btn-small" id="btn-send-code">发送验证码</button>
+  <section class="login-story" aria-label="即页产品介绍">
+    <a class="login-brand" href="#/" aria-label="返回即页首页">
+      <img class="brand-mark" src="/jpage_logo/jpage-app-icon.svg" alt="" aria-hidden="true">
+      <span class="login-brand-copy">
+        <strong class="login-title">即页</strong>
+        <span class="login-subtitle">JPage · Instant publishing</span>
+      </span>
+    </a>
+    <div class="login-story-copy">
+      <span class="login-kicker">从文件到页面，只差一次登录</span>
+      <h1 class="login-story-title">让创作离开本地，<br>在链接里继续生长。</h1>
+      <p class="login-story-desc">上传 HTML、Markdown 或演示文稿，即刻获得可预览、可分享、可迭代的在线页面。</p>
     </div>
-    <div class="register-code-tip" id="register-code-tip" hidden></div>
-    <label class="login-field">
-      <span>用户名 <small>(可选)</small></span>
-      <input type="text" name="username" id="register-username" autocomplete="username" placeholder="字母、数字、下划线，2-30 位" pattern="[a-zA-Z0-9_]{2,30}" minlength="2" maxlength="30" title="只能包含字母、数字和下划线，2-30 位">
-      <div class="register-username-hint" id="register-username-hint" hidden></div>
-    </label>
-    <label class="login-field">
-      <span>密码</span>
-      <input type="password" name="password" id="register-password" required minlength="8" autocomplete="new-password" placeholder="至少 8 位">
-    </label>
-    <label class="login-field">
-      <span>确认密码</span>
-      <input type="password" name="confirmPassword" id="register-confirm" required minlength="8" autocomplete="new-password">
-    </label>
-    <div class="login-error" id="register-error" role="alert" hidden></div>
-    <button type="submit" class="btn btn-primary login-submit" id="register-submit">注册</button>
-    <button type="button" class="btn btn-text" id="btn-back-to-login">返回登录</button>
-  </form>
+    <ol class="login-flow" aria-label="即页工作流">
+      <li><span>01</span><div><strong>上传</strong><small>拖入文件或交给 AI</small></div></li>
+      <li><span>02</span><div><strong>预览</strong><small>保留排版与交互</small></div></li>
+      <li><span>03</span><div><strong>分享</strong><small>一个链接直达内容</small></div></li>
+    </ol>
+    <p class="login-story-foot">为创作者、开发者与 AI 工作流而生。</p>
+  </section>
+
+  <section class="login-card" aria-labelledby="login-heading">
+    <a class="login-back" href="#/">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m6 6-6-6 6-6"/></svg>
+      返回首页
+    </a>
+    <div class="login-hero">
+      <span class="login-eyebrow">WELCOME BACK</span>
+      <h2 class="login-headline" id="login-heading">继续你的下一页</h2>
+      <p class="login-tagline">登录后管理文件、版本、模板与分享链接。</p>
+    </div>
+    <div class="auth-oauth" id="auth-oauth" hidden>
+      <button type="button" class="btn google-login-btn" id="btn-google-login" aria-label="使用 Google 账号登录" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.07H12v3.91h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.24c1.9-1.75 2.98-4.33 2.98-7.4z"/>
+          <path fill="#34A853" d="M12 22c2.7 0 4.98-.9 6.64-2.43l-3.24-2.54c-.9.6-2.05.96-3.4.96-2.61 0-4.82-1.76-5.61-4.13H3.04v2.62A10 10 0 0 0 12 22z"/>
+          <path fill="#FBBC05" d="M6.39 13.86A6 6 0 0 1 6.07 12c0-.65.11-1.28.32-1.86V7.52H3.04A10 10 0 0 0 2 12c0 1.61.39 3.14 1.04 4.48l3.35-2.62z"/>
+          <path fill="#EA4335" d="M12 6.01c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.65 9.65 0 0 0 12 2a10 10 0 0 0-8.96 5.52l3.35 2.62C7.18 7.77 9.39 6.01 12 6.01z"/>
+        </svg>
+        使用 Google 账号继续
+      </button>
+      <div class="auth-provider-grid">
+        <button type="button" class="btn github-login-btn" id="btn-github-login" aria-label="使用 GitHub 登录" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+          GitHub
+        </button>
+        <button type="button" class="btn wechat-login-btn" id="btn-wechat-login" aria-label="使用微信扫码登录" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.4 4.2c-4.1 0-7.4 2.7-7.4 6.1 0 1.9 1.1 3.6 2.7 4.7l-.7 2.2 2.6-1.3c.9.3 1.8.5 2.8.5.3 0 .6 0 .9-.1-.2-.6-.3-1.2-.3-1.8 0-3.2 3.2-5.8 7.1-5.8h.2c-.9-2.6-4-4.5-7.9-4.5zm-2.5 4.6c-.6 0-1-.4-1-1s.4-1 1-1 1 .4 1 1-.4 1-1 1zm5 0c-.6 0-1-.4-1-1s.4-1 1-1 1 .4 1 1-.4 1-1 1zm5.2 1.1c-3.3 0-6 2.1-6 4.7s2.7 4.7 6 4.7c.8 0 1.5-.1 2.2-.4l2.1 1-.6-1.8c1.3-.9 2.2-2.2 2.2-3.7 0-2.4-2.7-4.5-5.9-4.5zm-2 3.4c-.5 0-.8-.3-.8-.8s.3-.8.8-.8.8.3.8.8-.3.8-.8.8zm4 0c-.5 0-.8-.3-.8-.8s.3-.8.8-.8.8.3.8.8-.3.8-.8.8z"/></svg>
+          微信
+        </button>
+      </div>
+      <div class="auth-divider"><span>或使用邮箱 / 用户名</span></div>
+    </div>
+    <form class="login-form auth-panel active" id="auth-form" autocomplete="on">
+      <label class="login-field has-icon">
+        <span>邮箱 / 用户名</span>
+        <svg class="field-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+        <input type="text" name="account" id="auth-account" required autocomplete="username" placeholder="name@example.com" autofocus>
+      </label>
+      <label class="login-field has-icon" id="auth-password-field">
+        <span>密码</span>
+        <svg class="field-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+        <input type="password" name="password" id="auth-password" required autocomplete="current-password" placeholder="输入密码">
+      </label>
+      <div class="login-error" id="auth-error" role="alert" hidden></div>
+      <button type="submit" class="btn btn-primary login-submit" id="auth-submit">
+        进入工作台
+        <svg class="btn-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/></svg>
+      </button>
+    </form>
+    <form class="login-form auth-panel" id="register-extra" autocomplete="on" hidden>
+      <p class="register-hint">完成邮箱验证，创建你的即页工作台。</p>
+      <label class="login-field">
+        <span>邮箱</span>
+        <input type="email" name="email" id="register-email" autocomplete="email" readonly>
+      </label>
+      <div class="register-code-row">
+        <input type="text" id="register-code" placeholder="6 位验证码" maxlength="6" inputmode="numeric" pattern="\d{6}" required autocomplete="one-time-code">
+        <button type="button" class="btn btn-small" id="btn-send-code">发送验证码</button>
+      </div>
+      <div class="register-code-tip" id="register-code-tip" hidden></div>
+      <label class="login-field">
+        <span>用户名 <small>(可选)</small></span>
+        <input type="text" name="username" id="register-username" autocomplete="username" placeholder="字母、数字、下划线，2-30 位" pattern="[a-zA-Z0-9_]{2,30}" minlength="2" maxlength="30" title="只能包含字母、数字和下划线，2-30 位">
+        <div class="register-username-hint" id="register-username-hint" hidden></div>
+      </label>
+      <label class="login-field">
+        <span>密码</span>
+        <input type="password" name="password" id="register-password" required minlength="8" autocomplete="new-password" placeholder="至少 8 位">
+      </label>
+      <label class="login-field">
+        <span>确认密码</span>
+        <input type="password" name="confirmPassword" id="register-confirm" required minlength="8" autocomplete="new-password">
+      </label>
+      <div class="login-error" id="register-error" role="alert" hidden></div>
+      <button type="submit" class="btn btn-primary login-submit" id="register-submit">创建账号</button>
+      <button type="button" class="btn btn-text" id="btn-back-to-login">返回登录</button>
+    </form>
+    <p class="auth-security">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.9 3 8.3 7 10 4-1.7 7-5.1 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></svg>
+      登录信息仅用于身份验证，即页不会获得你的 Google 密码。
+    </p>
+    <p class="auth-terms">继续即表示你同意<a href="/terms" target="_blank">服务条款</a>和<a href="/privacy" target="_blank">隐私政策</a></p>
+  </section>
 </main>
 </div>
 </template>
