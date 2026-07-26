@@ -4,6 +4,7 @@ const assert = require('node:assert');
 const request = require('supertest');
 const { OAuth2Client } = require('google-auth-library');
 const { createTestEnv } = require('../helpers/setup');
+const logger = require('../../logger');
 
 let env;
 
@@ -37,6 +38,7 @@ async function withMockedGoogle(payloadFactory, run, options = {}) {
   OAuth2Client.prototype.getToken = async function getToken(code) {
     assert.strictEqual(code, 'mock-code');
     transporterOptions = { ...this.transporter.defaults };
+    if (options.tokenError) throw options.tokenError;
     return { tokens: { id_token: 'mock-google-id-token' } };
   };
   OAuth2Client.prototype.verifyIdToken = async ({ idToken, audience }) => {
@@ -559,6 +561,30 @@ test('Google OAuth 拒绝不支持的代理协议且不发起授权', async () =
   }, {
     proxy: 'socks5://proxy.example.com:1080'
   });
+});
+
+test('Google OAuth 将底层 AbortError 安全分类为上游超时', async () => {
+  const oldAudit = logger.audit;
+  let failureReason = null;
+  logger.audit = function audit(action, details) {
+    if (action === 'google.login' && details.success === false) failureReason = details.reason;
+  };
+  try {
+    await withMockedGoogle({}, async () => {
+      const agent = request.agent(env.app);
+      const start = await agent.get('/api/auth/google/start');
+      const loginUrl = new URL(start.headers.location);
+      const callback = await agent.get(`/api/auth/google/callback?code=mock-code&state=${loginUrl.searchParams.get('state')}`);
+      assert.strictEqual(callback.headers.location, 'https://jpage.cn/#/login?oauth=google_failed');
+      assert.strictEqual(failureReason, 'google_upstream_timeout');
+    }, {
+      tokenError: Object.assign(new Error('The operation was aborted.'), {
+        cause: { name: 'AbortError' }
+      })
+    });
+  } finally {
+    logger.audit = oldAudit;
+  }
 });
 
 test('Google OIDC 首次登录创建用户、绑定账号并建立 session', async () => {

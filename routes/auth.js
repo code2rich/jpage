@@ -478,7 +478,9 @@ function classifyGoogleLoginError(error) {
   const message = String(error?.message || '');
   const code = String(error?.code || error?.cause?.code || '').toUpperCase();
   if (message === 'google_proxy_invalid') return 'proxy_configuration_invalid';
-  if (code === 'ETIMEDOUT' || /timed?\s*out|timeout/i.test(message)) return 'google_upstream_timeout';
+  if (code === 'ETIMEDOUT' || error?.cause?.name === 'AbortError' || /timed?\s*out|timeout|operation was aborted/i.test(message)) {
+    return 'google_upstream_timeout';
+  }
   if (['ECONNREFUSED', 'ECONNRESET', 'ENETUNREACH', 'EHOSTUNREACH', 'ENOTFOUND'].includes(code)) {
     return 'google_upstream_unavailable';
   }
