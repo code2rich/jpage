@@ -473,8 +473,8 @@
 
 <!-- 文件管理模板 -->
 <template id="home-template">
-<div class="layout">
-<header class="header">
+<div class="layout workspace-layout">
+<header class="header workspace-header">
 <div class="header-left">
 <img class="brand-mark" src="/jpage_logo/jpage-app-icon.svg" alt="即页" aria-hidden="true">
 <div class="brand-text">
@@ -485,6 +485,7 @@
 <div class="header-right">
 <a class="header-tool-link" id="market-link" href="#/market" aria-label="创作市场" title="创作市场">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3h18l-2 7H5L3 3z"/><path d="M4 10v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V10"/><path d="M9 21V10"/><path d="M15 21V10"/></svg>
+  <span class="header-tool-label">创作市场</span>
 </a>
 <a class="header-tool-link" id="github-link" href="https://github.com/code2rich/jpage" target="_blank" rel="noopener noreferrer" aria-label="GitHub 项目" title="GitHub 项目">
   <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.3-1.7-1.3-1.7-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.78 2.73 1.27 3.4.97.1-.76.41-1.27.74-1.56-2.56-.29-5.26-1.28-5.26-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.7 5.41-5.27 5.69.42.37.8 1.1.8 2.22v3.29c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5z"/></svg>
@@ -555,17 +556,29 @@ CLI 工具
   <span>请验证你的邮箱地址</span>
   <button type="button" class="btn btn-small" id="btn-resend-verify">重新发送验证邮件</button>
 </div>
-<main class="main">
+<main class="main workspace-main">
+<section class="workspace-top" aria-labelledby="workspace-title">
+<div class="workspace-intro">
+  <span class="workspace-eyebrow">YOUR WORKSPACE</span>
+  <h2 id="workspace-title">把每一次创作，<br>变成可访问的页面。</h2>
+  <p>上传、整理、迭代，再用一个链接分享出去。</p>
+  <div class="workspace-capabilities" aria-label="工作区能力">
+    <span>即时预览</span><span>版本可追溯</span><span>链接可分享</span>
+  </div>
+</div>
 <div class="toolbar">
 <div class="upload-area" id="upload-area" role="button" tabindex="0" aria-label="选择或拖入 HTML、Markdown 文件上传，支持多选">
 <input type="file" id="file-input" accept=".html,.htm,.md,.markdown,.zip" multiple hidden aria-label="选择要上传的文件，支持多选">
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-<p class="upload-title">点击或拖拽上传</p>
-<span class="upload-hint">支持 .html .htm .md .markdown .zip，可多选，单文件最大 50MB</span>
+<div class="upload-copy">
+  <p class="upload-title">拖入文件，立即发布</p>
+  <span class="upload-hint">支持 HTML、Markdown 与 ZIP，可多选，单文件最大 50MB</span>
+</div>
+<span class="upload-action" aria-hidden="true">选择文件</span>
 </div>
 <label class="upload-privacy">
 <input type="checkbox" id="upload-is-public" checked>
-<span>公开访问（未勾选则仅自己可访问）</span>
+<span class="upload-privacy-copy"><strong>默认公开访问</strong><small>关闭后，新文件仅自己可见</small></span>
 </label>
 <div class="upload-progress" id="upload-progress" style="display:none">
 <div class="upload-progress-bar" id="upload-progress-bar"></div>
@@ -577,12 +590,17 @@ CLI 工具
 <span class="upload-progress-text" id="version-upload-progress-text">0%</span>
 </div>
 </div>
+</section>
+<section class="workspace-library" aria-labelledby="library-heading">
 <div class="file-list-header">
 <label class="file-checkbox-wrap select-all-wrap">
   <input type="checkbox" id="select-all-checkbox" aria-label="全选">
   <span class="file-checkbox-visual"></span>
 </label>
-<h2>文件列表</h2>
+<div class="library-heading-copy">
+  <span class="library-eyebrow">LIBRARY</span>
+  <h2 id="library-heading">内容库</h2>
+</div>
 <span class="file-count" id="file-count" aria-live="polite"></span>
 </div>
 <div class="file-filter-bar">
@@ -621,6 +639,7 @@ CLI 工具
 <p>暂无文件，请上传</p>
 <button type="button" class="empty-state-cta" id="empty-state-cta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>上传文件</button>
 </div>
+</section>
 <!-- Batch Toolbar -->
 <div class="batch-toolbar" id="batch-toolbar" hidden>
 <button type="button" class="btn btn-small btn-danger" id="batch-delete">删除</button>
