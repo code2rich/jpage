@@ -163,6 +163,8 @@ API 和 MCP 端点支持三种认证方式：
 | `APP_URL` | 否 | 应用外部访问地址，用于拼接验证链接（如 `https://jpage.cn`） |
 | `GOOGLE_CLIENT_ID` | 否 | Google Web 应用 OAuth Client ID；与 `GOOGLE_CLIENT_SECRET` 同时配置后启用 Google 登录 |
 | `GOOGLE_CLIENT_SECRET` | 否 | Google Web 应用 OAuth Client Secret；仅保存在服务端环境变量中 |
+| `GOOGLE_HTTP_TIMEOUT_MS` | 否 | Google Token 与 OIDC 公钥请求超时，范围 1000-60000 毫秒，默认 10000 |
+| `GOOGLE_HTTPS_PROXY` | 否 | 仅供 Google OAuth 出站请求使用的可信 HTTP CONNECT 代理，支持 `http://` 或 `https://` |
 | `JPAGE_DATA_DIR` | 否 | 数据目录，默认 `./data` |
 | `COOKIE_SECURE` | 否 | 设为 `true` 时 Cookie 仅 HTTPS 传输（生产推荐） |
 | `MCP_IP` | 否 | MCP 端点日志中显示的主机名，默认 `localhost` |

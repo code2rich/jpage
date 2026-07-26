@@ -186,6 +186,10 @@ API and MCP endpoints support three authentication methods:
 | `SMTP_PASS` | No | SMTP login password or authorization code. |
 | `SMTP_FROM` | No | Sender address (e.g. `"jpage <user@example.com>"`). |
 | `APP_URL` | No | External app URL used to build verification links (e.g. `https://jpage.cn`). |
+| `GOOGLE_CLIENT_ID` | No | Google Web application OAuth Client ID; enables Google sign-in together with `GOOGLE_CLIENT_SECRET`. |
+| `GOOGLE_CLIENT_SECRET` | No | Google Web application OAuth Client Secret; keep it only in the server-side environment. |
+| `GOOGLE_HTTP_TIMEOUT_MS` | No | Timeout for Google token and OIDC certificate requests, clamped to 1000-60000 ms; defaults to 10000. |
+| `GOOGLE_HTTPS_PROXY` | No | Trusted HTTP CONNECT proxy used only for Google OAuth egress; supports `http://` or `https://`. |
 | `JPAGE_DATA_DIR` | No | Data directory, defaults to `./data`. |
 | `COOKIE_SECURE` | No | When `true`, cookies are sent only over HTTPS (recommended for production). |
 | `MCP_IP` | No | Hostname shown in MCP endpoint logs, defaults to `localhost`. |

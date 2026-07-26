@@ -19,6 +19,9 @@ const ALLOW_REGISTRATION = process.env.ALLOW_REGISTRATION === 'true';
 const WECHAT_PROVIDER = 'wechat';
 const GITHUB_PROVIDER = 'github';
 const GOOGLE_PROVIDER = 'google';
+const DEFAULT_GOOGLE_HTTP_TIMEOUT_MS = 10_000;
+const MIN_GOOGLE_HTTP_TIMEOUT_MS = 1_000;
+const MAX_GOOGLE_HTTP_TIMEOUT_MS = 60_000;
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -453,6 +456,37 @@ function isGoogleLoginEnabled() {
   return !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 }
 
+function googleHttpTimeoutMs() {
+  const configured = Number.parseInt(process.env.GOOGLE_HTTP_TIMEOUT_MS || '', 10);
+  if (!Number.isFinite(configured)) return DEFAULT_GOOGLE_HTTP_TIMEOUT_MS;
+  return Math.min(MAX_GOOGLE_HTTP_TIMEOUT_MS, Math.max(MIN_GOOGLE_HTTP_TIMEOUT_MS, configured));
+}
+
+function googleProxyUrl() {
+  const raw = String(process.env.GOOGLE_HTTPS_PROXY || '').trim();
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw);
+    if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('unsupported protocol');
+    return parsed.toString();
+  } catch {
+    throw new Error('google_proxy_invalid');
+  }
+}
+
+function classifyGoogleLoginError(error) {
+  const message = String(error?.message || '');
+  const code = String(error?.code || error?.cause?.code || '').toUpperCase();
+  if (message === 'google_proxy_invalid') return 'proxy_configuration_invalid';
+  if (code === 'ETIMEDOUT' || /timed?\s*out|timeout/i.test(message)) return 'google_upstream_timeout';
+  if (['ECONNREFUSED', 'ECONNRESET', 'ENETUNREACH', 'EHOSTUNREACH', 'ENOTFOUND'].includes(code)) {
+    return 'google_upstream_unavailable';
+  }
+  if (message.includes('缺少 ID Token')) return 'missing_id_token';
+  if (message.includes('nonce 校验失败')) return 'invalid_nonce';
+  return 'token_validation_failed';
+}
+
 function sanitizeGoogleUsername(raw) {
   return String(raw || '')
     .normalize('NFKD')
@@ -477,10 +511,14 @@ async function generateUsernameFromGoogle(profile) {
 }
 
 function createGoogleClient(redirectUri) {
+  const transporterOptions = { timeout: googleHttpTimeoutMs() };
+  const proxy = googleProxyUrl();
+  if (proxy) transporterOptions.proxy = proxy;
   return new OAuth2Client({
     clientId: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    redirectUri
+    redirectUri,
+    transporterOptions
   });
 }
 
@@ -794,7 +832,14 @@ router.get('/google/start', oauthLimiter, (req, res) => {
     returnTo,
     createdAt: Date.now()
   };
-  const client = createGoogleClient(redirectUri);
+  let client;
+  try {
+    client = createGoogleClient(redirectUri);
+  } catch (e) {
+    const reason = classifyGoogleLoginError(e);
+    logger.error({ type: 'app', msg: 'google login configuration error', error: reason });
+    return res.status(503).json({ error: 'Google 登录网络配置无效' });
+  }
   const url = client.generateAuthUrl({
     access_type: 'online',
     scope: ['openid', 'email', 'profile'],
@@ -865,8 +910,9 @@ router.get('/google/callback', oauthLimiter, async (req, res) => {
     logger.audit('google.login', { success: true, userId: user.id, providerUserId: profile.providerUserId, ip: clientIp(req) });
     res.redirect(redirectForReturnTo(req, saved.returnTo));
   } catch (e) {
-    logger.error({ type: 'app', msg: 'google login error', error: e.message });
-    return fail('token_validation_failed');
+    const reason = classifyGoogleLoginError(e);
+    logger.error({ type: 'app', msg: 'google login error', error: reason });
+    return fail(reason);
   }
 });
 

@@ -16,19 +16,27 @@ test.after(() => {
   env.cleanup();
 });
 
-async function withMockedGoogle(payloadFactory, run) {
+async function withMockedGoogle(payloadFactory, run, options = {}) {
   const oldClientId = process.env.GOOGLE_CLIENT_ID;
   const oldClientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const oldAppUrl = process.env.APP_URL;
+  const oldTimeout = process.env.GOOGLE_HTTP_TIMEOUT_MS;
+  const oldProxy = process.env.GOOGLE_HTTPS_PROXY;
   const oldGetToken = OAuth2Client.prototype.getToken;
   const oldVerifyIdToken = OAuth2Client.prototype.verifyIdToken;
   let expectedNonce = null;
+  let transporterOptions = null;
 
   process.env.GOOGLE_CLIENT_ID = 'google-test-client.apps.googleusercontent.com';
   process.env.GOOGLE_CLIENT_SECRET = 'google-test-secret';
   process.env.APP_URL = 'https://jpage.cn';
-  OAuth2Client.prototype.getToken = async (code) => {
+  if (options.timeout !== undefined) process.env.GOOGLE_HTTP_TIMEOUT_MS = String(options.timeout);
+  else delete process.env.GOOGLE_HTTP_TIMEOUT_MS;
+  if (options.proxy !== undefined) process.env.GOOGLE_HTTPS_PROXY = String(options.proxy);
+  else delete process.env.GOOGLE_HTTPS_PROXY;
+  OAuth2Client.prototype.getToken = async function getToken(code) {
     assert.strictEqual(code, 'mock-code');
+    transporterOptions = { ...this.transporter.defaults };
     return { tokens: { id_token: 'mock-google-id-token' } };
   };
   OAuth2Client.prototype.verifyIdToken = async ({ idToken, audience }) => {
@@ -44,6 +52,9 @@ async function withMockedGoogle(payloadFactory, run) {
     await run({
       setExpectedNonce(value) {
         expectedNonce = value;
+      },
+      getTransporterOptions() {
+        return transporterOptions;
       }
     });
   } finally {
@@ -55,6 +66,10 @@ async function withMockedGoogle(payloadFactory, run) {
     else process.env.GOOGLE_CLIENT_SECRET = oldClientSecret;
     if (oldAppUrl === undefined) delete process.env.APP_URL;
     else process.env.APP_URL = oldAppUrl;
+    if (oldTimeout === undefined) delete process.env.GOOGLE_HTTP_TIMEOUT_MS;
+    else process.env.GOOGLE_HTTP_TIMEOUT_MS = oldTimeout;
+    if (oldProxy === undefined) delete process.env.GOOGLE_HTTPS_PROXY;
+    else process.env.GOOGLE_HTTPS_PROXY = oldProxy;
   }
 }
 
@@ -507,6 +522,43 @@ test('Google 登录未配置时状态为关闭', async () => {
     if (oldClientId !== undefined) process.env.GOOGLE_CLIENT_ID = oldClientId;
     if (oldClientSecret !== undefined) process.env.GOOGLE_CLIENT_SECRET = oldClientSecret;
   }
+});
+
+test('Google OAuth 使用专用请求超时和 HTTPS 代理配置', async () => {
+  await withMockedGoogle({
+    iss: 'https://accounts.google.com',
+    aud: 'google-test-client.apps.googleusercontent.com',
+    sub: 'google-transport-options',
+    email: 'google.transport@example.com',
+    email_verified: true,
+    name: 'Google Transport User'
+  }, async ({ setExpectedNonce, getTransporterOptions }) => {
+    const agent = request.agent(env.app);
+    const start = await agent.get('/api/auth/google/start');
+    assert.strictEqual(start.status, 302);
+    const loginUrl = new URL(start.headers.location);
+    setExpectedNonce(loginUrl.searchParams.get('nonce'));
+
+    const callback = await agent.get(`/api/auth/google/callback?code=mock-code&state=${loginUrl.searchParams.get('state')}`);
+    assert.strictEqual(callback.headers.location, 'https://jpage.cn/#/');
+    assert.deepStrictEqual(getTransporterOptions(), {
+      timeout: 2500,
+      proxy: 'https://proxy.example.com:8443/'
+    });
+  }, {
+    timeout: 2500,
+    proxy: 'https://proxy.example.com:8443'
+  });
+});
+
+test('Google OAuth 拒绝不支持的代理协议且不发起授权', async () => {
+  await withMockedGoogle({}, async () => {
+    const res = await request(env.app).get('/api/auth/google/start');
+    assert.strictEqual(res.status, 503);
+    assert.strictEqual(res.body.error, 'Google 登录网络配置无效');
+  }, {
+    proxy: 'socks5://proxy.example.com:1080'
+  });
 });
 
 test('Google OIDC 首次登录创建用户、绑定账号并建立 session', async () => {
