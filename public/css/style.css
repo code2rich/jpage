@@ -1726,10 +1726,11 @@ html:not(.light) {
   margin: 18px 0 18px;
   color: #fff;
   font-family: "Iowan Old Style", "Baskerville", "Songti SC", serif;
-  font-size: clamp(38px, 4.2vw, 58px);
+  font-size: clamp(38px, 3.6vw, 50px);
   font-weight: 600;
   line-height: 1.12;
   letter-spacing: -.045em;
+  white-space: nowrap;
 }
 
 .login-story-desc {
@@ -1947,6 +1948,21 @@ html:not(.light) {
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 15%, transparent);
 }
 
+.login-field input:-webkit-autofill,
+.login-field input:-webkit-autofill:hover,
+.login-field input:autofill {
+  -webkit-text-fill-color: var(--text);
+  caret-color: var(--text);
+  box-shadow: 0 0 0 1000px var(--card) inset;
+}
+
+.login-field input:-webkit-autofill:focus,
+.login-field input:autofill:focus {
+  box-shadow:
+    0 0 0 1000px var(--card) inset,
+    0 0 0 4px color-mix(in srgb, var(--primary) 15%, transparent);
+}
+
 .login-field select,
 .login-field textarea {
   width: 100%;
@@ -2095,12 +2111,12 @@ html:not(.light) {
 
 .auth-provider-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 9px;
 }
 
-.auth-provider-grid > :only-child {
-  grid-column: 1 / -1;
+.auth-provider-grid:has(.github-login-btn:not([hidden])):has(.wechat-login-btn:not([hidden])) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .github-login-btn {
