@@ -543,12 +543,6 @@ function setupVersionUpload(container) {
       return;
     }
     const file = input.files[0];
-    const allowed = versionUploadTarget.isBundle
-      ? ['.zip']
-      : (versionUploadTarget.fileType === 'markdown' ? ['.md', '.markdown'] : ['.html', '.htm']);
-    const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
-    if (!allowed.includes(ext)) {
-      toast(versionUploadTarget.isBundle ? '网站包新版本必须上传 ZIP 文件' : '新版本文件类型必须与原文件一致', 'error');
     const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
     const target = versionUploadTarget;
     const typeMatches = target.isBundle
@@ -563,7 +557,6 @@ function setupVersionUpload(container) {
       return;
     }
 
-    const fileId = versionUploadTarget.id;
     const fileId = target.id;
     versionUploadTarget = null;
 
