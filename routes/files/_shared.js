@@ -8,19 +8,21 @@ const express = require('express');
 const multer = require('multer');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
-const { dbGet, dbAll, dbRun } = require('../../lib/db');
-const { now, unlinkQuiet, decodeFilename } = require('../../lib/util');
+const { decodeFilename } = require('../../lib/util');
 const { UPLOAD_DIR } = require('../../lib/paths');
-const { addUserStorage } = require('../../lib/usage');
+const {
+  MAX_FILE_VERSIONS,
+  generateStoredName,
+  removeStoredObject,
+  copyStoredObject,
+  backupAndApplyVersion,
+  pruneOldVersions,
+} = require('../../lib/file-storage');
 
 // --- 常量 ---
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const ALLOWED_UPLOAD_EXTS = ['.html', '.htm', '.md', '.markdown', '.zip']; // 上传（含 ZIP）
 const ALLOWED_TEXT_EXTS = ['.html', '.htm', '.md', '.markdown'];          // JSON 上传（无 ZIP）
-// 单个文件保留的历史版本数（file_versions 表），超过则自动删除最旧的。
-// 当前版本存在 files 主记录，不计入此上限。env 可配，默认 20。
-// 注：推翻设计文档 013 原定的「version 不设上限」。
-const MAX_FILE_VERSIONS = parseInt(process.env.MAX_FILE_VERSIONS, 10) || 20;
 
 // --- 上传限流 ---
 const uploadLimiter = rateLimit({
@@ -55,75 +57,6 @@ const upload = multer({
 // JSON body 解析器：上传类端点需要放宽到 50MB（全局默认 1MB）
 const largeJson = express.json({ limit: '50mb' });
 
-// --- 文件名生成：替换原先散落在 5 处的 Date.now()+'-'+Math.round(...)+ext ---
-function generateStoredName(ext) {
-  return Date.now() + '-' + Math.round(Math.random() * 1e9) + ext;
-}
-
-// --- 版本备份 + 主记录更新序列 ---
-// 原先在 upload/upload-json/overwrite/overwrite-json/restore 共 5 处重复。
-// 行为零差异：读 nextVer → INSERT 旧版本到 file_versions → UPDATE files 主记录。
-//
-// @param {object} file        - 旧 files 行（含 stored_name/size/id）
-// @param {object} next        - 新版本数据 { storedName, size }
-// @param {number} recordedBy  - 写入 file_versions.uploaded_by 的用户 id。
-//                               语义为「被归档那一版内容的原始上传者」，由各处传
-//                               file.uploaded_by（注意：这不是本次操作者）。
-// @param {string} [source]    - 本次上传来源 'web'|'cli'|'mcp'，缺省 'web'。
-//                               写入 file_versions.upload_source（该版本被写入时的来源），
-//                               并刷新 files.upload_source（最近一次来源）。
-// @param {number} [performedBy] - 写入 file_versions.performed_by 的用户 id。
-//                                 语义为「触发本次版本创建的操作者」（覆盖/恢复动作的执行者），
-//                                 与 recordedBy 区分。缺省时回退到 recordedBy，保持向后兼容。
-// @returns {Promise<{ version: number }>} 返回新版本号（nextVer + 1，对齐审计日志语义）
-async function backupAndApplyVersion(file, next, recordedBy, source = 'web', performedBy) {
-  const verRow = await dbGet(
-    'SELECT COALESCE(MAX(version), 0) + 1 AS nextVer FROM file_versions WHERE file_id = ?',
-    [file.id]
-  );
-  const nextVer = verRow.nextVer;
-  // performed_by 缺省回退到 recordedBy（原始上传者）：旧调用方未传时仍可审计。
-  const performedById = performedBy !== undefined ? performedBy : recordedBy;
-  await dbRun(
-    'INSERT INTO file_versions (file_id, version, stored_name, size, uploaded_by, upload_source, performed_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [file.id, nextVer, file.stored_name, file.size, recordedBy, source, performedById]
-  );
-  await dbRun(
-    'UPDATE files SET stored_name = ?, size = ?, upload_source = ?, updated_at = ? WHERE id = ?',
-    [next.storedName, next.size, source, now(), file.id]
-  );
-
-  // 维护用户存储量：当前文件大小变化量 = 新版本 - 旧版本
-  await addUserStorage(file.uploaded_by, next.size - file.size);
-
-  // 超过上限时删除最旧的历史版本（含磁盘文件），避免长期占盘。
-  await pruneOldVersions(file.id, MAX_FILE_VERSIONS, file.uploaded_by);
-  return { version: nextVer + 1 };
-}
-
-// --- 历史版本裁剪 ---
-// 保留每个文件最近 keep 个历史版本（version 最大的 keep 个），删掉更老的，
-// 同步清理磁盘文件。当前版本在 files 主记录，不参与计数。
-async function pruneOldVersions(fileId, keep, ownerId) {
-  if (!Number.isFinite(keep) || keep <= 0) return;
-  // version 倒序：前 keep 条保留，其余删除
-  const all = await dbAll(
-    'SELECT id, stored_name, size FROM file_versions WHERE file_id = ? ORDER BY version DESC',
-    [fileId]
-  );
-  const toRemove = all.slice(keep);
-  let removedBytes = 0;
-  for (const v of toRemove) {
-    if (v.stored_name) await unlinkQuiet(path.join(UPLOAD_DIR, v.stored_name));
-    await dbRun('DELETE FROM file_versions WHERE id = ?', [v.id]);
-    if (v.size) removedBytes += v.size;
-  }
-  // 扣减被删版本占用的存储量
-  if (removedBytes > 0 && ownerId) {
-    await addUserStorage(ownerId, -removedBytes);
-  }
-}
-
 // --- 下载 Content-Disposition 头（UTF-8 文件名） ---
 // 替换 download 路由两处重复的 encoded + filename*=UTF-8'' 拼接。
 function setDownloadHeaders(res, name) {
@@ -149,6 +82,8 @@ module.exports = {
   upload,
   largeJson,
   generateStoredName,
+  removeStoredObject,
+  copyStoredObject,
   backupAndApplyVersion,
   pruneOldVersions,
   setDownloadHeaders,

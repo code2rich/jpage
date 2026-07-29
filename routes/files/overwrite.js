@@ -11,6 +11,7 @@ const { UPLOAD_DIR } = require('../../lib/paths');
 const { isFtsIndexable, indexFileContent } = require('../../lib/fts');
 const { uploadLimiter, upload, largeJson, MAX_FILE_SIZE, backupAndApplyVersion } = require('./_shared');
 const { checkFileOwnership } = require('../../lib/middleware/files');
+const { handleZipUpload, translateZipError } = require('../../lib/zip');
 const logger = require('../../logger');
 
 function registerOverwrite(router) {
@@ -19,6 +20,20 @@ function registerOverwrite(router) {
     if (!req.file) return res.status(400).json({ error: '未上传文件' });
     req.file.originalname = decodeFilename(req.file.originalname);
     const ext = path.extname(req.file.originalname).toLowerCase();
+    if (ext === '.zip') {
+      try {
+        const zipBuffer = await fs.promises.readFile(req.file.path);
+        await unlinkQuiet(req.file.path);
+        return handleZipUpload(req, res, zipBuffer, { targetFileId: req.params.id });
+      } catch (e) {
+        await unlinkQuiet(req.file.path);
+        if (res.headersSent) return;
+        logger.error({ type: 'app', action: 'zip.overwrite', error: e.message });
+        return res.status(e.statusCode || 500).json({
+          error: e.isUserError ? e.message : translateZipError(e)
+        });
+      }
+    }
     let fileType = 'html';
     if (ext === '.md' || ext === '.markdown') fileType = 'markdown';
     const source = resolveUploadSource(req);
@@ -32,6 +47,10 @@ function registerOverwrite(router) {
       if (!checkFileOwnership(req, file)) {
         await unlinkQuiet(path.join(UPLOAD_DIR, req.file.filename));
         return res.status(403).json({ error: '无权操作此文件' });
+      }
+      if (file.is_bundle) {
+        await unlinkQuiet(path.join(UPLOAD_DIR, req.file.filename));
+        return res.status(400).json({ error: 'ZIP 网站包只能使用 ZIP 文件覆盖' });
       }
 
       // 校验文件类型
@@ -69,6 +88,27 @@ function registerOverwrite(router) {
     }
   });
 
+  // --- ZIP(base64) 显式覆盖 ---
+  router.post('/:id/overwrite-zip-base64', requireAuth, uploadLimiter, largeJson, async (req, res) => {
+    const { name, content } = req.body || {};
+    if (typeof name !== 'string' || path.extname(name).toLowerCase() !== '.zip') {
+      return res.status(400).json({ error: '仅支持 ZIP 文件' });
+    }
+    if (typeof content !== 'string') return res.status(400).json({ error: 'content 必须是字符串' });
+    try {
+      const zipBuffer = Buffer.from(content, 'base64');
+      if (zipBuffer.length > MAX_FILE_SIZE) return res.status(400).json({ error: 'ZIP 文件超过50MB限制' });
+      req.file = { originalname: decodeFilename(name) };
+      return handleZipUpload(req, res, zipBuffer, { targetFileId: req.params.id });
+    } catch (e) {
+      if (res.headersSent) return;
+      logger.error({ type: 'app', action: 'zip.overwrite.base64', error: e.message });
+      return res.status(e.statusCode || 500).json({
+        error: e.isUserError ? e.message : translateZipError(e)
+      });
+    }
+  });
+
   // --- JSON 覆盖 ---
   router.post('/:id/overwrite-json', requireAuth, uploadLimiter, largeJson, async (req, res) => {
     const { content } = req.body || {};
@@ -79,6 +119,7 @@ function registerOverwrite(router) {
       const file = await dbGet('SELECT * FROM files WHERE id = ?', [req.params.id]);
       if (!file) return res.status(404).json({ error: '文件不存在' });
       if (!checkFileOwnership(req, file)) return res.status(403).json({ error: '无权操作此文件' });
+      if (file.is_bundle) return res.status(400).json({ error: 'ZIP 网站包只能使用 ZIP 文件覆盖' });
 
       const size = Buffer.byteLength(content, 'utf-8');
       if (size > MAX_FILE_SIZE) return res.status(400).json({ error: '文件大小超过50MB限制' });

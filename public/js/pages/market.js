@@ -250,9 +250,31 @@ function renderHome(container, navigate) {
   const go = navigate || ((path) => { location.hash = path; });
   const body = renderMarketShell(container, { active: 'home', navigate });
   body.innerHTML = `
+    <header class="mw-page-intro">
+      <div>
+        <span class="mw-page-kicker">JPage Market</span>
+        <h1>创作市场</h1>
+        <p>精选高质量模板，激发灵感，助你高效创作。</p>
+      </div>
+      <a href="#/market/my" class="mw-publish-link">管理我的模板</a>
+    </header>
+    <section class="mw-curation" id="market-curation" aria-labelledby="market-curation-title">
+      <div class="mw-curation-heading">
+        <div>
+          <span class="mw-curation-eyebrow">本周策展</span>
+          <h2 id="market-curation-title">本周灵感</h2>
+          <p>精选本周优质模板，为你的创作带来灵感。</p>
+        </div>
+        <button type="button" class="mw-curation-more" id="market-curation-more">浏览全部精选</button>
+      </div>
+      <div class="mw-curation-grid" id="market-curation-grid">
+        <div class="mw-curation-skeleton mw-curation-skeleton-main"></div>
+        <div class="mw-curation-skeleton"></div>
+        <div class="mw-curation-skeleton"></div>
+      </div>
+    </section>
     <div class="mw-filter-bar">
       <div class="mw-search-wrap">
-        <span aria-hidden="true">⌕</span>
         <input type="search" id="market-search" autocomplete="off" placeholder="搜索页面、工作流、主题、创作者" value="${escapeHtml(homeState.keyword)}">
         <button type="button" id="market-search-clear" class="mw-search-clear hidden" aria-label="清空搜索">×</button>
       </div>
@@ -268,7 +290,6 @@ function renderHome(container, navigate) {
           <button type="button" data-type="markdown" class="${homeState.fileType === 'markdown' ? 'active' : ''}">MD</button>
         </div>
         <button type="button" id="market-clear-filters" class="btn btn-small mw-clear-filters hidden">清除全部</button>
-        <a href="#/market/my" class="btn btn-small">我的上架</a>
       </div>
     </div>
     <div class="mw-category-scroll" id="market-category-scroll">
@@ -278,8 +299,9 @@ function renderHome(container, navigate) {
     </div>
     <section class="mw-feed-head">
       <div>
-        <h1>推荐作品</h1>
-        <p>浏览、筛选和创建可复用页面资产。</p>
+        <span class="mw-feed-kicker">可复用的创作起点</span>
+        <h2>推荐作品</h2>
+        <p>浏览真实预览，找到适合下一次创作的页面资产。</p>
       </div>
       <span id="mw-result-count" aria-live="polite" aria-atomic="true">-</span>
     </section>
@@ -350,6 +372,13 @@ function renderHome(container, navigate) {
 
   body.querySelector('#market-clear-filters').addEventListener('click', () => {
     clearAllFilters(body, go);
+  });
+
+  body.querySelector('#market-curation-more').addEventListener('click', () => {
+    homeState.sort = 'featured';
+    saveHomeState();
+    body.querySelectorAll('#market-sort-tabs button').forEach(b => b.classList.toggle('active', b.dataset.sort === 'featured'));
+    loadHomeList(body, go, { reset: true });
   });
 
   const backToTop = body.querySelector('#market-back-to-top');
@@ -468,6 +497,7 @@ async function loadHomeList(body, navigate, { reset = false } = {}) {
     homeState.page = 1;
     resetThumbCache();
     grid.innerHTML = renderSkeletonCards(12);
+    if (hasActiveFilters()) body.querySelector('#market-curation')?.classList.add('hidden');
     if (loadMoreWrap) loadMoreWrap.innerHTML = '';
     updateClearFilters(body);
   }
@@ -496,13 +526,17 @@ async function loadHomeList(body, navigate, { reset = false } = {}) {
     currentHomeRequest = null;
     const countEl = body.querySelector('#mw-result-count');
     if (countEl && data.pagination) countEl.textContent = `${data.pagination.total || 0} 个结果`;
-    renderHomeGrid(grid, data.templates || [], data.pagination, navigate, { append: !reset });
+    const templates = data.templates || [];
+    const showCuration = reset && homeState.page === 1 && !hasActiveFilters() && templates.length > 3;
+    if (reset) renderCuration(body, showCuration ? templates.slice(0, 3) : [], navigate);
+    renderHomeGrid(grid, showCuration ? templates.slice(3) : templates, data.pagination, navigate, { append: !reset });
     updateClearFilters(body);
   } catch (e) {
     if (e.name === 'AbortError') return;
     currentHomeRequest = null;
     if (overlay) overlay.remove();
     if (reset) {
+      renderCuration(body, [], navigate);
       const title = homeState.keyword
         ? `搜索「${homeState.keyword}」失败`
         : (homeState.category ? '分类加载失败' : '加载失败');
@@ -517,6 +551,46 @@ async function loadHomeList(body, navigate, { reset = false } = {}) {
   } finally {
     if (overlay) overlay.remove();
   }
+}
+
+function createCurationCard(t, index) {
+  const featuredLabel = index === 0 ? '本周精选' : (index === 1 ? '编辑推荐' : '人气之选');
+  const typeLabel = t.file_type === 'markdown' ? 'Markdown' : 'HTML';
+  const description = (t.description || '用真实内容预览，快速判断它是否适合你的下一次创作。').slice(0, 72);
+  return `<article class="ct-card mw-curation-card ${index === 0 ? 'mw-curation-card-main' : ''}" data-share-key="${escapeHtml(t.share_key || '')}" data-title="${escapeHtml(t.title)}" tabindex="0">
+    <div class="mw-curation-preview">
+      <div class="ct-card-thumb-wrap"><iframe class="ct-thumb-iframe" sandbox="allow-scripts" title="${escapeHtml(t.title)} 模板预览"></iframe></div>
+      <div class="ct-card-thumb-loading"></div>
+      <span class="mw-curation-label">${featuredLabel}</span>
+      <div class="mw-curation-actions">
+        <button type="button" data-act="preview">预览</button>
+        <button type="button" data-act="use">用此模板</button>
+      </div>
+    </div>
+    <div class="mw-curation-caption">
+      <span class="mw-curation-format">${typeLabel}</span>
+      <h3>${escapeHtml(t.title)}</h3>
+      <p>${escapeHtml(description)}</p>
+      <span class="mw-curation-author">by ${escapeHtml(t.uploader_name || 'JPage 创作者')}</span>
+    </div>
+  </article>`;
+}
+
+function renderCuration(body, templates, navigate) {
+  const section = body.querySelector('#market-curation');
+  const grid = body.querySelector('#market-curation-grid');
+  if (!section || !grid) return;
+  const visible = templates.length >= 3;
+  section.classList.toggle('hidden', !visible);
+  if (!visible) return;
+
+  grid.innerHTML = templates.map(createCurationCard).join('');
+  const obs = ensureThumbObserver();
+  grid.querySelectorAll('.ct-card').forEach(card => {
+    card.dataset.thumbBound = '1';
+    obs.observe(card);
+  });
+  setupCardInteractions(grid, navigate);
 }
 
 function renderHeatLabel(score) {
@@ -545,8 +619,8 @@ function createTemplateCard(t) {
         </button>
       </div>
       <div class="mw-card-actions">
-        <button type="button" data-act="preview">查看详情</button>
-        <button type="button" data-act="use">使用模板</button>
+        <button type="button" data-act="preview">预览</button>
+        <button type="button" data-act="use">用此模板</button>
       </div>
     </div>
     <div class="mw-card-meta-row">${cat}${featured}<span class="ct-badge ${typeClass}">${typeLabel}</span></div>
@@ -554,7 +628,7 @@ function createTemplateCard(t) {
       <span class="ct-card-title">${escapeHtml(t.title)}</span>
     </div>
     <p class="ct-card-desc">${escapeHtml(t.description || '').slice(0, 100)}</p>
-    <div class="mw-card-author">${escapeHtml(t.uploader_name || '匿名创作者')}</div>
+    <div class="mw-card-author"><span>${escapeHtml(t.uploader_name || '匿名创作者')}</span><span>${t.use_count || 0} 人使用</span></div>
     <div class="ct-card-footer">
       ${renderHeatLabel(t.heat_score)}
     </div>
@@ -640,6 +714,8 @@ async function showTemplateUseGuide({ shareKey, title }) {
 }
 
 function setupCardInteractions(grid, navigate) {
+  if (grid.dataset.interactionsBound) return;
+  grid.dataset.interactionsBound = '1';
   grid.addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-act]');
     const card = e.target.closest('.ct-card');
@@ -698,14 +774,12 @@ function setupCardInteractions(grid, navigate) {
     }
   });
 
-  grid.querySelectorAll('.ct-card').forEach(card => {
-    card.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        try { sessionStorage.setItem('marketScrollY', String(window.scrollY)); } catch (_) {}
-        navigate(`/market/${card.dataset.shareKey}`);
-      }
-    });
+  grid.addEventListener('keydown', (e) => {
+    const card = e.target.closest('.ct-card');
+    if (!card || (e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault();
+    try { sessionStorage.setItem('marketScrollY', String(window.scrollY)); } catch (_) {}
+    navigate(`/market/${card.dataset.shareKey}`);
   });
 }
 
