@@ -145,7 +145,7 @@ curl -b jpage.sid -X POST http://localhost:8858/api/files/upload \
 
 返回 `{id, original_name, file_type, size, is_public}`。
 
-`.zip` 走两种模式：(1) **网站包 Bundle**（含 `index.html` + 资源目录），存为解压目录，`is_bundle=1`；(2) **批量上传**（多个独立 HTML/MD），各自建文件记录。同名文件自动覆盖（旧版本备份到 `file_versions`）。
+`.zip` 走两种模式：(1) **网站包 Bundle**（含 `index.html` + 资源目录），存为解压目录，`is_bundle=1`；(2) **批量上传**（多个独立 HTML/MD），各自建文件记录。同一用户再次上传同名 bundle ZIP 时保留原 file ID / 短链并归档旧目录；batch ZIP 则按包内文件名逐项覆盖并生成各自历史版本。包内不同路径出现相同 basename 时拒绝上传。
 
 ### `POST /api/files/upload-json` — JSON
 
@@ -226,7 +226,11 @@ Bundle 资源文件访问（带路径穿越校验）。
 
 ### `POST /api/files/:id/overwrite` — multipart
 
-预览页专用覆盖上传，自动把旧版本备份到 `file_versions`。
+预览页专用覆盖上传，自动把旧版本备份到 `file_versions`。普通文件只能用相同 HTML/Markdown 类型覆盖；bundle 只能用分类结果仍为 bundle 的 ZIP 覆盖，batch ZIP 不能覆盖单一 ID。
+
+### `POST /api/files/:id/overwrite-zip-base64` — JSON
+
+MCP 使用的 bundle ZIP 显式覆盖端点。Body: `{name, content(base64)}`。目标必须是 bundle，且 ZIP 必须分类为 bundle。
 
 ### `POST /api/files/:id/overwrite-json` — JSON
 
@@ -247,6 +251,7 @@ MCP 使用的 JSON 覆盖上传，自动版本备份。
 | `/api/files/:id/versions` | GET | 版本历史列表 |
 | `/api/files/:id/versions/:ver/content` | GET | 历史版本原文 |
 | `/api/files/:id/versions/:ver/render` | GET | 渲染历史版本 |
+| `/api/files/:id/versions/:ver/download` | GET | 下载历史版本；bundle 动态打包为 ZIP |
 | `/api/files/:id/versions/:ver/restore` | POST | 恢复到指定版本 |
 | `/api/files/:id/versions/:ver` | DELETE | 删除指定历史版本 |
 
@@ -445,6 +450,33 @@ curl -b jpage.sid -OJ http://localhost:8858/api/skills/jpage/download
 
 ---
 
+## 问题反馈（`/api/feedback`）
+
+免登录公开接口，用户（含匿名访客）提交问题/功能建议。反馈写入数据库，并向管理员发送邮件通知。
+
+### `POST /api/feedback`
+
+**请求体**（JSON）：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `content` | string | 是 | 反馈正文，≤ 5000 字 |
+| `category` | string | 否 | 类型：`feature`（功能建议）/ `bug`（问题反馈）/ `other`（其他），默认 `feature` |
+| `name` | string | 否 | 提交者称呼，≤ 100 字 |
+| `contact` | string | 否 | 联系方式（邮箱/微信等），≤ 100 字 |
+
+**限流**：每 IP 15 分钟最多 10 次。**收件邮箱**优先级：`FEEDBACK_EMAIL` → 首个 admin 用户邮箱 → `SMTP_FROM`；均无或 SMTP 未配置时仅写库不发信。
+
+```bash
+curl -X POST http://localhost:8858/api/feedback \
+  -H "Content-Type: application/json" \
+  -d '{"content":"希望增加暗色模式","category":"feature","contact":"alice@example.com"}'
+```
+
+返回 `{ "success": true, "id": <feedbackId> }`。
+
+---
+
 ## MCP 端点（`/mcp`）
 
 独立的 MCP Streamable HTTP 端点。**全局 `MCP_TOKEN` 或用户级 API Token 任一即可挂载**（未配置任何 Token 时 `/mcp` 禁用）。
@@ -478,5 +510,6 @@ curl -b jpage.sid -OJ http://localhost:8858/api/skills/jpage/download
 | `ALLOW_REGISTRATION` | `false` | 设为 `true` 开放用户自助注册 |
 | `SMTP_HOST` 等 | — | SMTP 配置（`SMTP_HOST/PORT/SECURE/USER/PASS/FROM`），用于邮箱验证 |
 | `APP_URL` | `http://localhost:8858` | 应用外部访问地址，用于拼接验证链接 |
+| `FEEDBACK_EMAIL` | — | 问题反馈邮件接收地址；留空时回退到首个管理员邮箱 → `SMTP_FROM` |
 | `GOOGLE_CLIENT_ID` | — | Google Web 应用 OAuth Client ID；与 Client Secret 同时配置后启用 Google 登录 |
 | `GOOGLE_CLIENT_SECRET` | — | Google Web 应用 OAuth Client Secret，仅限服务端保存 |

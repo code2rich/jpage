@@ -54,6 +54,17 @@ function renderLanding(container) {
   });
 
   bindTryPaste(el);
+  bindFeedback(el);
+}
+
+// 问题反馈：落地页页脚「问题反馈」入口，动态加载组件（不进首屏 chunk）。
+function bindFeedback(el) {
+  const link = el.querySelector('#landing-feedback-link');
+  if (!link) return;
+  link.addEventListener('click', async () => {
+    const { openFeedbackModal } = await import('../components/feedback-modal.js');
+    openFeedbackModal();
+  });
 }
 
 // 粘贴试用：免登录将 HTML/Markdown 生成 10 分钟临时页面。

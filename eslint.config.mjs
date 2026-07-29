@@ -74,6 +74,7 @@ const browserGlobals = {
   Event: 'readonly',
   CustomEvent: 'readonly',
   FileReader: 'readonly',
+  Image: 'readonly', // new Image() 用于二维码等图片可达性预检
   FormData: 'readonly',
   Blob: 'readonly',
   DragEvent: 'readonly',

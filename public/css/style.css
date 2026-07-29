@@ -5993,3 +5993,110 @@ html:not(.light) .btn-danger-soft {
   margin-top: 8px;
   line-height: 1.5;
 }
+
+/* ---------- 问题反馈弹窗 ---------- */
+.feedback-category-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.feedback-category-chip {
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.feedback-category-chip:hover {
+  border-color: var(--text-secondary);
+  color: var(--text);
+}
+.feedback-category-chip.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.feedback-content-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 14px;
+  line-height: 1.6;
+  background: var(--card);
+  color: var(--text);
+  transition: border-color .2s, box-shadow .2s;
+  resize: vertical;
+  min-height: 96px;
+  font-family: inherit;
+}
+.feedback-content-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent);
+}
+.feedback-content-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.feedback-content-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.feedback-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+.feedback-row .login-field {
+  flex: 1;
+  min-width: 0;
+}
+.feedback-wechat {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--card) 94%, var(--bg) 6%);
+}
+.feedback-wechat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.feedback-wechat-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.feedback-wechat-id {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.feedback-wechat-qr {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+@media (max-width: 480px) {
+  .feedback-row {
+    flex-direction: column;
+  }
+  .feedback-wechat {
+    flex-direction: column;
+    text-align: center;
+  }
+}

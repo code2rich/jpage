@@ -161,6 +161,7 @@ API 和 MCP 端点支持三种认证方式：
 | `SMTP_PASS` | 否 | SMTP 登录密码或授权码 |
 | `SMTP_FROM` | 否 | 发件人地址（如 `"即页 <user@example.com>"`） |
 | `APP_URL` | 否 | 应用外部访问地址，用于拼接验证链接（如 `https://jpage.cn`） |
+| `FEEDBACK_EMAIL` | 否 | 问题反馈邮件接收地址；留空时回退到首个管理员邮箱 → `SMTP_FROM` |
 | `GOOGLE_CLIENT_ID` | 否 | Google Web 应用 OAuth Client ID；与 `GOOGLE_CLIENT_SECRET` 同时配置后启用 Google 登录 |
 | `GOOGLE_CLIENT_SECRET` | 否 | Google Web 应用 OAuth Client Secret；仅保存在服务端环境变量中 |
 | `GOOGLE_HTTP_TIMEOUT_MS` | 否 | Google Token 与 OIDC 公钥请求超时，范围 1000-60000 毫秒，默认 10000 |
@@ -312,8 +313,10 @@ jpage/
 | `/api/files/:id/download` | GET | 流式下载文件（Bundle 以 ZIP 下载） |
 | `/api/files/:id/asset/*` | GET | Bundle 资源文件访问 |
 | `/api/files/:id/overwrite` | POST | 覆盖上传（自动版本备份） |
+| `/api/files/:id/overwrite-zip-base64` | POST | base64 bundle ZIP 显式覆盖 |
 | `/api/files/:id/versions` | GET | 版本历史列表 |
 | `/api/files/:id/versions/:ver/restore` | POST | 恢复到指定版本 |
+| `/api/files/:id/versions/:ver/download` | GET | 下载历史版本（Bundle 以 ZIP 下载） |
 | `/api/files/:id/stats` | GET | 访问统计（viewCount/daily7/daily30） |
 | `/s/:key` | GET | 短链接渲染页面 |
 
@@ -369,6 +372,12 @@ jpage/
 | `/api/skills` | GET | 列出已安装的 skill 包 |
 | `/api/skills/:name` | GET | skill 详情 |
 | `/api/skills/:name/download` | GET | ZIP 下载整个 skill 目录 |
+
+### 问题反馈
+
+| 端点 | 方法 | 说明 |
+|---|---|---|
+| `/api/feedback` | POST | 提交问题/功能建议（免登录，写入数据库并邮件通知管理员） |
 
 完整 API 文档见 [docs/api.md](docs/api.md)。
 
