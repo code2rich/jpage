@@ -37,9 +37,12 @@ function loadVersions(container, fileId) {
   body.innerHTML = '<div class="version-empty">加载中…</div>';
 
   api(`/api/files/${fileId}/versions`).then(data => {
+    const versions = data.versions || [];
     _versionPanelState.fileId = fileId;
-    _versionPanelState.versions = data.versions || [];
-    _versionPanelState.currentVer = (data.versions ? data.versions.length : 0) + 1;
+    _versionPanelState.versions = versions;
+    _versionPanelState.currentVer = versions.length
+      ? Math.max(...versions.map(version => version.version)) + 1
+      : 1;
     renderVersionList(container, data);
 
     const menu = container.querySelector('#menu-version-history');
@@ -75,7 +78,7 @@ function renderVersionList(container, data) {
     <div class="version-item version-item-current">
       <div class="version-item-row">
         <span class="version-item-dot"></span>
-        <span class="version-item-label">当前 (v${versions.length + 1})</span>
+        <span class="version-item-label">当前 (v${_versionPanelState.currentVer})</span>
       </div>
       <div class="version-item-meta">${currentSize} · ${currentTime}</div>
     </div>
@@ -186,10 +189,14 @@ function setupVersionUpload(container, fileId) {
   input.addEventListener('change', () => {
     if (!input.files.length) return;
     const file = input.files[0];
-    const allowed = ['.html', '.htm', '.md', '.markdown'];
+    const isBundle = input.dataset.isBundle === 'true';
+    const fileType = input.dataset.fileType;
+    const allowed = isBundle
+      ? ['.zip']
+      : (fileType === 'markdown' ? ['.md', '.markdown'] : ['.html', '.htm']);
     const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
     if (!allowed.includes(ext)) {
-      toast('仅支持 HTML 和 Markdown 文件', 'error');
+      toast(isBundle ? '网站包新版本必须上传 ZIP 文件' : '新版本文件类型必须与原文件一致', 'error');
       input.value = '';
       return;
     }
@@ -710,6 +717,12 @@ function renderPreview(container, hash) {
     // Bundle：初始化文件树，源码视图展示入口文件，可点击切换查看其它文件
     if (data.is_bundle && Array.isArray(data.entries) && data.entries.length > 0) {
       setupBundleTree(data.entries, data.entry_path, data.entries_truncated);
+    }
+    const versionInput = container.querySelector('#version-file-input');
+    if (versionInput) {
+      versionInput.dataset.isBundle = data.is_bundle ? 'true' : 'false';
+      versionInput.dataset.fileType = data.file_type;
+      versionInput.accept = data.is_bundle ? '.zip' : (data.file_type === 'markdown' ? '.md,.markdown' : '.html,.htm');
     }
     if (spinner) spinner.style.display = 'flex';
     iframe.src = API_BASE + `/api/files/${id}/render`;

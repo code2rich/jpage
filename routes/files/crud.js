@@ -1,16 +1,14 @@
 // 更新 / 删除 / 批量操作路由。
 // 从 routes/files.js 提取，行为保持不变。挂在共享 router 上。
 
-const fs = require('fs');
-const path = require('path');
 const { dbGet, dbRun, dbAll } = require('../../lib/db');
 const { requireAuth } = require('../../lib/middleware/auth');
-const { unlinkQuiet, clientIp } = require('../../lib/util');
-const { UPLOAD_DIR } = require('../../lib/paths');
+const { clientIp } = require('../../lib/util');
 const { deleteFileIndex } = require('../../lib/fts');
 const { invalidateRenderCache } = require('../../lib/render-cache');
 const { checkFileOwnership } = require('../../lib/middleware/files');
 const { subtractFileStorage } = require('../../lib/usage');
+const { removeStoredObject } = require('./_shared');
 const logger = require('../../logger');
 
 function registerCrud(router) {
@@ -70,16 +68,14 @@ function registerCrud(router) {
       await subtractFileStorage(file);
 
       // 清理版本记录及对应磁盘文件
-      const versions = await dbAll('SELECT stored_name FROM file_versions WHERE file_id = ?', [req.params.id]);
+      const versions = await dbAll('SELECT stored_name, is_bundle FROM file_versions WHERE file_id = ?', [req.params.id]);
       for (const v of versions) {
-        const p = path.join(UPLOAD_DIR, v.stored_name);
-        if (fs.existsSync(p)) await unlinkQuiet(p);
+        await removeStoredObject(v.stored_name, v.is_bundle);
       }
       await dbRun('DELETE FROM file_versions WHERE file_id = ?', [req.params.id]);
 
       // 删除主文件
-      const filePath = path.join(UPLOAD_DIR, file.stored_name);
-      if (fs.existsSync(filePath)) await unlinkQuiet(filePath);
+      await removeStoredObject(file.stored_name, file.is_bundle);
       await dbRun('DELETE FROM files WHERE id = ?', [req.params.id]);
       invalidateRenderCache(req.params.id);
       logger.audit('file.delete', { fileId: req.params.id, fileName: file.original_name, ip: clientIp(req) });
@@ -120,13 +116,13 @@ function registerCrud(router) {
         try {
           await dbRun(`DELETE FROM file_tags WHERE file_id IN (${idPlaceholders})`, fileIds);
           await dbRun(`DELETE FROM starred_files WHERE file_id IN (${idPlaceholders})`, fileIds);
-          const versions = await dbAll(`SELECT stored_name FROM file_versions WHERE file_id IN (${idPlaceholders})`, fileIds);
+          const versions = await dbAll(`SELECT stored_name, is_bundle FROM file_versions WHERE file_id IN (${idPlaceholders})`, fileIds);
           for (const v of versions) {
-            await unlinkQuiet(path.join(UPLOAD_DIR, v.stored_name));
+            await removeStoredObject(v.stored_name, v.is_bundle);
           }
           await dbRun(`DELETE FROM file_versions WHERE file_id IN (${idPlaceholders})`, fileIds);
           for (const f of files) {
-            await unlinkQuiet(path.join(UPLOAD_DIR, f.stored_name));
+            await removeStoredObject(f.stored_name, f.is_bundle);
           }
           await dbRun(`DELETE FROM files WHERE id IN (${idPlaceholders})`, fileIds);
           await dbRun('COMMIT');

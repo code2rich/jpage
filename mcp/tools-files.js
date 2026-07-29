@@ -66,7 +66,7 @@ function registerFileTools(server, { api, port, mcpIp, protocol }) {
           .int()
           .positive()
           .optional()
-          .describe('显式指定覆盖目标文件 ID。提供时调用覆盖上传 API（POST /api/files/:id/overwrite-json），不提供时走同名自动覆盖逻辑。'),
+          .describe('显式指定覆盖目标文件 ID。HTML/Markdown 调用 overwrite-json；ZIP 调用 overwrite-zip-base64。ZIP 目标必须是网站包 bundle。'),
         tags: z
           .array(z.string())
           .optional()
@@ -89,7 +89,10 @@ function registerFileTools(server, { api, port, mcpIp, protocol }) {
           return textResult(`ZIP 文件过大 (${buf.length} 字节)，上限 50MB`, { isError: true });
         }
         try {
-          const data = await api.post('/api/files/upload-zip-base64', {
+          const uploadPath = overwriteFileId
+            ? `/api/files/${overwriteFileId}/overwrite-zip-base64`
+            : '/api/files/upload-zip-base64';
+          const data = await api.post(uploadPath, {
             name,
             content,
             isPublic: isPublic ?? true,

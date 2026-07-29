@@ -244,7 +244,7 @@ CI（`.github/workflows/ci.yml`）在 Node 20/22 矩阵上执行 `npm run lint`�
 
 - `_migrations(id, name UNIQUE, applied_at)`
 - `files(id, original_name, stored_name, file_type, size, created_at, updated_at, is_public, uploaded_by, share_key, category_id, is_bundle, entry_path, view_count, template_id, share_expires_at, share_password_hash, upload_source, source_asset_id, created_from)`
-- `file_versions(id, file_id, version, stored_name, size, created_at, uploaded_by, upload_source, performed_by)`
+- `file_versions(id, file_id, version, stored_name, size, created_at, uploaded_by, upload_source, performed_by, is_bundle, entry_path, file_type)`
 - `users(id, username UNIQUE, email, email_verified, password_hash, role, created_at, total_storage_bytes, api_calls_count, storage_quota_bytes)`（email 有 `WHERE email IS NOT NULL` 唯一索引）
 - `api_calls(id, user_id, source, action, method, path, status, created_at)`
 - `tokens(id, user_id, name, token_hash UNIQUE, token_prefix, token_enc, last_used_at, created_at)`
@@ -269,8 +269,8 @@ CI（`.github/workflows/ci.yml`）在 Node 20/22 矩阵上执行 `npm run lint`�
 - **用户管理（admin）**：`/api/users`
 - **个人用量**：`/api/users/me/usage`
 - **API Token**：`/api/tokens`、`/api/tokens/:id/reveal`
-- **文件管理**：`/api/files`、`/api/files/search`、`/api/files/upload`、`/api/files/upload-json`、`/api/files/upload-zip-base64`、`/api/files/batch`、`/api/files/:id`、`/api/files/:id/content`、`/api/files/:id/render`、`/api/files/:id/download`、`/api/files/:id/asset/*`、`/api/files/:id/overwrite`、`/api/files/:id/overwrite-json`、`/api/files/:id/stats`
-- **版本历史**：`/api/files/:id/versions`、versions content/render/restore/delete
+- **文件管理**：`/api/files`、`/api/files/search`、`/api/files/upload`、`/api/files/upload-json`、`/api/files/upload-zip-base64`、`/api/files/batch`、`/api/files/:id`、`/api/files/:id/content`、`/api/files/:id/render`、`/api/files/:id/download`、`/api/files/:id/asset/*`、`/api/files/:id/overwrite`、`/api/files/:id/overwrite-json`、`/api/files/:id/overwrite-zip-base64`、`/api/files/:id/stats`
+- **版本历史**：`/api/files/:id/versions`、versions content/render/download/restore/delete（bundle 历史按目录保存）
 - **分享设置**：`/api/files/:id/share`（PUT 别名/过期/密码）、`/api/files/:id/share/regenerate`
 - **标签**：`/api/tags`、`/api/files/:id/tags`
 - **收藏**：`/api/files/:id/star`
@@ -346,7 +346,7 @@ CLI 与 MCP 共用同一套 REST API，是对等的两个客户端入口。
 - `_migrations(name UNIQUE)` 记录已应用的 migration。
 - `migrations/` 下文件按文件名排序执行；每个文件导出 `{ name, async up(db, { dbRun, dbGet, dbAll }) }`。
 - **新增 migration 规则**：
-  1. 命名格式 `{序号}_{描述}.js`，序号接续当前最大值（当前已到 022）。
+  1. 命名格式 `{序号}_{描述}.js`，序号接续当前最大值（当前已到 027）。
   2. 新建表用 `CREATE TABLE IF NOT EXISTS`。
   3. 新增列必须幂等：先 `PRAGMA table_info` 检查是否存在，再 `ALTER TABLE ADD COLUMN`。
   4. SQLite `ALTER TABLE ADD COLUMN` 不支持非恒定默认值；需要默认值时先加列（无默认或恒定默认），再 `UPDATE` 回填。

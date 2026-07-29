@@ -20,7 +20,7 @@ let lastCheckedIndex = -1;
 let skillModalCurrent = null;
 let searchResults = null;
 let homeAbortController = null;
-let versionUploadFileId = null;
+let versionUploadTarget = null;
 
 // ---------- 视图模式（列表 / 卡片） ----------
 const FILE_VIEW_KEY = 'jpage-file-view';
@@ -531,23 +531,28 @@ function setupVersionUpload(container) {
   if (!input) return;
 
   input.addEventListener('change', () => {
-    if (!input.files.length || !versionUploadFileId) {
+    if (!input.files.length || !versionUploadTarget) {
       input.value = '';
-      versionUploadFileId = null;
+      versionUploadTarget = null;
       return;
     }
     const file = input.files[0];
-    const allowed = ['.html', '.htm', '.md', '.markdown'];
     const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
-    if (!allowed.includes(ext)) {
-      toast('仅支持 HTML 和 Markdown 文件', 'error');
+    const target = versionUploadTarget;
+    const typeMatches = target.isBundle
+      ? ext === '.zip'
+      : (target.fileType === 'markdown'
+        ? ['.md', '.markdown'].includes(ext)
+        : ['.html', '.htm'].includes(ext));
+    if (!typeMatches) {
+      toast(target.isBundle ? '网站包新版本必须上传 ZIP 文件' : '新版本文件类型必须与原文件一致', 'error');
       input.value = '';
-      versionUploadFileId = null;
+      versionUploadTarget = null;
       return;
     }
 
-    const fileId = versionUploadFileId;
-    versionUploadFileId = null;
+    const fileId = target.id;
+    versionUploadTarget = null;
 
     const progressEl = container.querySelector('#version-upload-progress');
     const progressBar = container.querySelector('#version-upload-progress-bar');
@@ -950,7 +955,9 @@ function renderFileList(container, list, files) {
     el.querySelector('.btn-upload-version').addEventListener('click', e => {
       e.stopPropagation();
       moreDropdown.classList.remove('open');
-      versionUploadFileId = f.id;
+      versionUploadTarget = { id: f.id, isBundle: !!f.is_bundle, fileType: f.file_type };
+      const input = container.querySelector('#version-file-input');
+      if (input) input.accept = f.is_bundle ? '.zip' : (f.file_type === 'markdown' ? '.md,.markdown' : '.html,.htm');
       container.querySelector('#version-file-input')?.click();
     });
     list.appendChild(el);
@@ -1149,7 +1156,9 @@ function renderCardList(container, list, files) {
     el.querySelector('.btn-upload-version').addEventListener('click', e => {
       e.stopPropagation();
       moreDropdown.classList.remove('open');
-      versionUploadFileId = f.id;
+      versionUploadTarget = { id: f.id, isBundle: !!f.is_bundle, fileType: f.file_type };
+      const input = container.querySelector('#version-file-input');
+      if (input) input.accept = f.is_bundle ? '.zip' : (f.file_type === 'markdown' ? '.md,.markdown' : '.html,.htm');
       container.querySelector('#version-file-input')?.click();
     });
     el.querySelectorAll('.file-badge-tag').forEach(badge => {
@@ -1369,6 +1378,9 @@ async function openFileStatsDialog(fileId) {
 
 function buildVersionHistoryHtml(data) {
   const versions = data.versions || [];
+  const currentVersion = versions.length
+    ? Math.max(...versions.map(version => version.version)) + 1
+    : 1;
   const currentSize = data.current ? formatSize(data.current.size) : '';
   const currentTime = data.current ? relativeTime(data.current.updated_at) : '';
 
@@ -1377,7 +1389,7 @@ function buildVersionHistoryHtml(data) {
       <div class="version-item version-item-current">
         <div class="version-item-row">
           <span class="version-item-dot"></span>
-          <span class="version-item-label">当前 (v${versions.length + 1})</span>
+          <span class="version-item-label">当前 (v${currentVersion})</span>
         </div>
         <div class="version-item-meta">${currentSize} · ${currentTime}</div>
       </div>
