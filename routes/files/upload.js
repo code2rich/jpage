@@ -22,7 +22,15 @@ function registerUpload(router) {
     const ext = path.extname(req.file.originalname).toLowerCase();
     // ZIP 处理
     if (ext === '.zip') {
-      return handleZipUpload(req, res, await fs.promises.readFile(req.file.path));
+      try {
+        const zipBuffer = await fs.promises.readFile(req.file.path);
+        await unlinkQuiet(req.file.path);
+        return handleZipUpload(req, res, zipBuffer);
+      } catch (e) {
+        await unlinkQuiet(req.file.path);
+        logger.error({ type: 'app', action: 'zip.multipart', error: e.message });
+        return res.status(500).json({ error: '读取 ZIP 文件失败' });
+      }
     }
     let fileType = 'html';
     if (ext === '.md' || ext === '.markdown') fileType = 'markdown';
@@ -32,11 +40,15 @@ function registerUpload(router) {
       // 检查同名文件（按用户隔离：同名只在当前用户命名空间内匹配，
       // 不会命中其他用户的同名记录，避免跨用户覆盖）
       const existing = await dbGet(
-        'SELECT id, stored_name, size, uploaded_by, file_type, is_public FROM files WHERE original_name = ? AND uploaded_by = ?',
+        'SELECT id, stored_name, size, uploaded_by, file_type, is_public, is_bundle, entry_path FROM files WHERE original_name = ? AND uploaded_by = ?',
         [req.file.originalname, currentUserId(req)]
       );
 
       if (existing) {
+        if (existing.is_bundle) {
+          await unlinkQuiet(path.join(UPLOAD_DIR, req.file.filename));
+          return res.status(400).json({ error: '网站包只能使用 ZIP 文件覆盖' });
+        }
         // 同名文件：校验文件类型
         if (existing.file_type !== fileType) {
           // 类型不匹配，清理已上传的文件，拒绝覆盖
@@ -123,11 +135,15 @@ function registerUpload(router) {
 
     // 检查同名文件（按用户隔离，理由同 multipart /upload）
     const existing = await dbGet(
-      'SELECT id, stored_name, size, uploaded_by, file_type, is_public, share_key FROM files WHERE original_name = ? AND uploaded_by = ?',
+      'SELECT id, stored_name, size, uploaded_by, file_type, is_public, share_key, is_bundle, entry_path FROM files WHERE original_name = ? AND uploaded_by = ?',
       [decoded, currentUserId(req)]
     ).catch(() => null);
 
     if (existing) {
+      if (existing.is_bundle) {
+        await unlinkQuiet(filePath);
+        return res.status(400).json({ error: '网站包只能使用 ZIP 文件覆盖' });
+      }
       // 同名文件：校验文件类型
       if (existing.file_type !== fileType) {
         await unlinkQuiet(filePath);

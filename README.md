@@ -312,8 +312,10 @@ jpage/
 | `/api/files/:id/download` | GET | 流式下载文件（Bundle 以 ZIP 下载） |
 | `/api/files/:id/asset/*` | GET | Bundle 资源文件访问 |
 | `/api/files/:id/overwrite` | POST | 覆盖上传（自动版本备份） |
+| `/api/files/:id/overwrite-zip-base64` | POST | base64 bundle ZIP 显式覆盖 |
 | `/api/files/:id/versions` | GET | 版本历史列表 |
 | `/api/files/:id/versions/:ver/restore` | POST | 恢复到指定版本 |
+| `/api/files/:id/versions/:ver/download` | GET | 下载历史版本（Bundle 以 ZIP 下载） |
 | `/api/files/:id/stats` | GET | 访问统计（viewCount/daily7/daily30） |
 | `/s/:key` | GET | 短链接渲染页面 |
 
