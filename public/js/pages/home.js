@@ -349,6 +349,12 @@ function renderHome(container) {
       settingsBtn.setAttribute('aria-expanded', 'false');
       openUsageModal();
     });
+    settingsDropdown.querySelector('#menu-item-feedback')?.addEventListener('click', async () => {
+      settingsDropdown.classList.remove('open');
+      settingsBtn.setAttribute('aria-expanded', 'false');
+      const { openFeedbackModal } = await import('../components/feedback-modal.js');
+      openFeedbackModal();
+    });
     settingsDropdown.querySelector('#menu-item-market-admin')?.addEventListener('click', () => {
       settingsDropdown.classList.remove('open');
       settingsBtn.setAttribute('aria-expanded', 'false');
@@ -1992,16 +1998,19 @@ function openProfileModal() {
 
 // ---------- 数据管理弹窗 ----------
 function formatBytes(bytes) {
+  if (!Number.isFinite(bytes)) return '-';
   if (bytes === 0) return '0 B';
+  const sign = bytes < 0 ? '-' : '';
+  bytes = Math.abs(bytes);
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  const i = Math.min(sizes.length - 1, Math.floor(Math.log(bytes) / Math.log(k)));
+  return sign + parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
 function renderSourceCounts(bySource) {
   if (!bySource || Object.keys(bySource).length === 0) return '-';
-  const labelMap = { web: '网页', cli: 'CLI', mcp: 'MCP', utools: 'uTools', unknown: '其他' };
+  const labelMap = { web: '网页', api: 'API Token', cli: 'CLI', mcp: 'MCP', utools: 'uTools', unknown: '其他' };
   return Object.entries(bySource)
     .map(([source, count]) => (labelMap[source] || source.toUpperCase()) + ': ' + count)
     .join(', ');
@@ -2020,12 +2029,13 @@ async function openBackupModal() {
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-size:14px">' +
       '<span style="color:var(--text-secondary)">用户数量</span><span>' + stats.userCount + '</span>' +
       '<span style="color:var(--text-secondary)">文件数量</span><span>' + stats.fileCount + '</span>' +
-      '<span style="color:var(--text-secondary)">数据库大小</span><span>' + formatBytes(stats.dbSize) + '</span>' +
-      '<span style="color:var(--text-secondary)">上传文件大小</span><span>' + formatBytes(stats.uploadsSize) + '</span>' +
-      '<span style="color:var(--text-secondary)">总占用存储</span><span>' + formatBytes(stats.totalStorageBytes) + '</span>' +
-      '<span style="color:var(--text-secondary)">总大小</span><span style="font-weight:600">' + formatBytes(stats.totalSize) + '</span>' +
-      '<span style="color:var(--text-secondary)">短链浏览量</span><span>' + stats.totalShortLinkViews + '</span>' +
-      '<span style="color:var(--text-secondary)">API 调用总数</span><span>' + stats.totalApiCalls + '</span>' +
+      '<span style="color:var(--text-secondary)">数据库大小（含 WAL）</span><span>' + formatBytes(stats.dbSize) + '</span>' +
+      '<span style="color:var(--text-secondary)">上传目录物理占用</span><span>' + formatBytes(stats.uploadsSize) + '</span>' +
+      '<span style="color:var(--text-secondary)">内容逻辑存储（含历史）</span><span>' + formatBytes(stats.totalStorageBytes) + '</span>' +
+      '<span style="color:var(--text-secondary)">数据库 + 上传目录</span><span style="font-weight:600">' + formatBytes(stats.totalSize) + '</span>' +
+      '<span style="color:var(--text-secondary)">当前文件短链浏览量</span><span>' + stats.totalShortLinkViews + '</span>' +
+      '<span style="color:var(--text-secondary)">有效 API 请求</span><span>' + stats.totalApiCalls + '</span>' +
+      '<span style="color:var(--text-secondary)">全部 / 缓存 / 失败</span><span>' + stats.totalApiRequests + ' / ' + stats.apiCacheHits + ' / ' + stats.apiFailed + '</span>' +
       '<span style="color:var(--text-secondary)">API 调用来源</span><span>' + renderSourceCounts(stats.apiCallsBySource) + '</span>' +
       '</div>';
   } catch (e) {
@@ -2091,19 +2101,21 @@ async function openUsageModal() {
     const usage = await api('/api/users/me/usage');
     let storageHtml = '<span>' + formatBytes(usage.storageBytes) + '</span>';
     if (usage.storageQuota) {
-      const pct = Math.min(100, Math.round((usage.storageBytes / usage.storageQuota) * 100));
+      const rawPct = Math.round((usage.storageBytes / usage.storageQuota) * 100);
+      const pct = Math.min(100, Math.max(0, rawPct));
       storageHtml +=
         '<div style="margin-top:4px;height:6px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden">' +
         '<div style="width:' + pct + '%;height:100%;background:var(--primary)"></div></div>' +
-        '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">已用 ' + pct + '%（配额 ' + formatBytes(usage.storageQuota) + '）</div>';
+        '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">已用 ' + rawPct + '%（配额 ' + formatBytes(usage.storageQuota) + '）</div>';
     }
     statsEl.innerHTML =
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-size:14px">' +
-      '<span style="color:var(--text-secondary)">存储占用</span><span>' + storageHtml + '</span>' +
+      '<span style="color:var(--text-secondary)">内容存储（含历史版本）</span><span>' + storageHtml + '</span>' +
       '<span style="color:var(--text-secondary)">文件数量</span><span>' + usage.fileCount + '</span>' +
-      '<span style="color:var(--text-secondary)">API 调用总数</span><span>' + usage.apiCallsTotal + '</span>' +
+      '<span style="color:var(--text-secondary)">有效 API 请求</span><span>' + usage.apiCallsTotal + '（近 24h ' + usage.apiCalls24h + '）</span>' +
+      '<span style="color:var(--text-secondary)">全部 / 缓存 / 失败</span><span>' + usage.apiRequestsTotal + ' / ' + usage.apiCacheHits + ' / ' + usage.apiFailed + '</span>' +
       '<span style="color:var(--text-secondary)">API 调用来源</span><span>' + renderSourceCounts(usage.apiCallsBySource) + '</span>' +
-      '<span style="color:var(--text-secondary)">短链浏览量</span><span>' + usage.shortLinkViews + '</span>' +
+      '<span style="color:var(--text-secondary)">当前文件短链浏览量</span><span>' + usage.shortLinkViews + '</span>' +
       '</div>';
   } catch (e) {
     statsEl.innerHTML = '<p class="login-error">加载用量统计失败: ' + esc(e.message) + '</p>';

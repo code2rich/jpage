@@ -44,6 +44,7 @@ const contentTemplatesRouter = require('./routes/content-templates');
 const adminRouter = require('./routes/admin');
 const skillsRouter = require('./routes/skills');
 const { router: publicRouter, cleanupExpiredTryPastes } = require('./routes/public');
+const feedbackRouter = require('./routes/feedback');
 
 const PORT = process.env.PORT || 8858;
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -190,6 +191,7 @@ app.use('/api/content-templates', contentTemplatesRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', skillsRouter);            // /api/skills、/api/mcp/config
 app.use('/api/public', publicRouter);      // 免登录公开接口：/api/public/try-paste
+app.use('/api/feedback', feedbackRouter);  // 免登录公开接口：/api/feedback
 
 // --- 短链（根路径，公开热点）---
 // 访问门槛（按序）：

@@ -9,7 +9,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/jpage_logo/favicons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/jpage_logo/favicons/favicon-16.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/jpage_logo/jpage-app-icon-180.png">
-<link rel="stylesheet" href="/css/style.css?v=1.6.6">
+<link rel="stylesheet" href="/css/style.css?v=1.6.7">
 </head>
 <body>
 <div id="app"></div>
@@ -349,7 +349,7 @@
 
   <!-- 页脚 -->
   <footer class="landing-footer">
-    <p>&copy; 2026 即页 · <a href="https://github.com/code2rich/jpage" target="_blank">GitHub</a> · <a href="/privacy">隐私政策</a> · <a href="/terms">服务条款</a> · <a href="mailto:code2rich@qq.com">联系</a></p>
+    <p>&copy; 2026 即页 · <a href="https://github.com/code2rich/jpage" target="_blank">GitHub</a> · <a href="/privacy">隐私政策</a> · <a href="/terms">服务条款</a> · <a href="mailto:code2rich@qq.com">联系</a> · <a href="javascript:void(0)" id="landing-feedback-link">问题反馈</a></p>
     <!-- {{ICP_BEIAN_PLACEHOLDER}} -->
   </footer>
 </div>
@@ -533,6 +533,10 @@ CLI 工具
 	<button type="button" class="settings-menu-item" role="menuitem" id="menu-item-usage">
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
 	用量统计
+	</button>
+	<button type="button" class="settings-menu-item" role="menuitem" id="menu-item-feedback">
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+	问题反馈
 	</button>
 	<div class="settings-menu-divider admin-only" role="separator"></div>
 	<button type="button" class="settings-menu-item admin-only" role="menuitem" id="menu-item-market-admin">
@@ -1037,6 +1041,53 @@ CLI 工具
 </div>
 </div>
 
+<!-- 问题反馈弹窗（公开，含未登录访客） -->
+<div class="modal-backdrop" id="feedback-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="feedback-modal-title">
+<div class="modal-panel modal-panel-sm">
+<div class="modal-header">
+<h2 id="feedback-modal-title">问题反馈</h2>
+<button type="button" class="btn btn-small modal-close" id="feedback-modal-close" aria-label="关闭">×</button>
+</div>
+<div class="modal-body">
+<div class="feedback-category-group" id="feedback-category-group" role="radiogroup" aria-label="反馈类型">
+<button type="button" class="feedback-category-chip active" data-category="feature" role="radio" aria-checked="true">💡 功能建议</button>
+<button type="button" class="feedback-category-chip" data-category="bug" role="radio" aria-checked="false">🐛 问题反馈</button>
+<button type="button" class="feedback-category-chip" data-category="other" role="radio" aria-checked="false">💬 其他</button>
+</div>
+<label class="login-field">
+<span>反馈内容 <small>*</small></span>
+<textarea class="feedback-content-input" id="feedback-content" maxlength="5000" rows="5" placeholder="想提什么建议或遇到了什么问题？请详细描述，我们会认真阅读。" aria-describedby="feedback-content-count"></textarea>
+<div class="feedback-content-foot">
+<span class="feedback-content-count" id="feedback-content-count">0 / 5000</span>
+</div>
+</label>
+<div class="feedback-row">
+<label class="login-field">
+<span>称呼 <small>(可选)</small></span>
+<input type="text" id="feedback-name" maxlength="100" autocomplete="off" placeholder="怎么称呼你">
+</label>
+<label class="login-field">
+<span>联系方式 <small>(可选)</small></span>
+<input type="text" id="feedback-contact" maxlength="100" autocomplete="off" placeholder="邮箱 / 微信（方便我们回复）">
+</label>
+</div>
+<div class="login-error" id="feedback-error" role="alert" hidden></div>
+<!-- 公众号展示区 -->
+<div class="feedback-wechat">
+<div class="feedback-wechat-info">
+<span class="feedback-wechat-label">关注公众号，获取更多更新与使用技巧</span>
+<span class="feedback-wechat-id">公众号：code2rich</span>
+</div>
+<img class="feedback-wechat-qr" id="feedback-wechat-qr" src="/jpage_logo/wechat-code2rich.png" alt="公众号 code2rich 二维码" hidden>
+</div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn btn-small" id="feedback-modal-cancel">取消</button>
+<button type="button" class="btn btn-primary" id="feedback-modal-submit">提交反馈</button>
+</div>
+</div>
+</div>
+
 <div class="modal-backdrop" id="dialog-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="dialog-modal-title">
 <div class="modal-panel modal-panel-sm">
 <div class="modal-header">
@@ -1210,6 +1261,6 @@ CLI 工具
 </div>
 </div>
 
-<script type="module" src="/js/app.js?v=1.6.6"></script>
+<script type="module" src="/js/app.js?v=1.6.7"></script>
 </body>
 </html>

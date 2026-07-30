@@ -259,6 +259,7 @@ CI（`.github/workflows/ci.yml`）在 Node 20/22 矩阵上执行 `npm run lint`�
 - `template_market_categories(id, slug UNIQUE, name, description, sort_order, is_enabled, created_at, updated_at)`
 - `content_template_installs(id, template_id, user_id, file_id, source_version, created_at, UNIQUE(template_id, user_id))`
 - `starred_templates(user_id, template_id, created_at)`
+- `feedback(id, name, contact, content, category, user_id, ip, email_sent, status, created_at)`
 - `file_contents_fts` — FTS5 虚拟表 `(content, file_id UNINDEXED, tokenize='porter unicode61')`
 
 ### REST API
@@ -281,6 +282,7 @@ CI（`.github/workflows/ci.yml`）在 Node 20/22 矩阵上执行 `npm run lint`�
 - **Skills**：`/api/skills`、`/api/skills/:name`、`/api/skills/:name/download`
 - **短链**：`/s/:key`（文件）、`/t/:key`（市场模板）
 - **MCP 配置**：`/api/mcp/config`
+- **问题反馈（公开）**：`POST /api/feedback`
 - **CLI 指南**：`/api/cli/guide`
 
 ### MCP 端点
@@ -374,7 +376,7 @@ CLI 与 MCP 共用同一套 REST API，是对等的两个客户端入口。
 - 版本号以 `package.json` 为准。
 - 推荐发版：`npm version patch|minor|major` → `git push origin main` → `git push origin vX.Y.Z`，由 `.github/workflows/release.yml` 自动执行 lint、test、build、校验 tag、发布到 npm。
 - Docker：`Dockerfile` 多阶段构建（builder / frontend / runner），`EXPOSE 8858`；`docker-compose.yml` 映射 host 8858 → container 8858，挂载 `./data:/app/data`。
-- 环境变量完整清单（按需配置）：`PORT`、`NODE_ENV`、`JPAGE_DATA_DIR`、`ADMIN_USER`、`ADMIN_PASSWORD`、`SESSION_SECRET`、`COOKIE_SECURE`、`MCP_TOKEN`、`MCP_IP`、`MCP_PROTOCOL`、`TOKEN_ENCRYPTION_KEY`、`SMTP_HOST`、`SMTP_PORT`、`SMTP_SECURE`、`SMTP_USER`、`SMTP_PASS`、`SMTP_FROM`、`APP_URL`、`ALLOW_REGISTRATION`、`GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`、`WECHAT_OPEN_APP_ID`、`WECHAT_OPEN_APP_SECRET`、`MAX_FILE_VERSIONS`、`BACKUP_CRON`、`BACKUP_DIR`、`ICP_BEIAN`。
+- 环境变量完整清单（按需配置）：`PORT`、`NODE_ENV`、`JPAGE_DATA_DIR`、`ADMIN_USER`、`ADMIN_PASSWORD`、`SESSION_SECRET`、`COOKIE_SECURE`、`MCP_TOKEN`、`MCP_IP`、`MCP_PROTOCOL`、`TOKEN_ENCRYPTION_KEY`、`SMTP_HOST`、`SMTP_PORT`、`SMTP_SECURE`、`SMTP_USER`、`SMTP_PASS`、`SMTP_FROM`、`APP_URL`、`FEEDBACK_EMAIL`、`ALLOW_REGISTRATION`、`GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`、`WECHAT_OPEN_APP_ID`、`WECHAT_OPEN_APP_SECRET`、`MAX_FILE_VERSIONS`、`BACKUP_CRON`、`BACKUP_DIR`、`ICP_BEIAN`。
 
 ---
 

@@ -450,6 +450,33 @@ curl -b jpage.sid -OJ http://localhost:8858/api/skills/jpage/download
 
 ---
 
+## 问题反馈（`/api/feedback`）
+
+免登录公开接口，用户（含匿名访客）提交问题/功能建议。反馈写入数据库，并向管理员发送邮件通知。
+
+### `POST /api/feedback`
+
+**请求体**（JSON）：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `content` | string | 是 | 反馈正文，≤ 5000 字 |
+| `category` | string | 否 | 类型：`feature`（功能建议）/ `bug`（问题反馈）/ `other`（其他），默认 `feature` |
+| `name` | string | 否 | 提交者称呼，≤ 100 字 |
+| `contact` | string | 否 | 联系方式（邮箱/微信等），≤ 100 字 |
+
+**限流**：每 IP 15 分钟最多 10 次。**收件邮箱**优先级：`FEEDBACK_EMAIL` → 首个 admin 用户邮箱 → `SMTP_FROM`；均无或 SMTP 未配置时仅写库不发信。
+
+```bash
+curl -X POST http://localhost:8858/api/feedback \
+  -H "Content-Type: application/json" \
+  -d '{"content":"希望增加暗色模式","category":"feature","contact":"alice@example.com"}'
+```
+
+返回 `{ "success": true, "id": <feedbackId> }`。
+
+---
+
 ## MCP 端点（`/mcp`）
 
 独立的 MCP Streamable HTTP 端点。**全局 `MCP_TOKEN` 或用户级 API Token 任一即可挂载**（未配置任何 Token 时 `/mcp` 禁用）。
@@ -483,5 +510,6 @@ curl -b jpage.sid -OJ http://localhost:8858/api/skills/jpage/download
 | `ALLOW_REGISTRATION` | `false` | 设为 `true` 开放用户自助注册 |
 | `SMTP_HOST` 等 | — | SMTP 配置（`SMTP_HOST/PORT/SECURE/USER/PASS/FROM`），用于邮箱验证 |
 | `APP_URL` | `http://localhost:8858` | 应用外部访问地址，用于拼接验证链接 |
+| `FEEDBACK_EMAIL` | — | 问题反馈邮件接收地址；留空时回退到首个管理员邮箱 → `SMTP_FROM` |
 | `GOOGLE_CLIENT_ID` | — | Google Web 应用 OAuth Client ID；与 Client Secret 同时配置后启用 Google 登录 |
 | `GOOGLE_CLIENT_SECRET` | — | Google Web 应用 OAuth Client Secret，仅限服务端保存 |
